@@ -7,6 +7,8 @@ import BooksPage from './pages/BooksPage';
 import BookDetailPage from './pages/BookDetailPage';
 import RunPage from './pages/RunPage';
 import ChapterReaderPage from './pages/ChapterReaderPage';
+import DiffPage from './pages/DiffPage';
+import DashboardPage from './pages/DashboardPage';
 import './index.css';
 
 const queryClient = new QueryClient();
@@ -20,6 +22,8 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/books/:bookId" element={<BookDetailPage />} />
           <Route path="/books/:bookId/chapters/:chapterNo" element={<ChapterReaderPage />} />
           <Route path="/runs/:runId" element={<RunPage />} />
+          <Route path="/runs/:runId/dashboard" element={<DashboardPage />} />
+          <Route path="/books/:bookId/chapters/:chapterNo/diff" element={<DiffPage />} />
           <Route path="*" element={<App />} />
         </Routes>
       </BrowserRouter>
