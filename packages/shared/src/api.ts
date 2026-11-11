@@ -57,6 +57,10 @@ export interface RunDto {
   error?: string;
 }
 
+export interface RunWithStepsDto extends RunDto {
+  steps: RunStepDto[];
+}
+
 export interface RunStepDto {
   id: string;
   runId: string;
