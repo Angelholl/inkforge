@@ -1,0 +1,148 @@
+import fs from 'node:fs';
+import { countChars, type ChapterBlueprint } from '@inkforge/shared';
+
+export interface L0Check {
+  name: 'length' | 'cliche' | 'replay_ngram' | 'plagiarism_ngram' | 'beat_coverage' | 'continuity_facts' | 'style_drift';
+  pass: boolean;
+  details: string;
+}
+
+export interface StyleMetrics {
+  medianSentenceLen: number;
+  p90SentenceLen: number;
+  dialogueRatio: number;
+  uniqueCharRatio: number;
+}
+
+export interface L0Report {
+  checks: L0Check[];
+  hardFail: boolean;
+  softMajors: number;
+  metrics: { charCount: number; replayRatio: number };
+}
+
+/** 套话表：每行一条 JS 正则 source；`!` 前缀=建议级。 */
+export function loadCliches(path: string): { hard: RegExp[]; soft: RegExp[] } {
+  const lines = fs.readFileSync(path, 'utf8').split(/\r?\n/).filter((l) => l.trim() !== '');
+  const hard: RegExp[] = [];
+  const soft: RegExp[] = [];
+  for (const line of lines) {
+    if (line.startsWith('!')) soft.push(new RegExp(line.slice(1)));
+    else hard.push(new RegExp(line));
+  }
+  return { hard, soft };
+}
+
+function ngramSet(text: string, n: number): Set<string> {
+  const clean = text.replace(/\s/g, '');
+  const set = new Set<string>();
+  for (let i = 0; i + n <= clean.length; i++) set.add(clean.slice(i, i + n));
+  return set;
+}
+
+/** 与前文相比的 8-gram 重合率（占当前 draft 的 8-gram 比例）。 */
+function replayRatio(draft: string, prevTexts: string[], n = 8): number {
+  const grams = ngramSet(draft, n);
+  if (grams.size === 0) return 0;
+  const prev = new Set<string>();
+  for (const t of prevTexts) for (const g of ngramSet(t, n)) prev.add(g);
+  let hit = 0;
+  for (const g of grams) if (prev.has(g)) hit++;
+  return hit / grams.size;
+}
+
+/** ≥15 连续字抄用检测（对 few-shot/参考文本）。 */
+function hasLongCopy(draft: string, references: string[], minLen = 15): boolean {
+  const clean = draft.replace(/\s/g, '');
+  for (const ref of references) {
+    const rc = ref.replace(/\s/g, '');
+    for (let i = 0; i + minLen <= rc.length; i++) {
+      if (clean.includes(rc.slice(i, i + minLen))) return true;
+    }
+  }
+  return false;
+}
+
+export function runL0Checks(input: {
+  draft: string;
+  targetChars: number;
+  prevTexts: string[];
+  blueprint: ChapterBlueprint;
+  continuity: { characters: Array<{ name: string; state: object }> };
+  referenceTexts?: string[];
+  voiceRefMetrics?: StyleMetrics;
+  cliches?: { hard: RegExp[]; soft: RegExp[] };
+}): L0Report {
+  const checks: L0Check[] = [];
+  let softMajors = 0;
+
+  // 1. length ±20%
+  const charCount = countChars(input.draft);
+  const band = input.targetChars * 0.2;
+  const lengthPass = Math.abs(charCount - input.targetChars) <= band;
+  checks.push({ name: 'length', pass: lengthPass, details: `charCount=${charCount} target=${input.targetChars} band=±${band}` });
+
+  // 2. cliche：硬禁命中 fail；建议级命中仅记 details
+  if (input.cliches) {
+    const hardHits = input.cliches.hard.filter((re) => re.test(input.draft)).map((r) => r.source);
+    const softHits = input.cliches.soft.filter((re) => re.test(input.draft)).map((r) => r.source);
+    checks.push({
+      name: 'cliche',
+      pass: hardHits.length === 0,
+      details: `硬禁命中: [${hardHits.join(' | ')}]；建议级命中: [${softHits.join(' | ')}]`,
+    });
+  }
+
+  // 3. replay n=8 阈值 0.35
+  const ratio = replayRatio(input.draft, input.prevTexts);
+  checks.push({ name: 'replay_ngram', pass: ratio < 0.35 || input.prevTexts.length === 0, details: `replayRatio=${ratio.toFixed(3)} (n=8, 阈值 0.35)` });
+
+  // 4. plagiarism ≥15 连续字命中 few-shot/参考
+  const copied = input.referenceTexts ? hasLongCopy(input.draft, input.referenceTexts) : false;
+  checks.push({ name: 'plagiarism_ngram', pass: !copied, details: copied ? '发现 ≥15 连续字与参考文本重合' : '无 ≥15 连续字重合' });
+
+  // 5. beat_coverage：mustHaveBeats keywords 至少一个出现
+  const missed = input.blueprint.mustHaveBeats.filter((m) => !m.keywords.some((k) => input.draft.includes(k)));
+  checks.push({ name: 'beat_coverage', pass: missed.length === 0, details: missed.length === 0 ? '必含节拍全覆盖' : `缺失: ${missed.map((m) => m.text).join('、')}` });
+
+  // 6. continuity_facts：deceased/absent 角色不得出现
+  const ghosts = input.continuity.characters
+    .filter((c) => (c.state as Record<string, unknown>).deceased === true || (c.state as Record<string, unknown>).absent === true)
+    .map((c) => c.name)
+    .filter((name) => input.draft.includes(name));
+  checks.push({ name: 'continuity_facts', pass: ghosts.length === 0, details: ghosts.length === 0 ? '无已故/离场角色现身' : `已故/离场角色出现: ${ghosts.join('、')}` });
+
+  // 7. style_drift（T32 接线；voiceRefMetrics 存在才启用）
+  if (input.voiceRefMetrics) {
+    const drift = checkStyleDrift(input.draft, input.voiceRefMetrics);
+    softMajors += drift.overBandItems;
+    checks.push({ name: 'style_drift', pass: drift.overBandItems === 0, details: drift.details });
+  }
+
+  const hardFail = checks.some((c) => !c.pass && ['length', 'cliche', 'replay_ngram', 'plagiarism_ngram', 'beat_coverage', 'continuity_facts'].includes(c.name));
+  return { checks, hardFail, softMajors, metrics: { charCount, replayRatio: ratio } };
+}
+
+function checkStyleDrift(draft: string, ref: StyleMetrics): { overBandItems: number; details: string } {
+  // 句切分 /[。！？；\n]+/；dialogueRatio=引号内字符数/countChars；uniqueCharRatio 同 T32 口径
+  const sentences = draft.split(/[。！？；\n]+/).filter((s) => s.trim() !== '');
+  const lens = sentences.map((s) => s.length).sort((a, b) => a - b);
+  const median = lens.length === 0 ? 0 : lens[Math.floor(lens.length / 2)];
+  const inQuotes = [...draft.matchAll(/[“"]([^”"]*)[”"]/g)].reduce((acc, m) => acc + m[1].length, 0);
+  const dialogueRatio = charCountOf(draft) === 0 ? 0 : inQuotes / charCountOf(draft);
+  const unique = new Set(draft.replace(/\s/g, '')).size;
+  const uniqueCharRatio = charCountOf(draft) === 0 ? 0 : unique / charCountOf(draft);
+  const items: string[] = [];
+  const check = (name: string, cur: number, base: number) => {
+    if (base === 0) return;
+    if (Math.abs(cur - base) / base > 0.4) items.push(`${name}(cur=${cur.toFixed(2)}, base=${base.toFixed(2)})`);
+  };
+  check('句长中位数', median, ref.medianSentenceLen);
+  check('对话比', dialogueRatio, ref.dialogueRatio);
+  check('去重字符比', uniqueCharRatio, ref.uniqueCharRatio);
+  return { overBandItems: items.length, details: items.length === 0 ? '风格带内' : `超带: ${items.join('; ')}（每项记 1 softMajor）` };
+}
+
+function charCountOf(s: string): number {
+  return countChars(s);
+}
