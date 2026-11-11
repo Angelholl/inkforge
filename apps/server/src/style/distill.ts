@@ -28,7 +28,7 @@ RULES: <一条规则>
 /** 蒸馏：LLM 仅产出量化规则；few-shot 客户端确定性选取；同 source_hash version+1 新行（旧行永不改）。 */
 export async function distillStyleProfile(
   deps: { db: Database; provider: LlmProvider },
-  input: { name: string; sourcePath: string; samples: string[] },
+  input: { name: string; sourcePath: string; samples: Array<StyleSample | string> },
 ): Promise<string> {
   const source = fs.readFileSync(input.sourcePath, 'utf8');
   if (source.replace(/\s/g, '') === '') {
@@ -50,6 +50,7 @@ export async function distillStyleProfile(
     .filter((l) => l.trim().startsWith('RULES:'))
     .map((l) => l.trim().slice(6).trim())
     .filter((l) => l !== '');
+  const normalized: StyleSample[] = input.samples.map((x, i) => (typeof x === 'string' ? { id: `s${i}`, text: x } : x));
   const rulesText = rules.join('\n');
   const prev = deps.db
     .prepare('SELECT version, rules_json, samples_json, metrics_json FROM style_profiles WHERE source_hash = ? ORDER BY version DESC')
@@ -60,7 +61,7 @@ export async function distillStyleProfile(
     .prepare(
       'INSERT INTO style_profiles(id, name, source_path, source_hash, version, rules_json, samples_json, metrics_json, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
     )
-    .run(id, input.name, input.sourcePath, sourceHash, version, JSON.stringify({ rulesText }), JSON.stringify(input.samples), '{}', new Date().toISOString());
+    .run(id, input.name, input.sourcePath, sourceHash, version, JSON.stringify({ rulesText }), JSON.stringify(normalized), '{}', new Date().toISOString());
   return id;
 }
 

@@ -2,12 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadConfig } from '../../src/config';
 import { migrate } from '../../src/db/migrate';
+import { loadConfig } from '../../src/config';
 import { openDb, type Database } from '../../src/db/open';
-import { createBook } from '../../src/db/repositories/books';
-import { setBookStyleProfile } from '../../src/db/repositories/books';
-import { upsertBlueprint } from '../../src/db/repositories/chapters';
 import { distillStyleProfile } from '../../src/style/distill';
 import { createMockProvider } from '../../src/llm/mock';
 import { runL0Checks } from '../../src/quality/l0';
@@ -20,7 +17,6 @@ RULES: 每段不超过 6 行。`;
 let db: Database;
 let dir: string;
 let provider: ReturnType<typeof createMockProvider>;
-const config = loadConfig({ STRATA_BASE_URL: 'http://x', STRATA_API_KEY: 'k', STRATA_MODEL: 'm' });
 
 beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-style-'));

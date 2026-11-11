@@ -7,13 +7,14 @@ import { EventEmitter } from 'node:events';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Database } from '../db/open';
+import { assembleContext } from '../context/assembler';
 import * as booksRepo from '../db/repositories/books';
 import * as chaptersRepo from '../db/repositories/chapters';
 import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, styleBindSchema } from './schemas';
+import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
@@ -28,7 +29,7 @@ export interface RouteState {
 }
 
 export async function registerRoutes(app: FastifyInstance, state: RouteState): Promise<void> {
-  const { db, config, bus, runAborts } = state;
+  const { db, config, provider, bus, runAborts } = state;
 
   await app.register(cors, { origin: ['http://localhost:5173', 'tauri://localhost', 'http://tauri.localhost'] });
   if (fs.existsSync(WEB_DIST)) {
@@ -234,6 +235,77 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     if (!v) return reply.code(404).send({ error: 'not found' });
     chaptersRepo.setCurrentVersion(db, v.chapterId, versionId);
     reply.send({ ok: true, currentVersionId: versionId });
+  });
+
+  // ── report / 选段重写（T30）──
+  app.get('/api/runs/:runId/report', async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    const run = runsRepo.getRun(db, runId);
+    if (!run) return reply.code(404).send({ error: 'not found' });
+    const steps = runsRepo.listSteps(db, runId);
+    const chapters: Array<{ chapterNo: number; steps: Array<{ step: string; attempt: number; ms: number; usage: { promptTokens: number; completionTokens: number } }> }> = [];
+    let totalMs = 0;
+    let totalPrompt = 0;
+    let totalCompletion = 0;
+    const byChapter = new Map<string, typeof steps>();
+    for (const st of steps) byChapter.set(st.chapterId, [...(byChapter.get(st.chapterId) ?? []), st]);
+    for (const [chapterId, chSteps] of byChapter) {
+      const ch = chaptersRepo.getChapterById(db, chapterId);
+      const chapterNo = ch?.chapterNo ?? 0;
+      const stepRows = chSteps.map((st) => {
+        const ms = st.startedAt && st.endedAt ? new Date(st.endedAt).getTime() - new Date(st.startedAt).getTime() : 0;
+        totalMs += ms;
+        let usage = { promptTokens: 0, completionTokens: 0 };
+        if (st.outputVersionId) {
+          const v = chaptersRepo.getVersion(db, st.outputVersionId);
+          const u = (v?.params as { usage?: { promptTokens?: number; completionTokens?: number } } | undefined)?.usage;
+          if (u) usage = { promptTokens: u.promptTokens ?? 0, completionTokens: u.completionTokens ?? 0 };
+        }
+        totalPrompt += usage.promptTokens;
+        totalCompletion += usage.completionTokens;
+        return { step: st.step, attempt: st.attempt, ms, usage };
+      });
+      chapters.push({ chapterNo, steps: stepRows });
+    }
+    chapters.sort((a, b) => a.chapterNo - b.chapterNo);
+    reply.send({ chapters, totals: { ms: totalMs, promptTokens: totalPrompt, completionTokens: totalCompletion } });
+  });
+
+  app.post('/api/versions/:versionId/rewrite-selection', async (req, reply) => {
+    const { versionId } = req.params as { versionId: string };
+    const body = parseBody(reply, rewriteSelectionSchema, req.body);
+    if (!body) return;
+    const v = chaptersRepo.getVersion(db, versionId);
+    if (!v) return reply.code(404).send({ error: 'not found' });
+    const chapter = chaptersRepo.getChapterById(db, v.chapterId)!;
+    const taskInstruction = `对以下选段按指令改写，只输出改写后的选段文本。
+【选段】${body.selection}
+【指令】${body.instruction}`;
+    const slots = [
+      { name: 'hardRules', content: '', budgetChars: 500, stable: true, keep: 'head' as const },
+      { name: 'original', content: body.selection, budgetChars: 6000, stable: false, keep: 'head' as const },
+      { name: 'task', content: taskInstruction, budgetChars: 500, stable: false, keep: 'head' as const },
+    ];
+    const assembled = assembleContext(slots, config.providers.local.contextWindow - config.providers.local.maxOutput - 500);
+    const res = await provider.complete({
+      system: assembled.system,
+      user: assembled.user,
+      temperature: 0.7,
+      topP: 0.9,
+      maxOutputTokens: config.providers.local.maxOutput,
+      timeoutMs: config.timeouts.rewrite,
+      meta: { step: 'rewrite', chapterNo: chapter.chapterNo },
+    });
+    const newVersion = chaptersRepo.appendChapterVersion(db, {
+      chapterId: v.chapterId,
+      kind: 'revised',
+      content: res.text,
+      runId: v.runId,
+      model: config.providers.local.model,
+      parentVersionId: v.id,
+      params: { selectionRewrite: true, selection: body.selection, instruction: body.instruction, usage: res.usage },
+    });
+    reply.code(201).send(newVersion); // 不移动 current 指针
   });
 
   // ── export / search ──

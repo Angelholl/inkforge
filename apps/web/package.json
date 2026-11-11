@@ -12,12 +12,14 @@
   "dependencies": {
     "@inkforge/shared": "workspace:*",
     "@tanstack/react-query": "^5",
+    "diff": "^9.0.0",
     "react": "^19",
     "react-dom": "^19",
     "react-router": "^7"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16",
     "@types/react": "^19",
     "@types/react-dom": "^19",

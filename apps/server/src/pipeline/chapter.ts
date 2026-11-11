@@ -187,9 +187,11 @@ export async function runChapterPipeline(
           {
             hardRules,
             worldview: book.description,
+            styleRules: styleRulesText || undefined,
             blueprint: blueprintText(blueprint),
             continuity: continuityText,
             prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
+            fewShot: styleSamples.length > 0 ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot) : undefined,
             task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }),
           },
           config.budgets.draft,
