@@ -28,9 +28,22 @@ export interface RunOutcome {
   rounds: number;
 }
 
+export type PipelineRole = 'drafter' | 'qc' | 'rewriter' | 'summarizer';
+
+export interface RoleProviders {
+  drafter: LlmProvider;
+  qc: LlmProvider;
+  rewriter: LlmProvider;
+  summarizer: LlmProvider;
+  /** 分账标签：该角色走的 provider 名（local|cloud），写入 step output_json 与版本 params */
+  labels?: Partial<Record<PipelineRole, 'local' | 'cloud'>>;
+}
+
 export interface PipelineDeps {
   db: Database;
   provider: LlmProvider;
+  /** T31 角色路由装配；缺省时全角色用 provider（向后兼容） */
+  providers?: RoleProviders;
   config: AppConfig;
   emit: (e: RunEvent) => void;
   onPartial?: (text: string) => void;
@@ -56,7 +69,7 @@ export async function runChapterPipeline(
   deps: PipelineDeps,
   args: { runId: string; bookId: string; chapterNo: number; signal?: AbortSignal; resumeFrom?: StepName },
 ): Promise<RunOutcome> {
-  const { db, provider, config, emit } = deps;
+  const { db, config, emit } = deps;
   const signal = args.signal;
   const throwIfAborted = () => {
     if (signal?.aborted) throw makeAbort();
@@ -72,6 +85,9 @@ export async function runChapterPipeline(
   const runRow = runsRepo.getRun(db, args.runId);
   const maxRounds = runRow?.maxRounds ?? config.quality.maxRounds;
 
+  const fallback = deps.provider;
+  const roleProvider = (role: PipelineRole): LlmProvider => deps.providers?.[role] ?? fallback;
+  const roleLabel = (role: PipelineRole): 'local' | 'cloud' => deps.providers?.labels?.[role] ?? 'local';
   const snapshot = continuityRepo.getContinuitySnapshot(db, args.bookId, args.chapterNo);
   const continuityText = continuityRepo.renderSnapshotText(snapshot);
   const prevTexts: string[] = [];
@@ -163,7 +179,7 @@ export async function runChapterPipeline(
         ),
         totalBudget,
       );
-      const draftRes = await provider.complete({
+      const draftRes = await roleProvider('drafter').complete({
         system: draftAssembled.system,
         user: draftAssembled.user,
         temperature: 0.9,
@@ -185,7 +201,7 @@ export async function runChapterPipeline(
         runId: args.runId,
         promptHash: hashPrompt(draftAssembled.system, draftAssembled.user),
         model,
-        params: { usage: draftRes.usage },
+        params: { usage: draftRes.usage, provider: roleLabel('drafter') },
       });
       finishStep('draft', 1, { outputVersionId: draftVersion.id });
       draftFlusher.discard();
@@ -207,7 +223,7 @@ export async function runChapterPipeline(
         cliches,
       });
       const l1: L1Report = await runL1Qc(
-        { provider, config, hardRules },
+        { provider: roleProvider('qc'), config, hardRules },
         {
           draft: currentVersion.content,
           blueprintText: blueprintText(blueprint),
@@ -218,7 +234,7 @@ export async function runChapterPipeline(
         },
       );
       const gate = decideGate({ l0, l1, roundsUsed: rounds, prevOverall }, { ...config.quality, maxRounds });
-      finishStep('qc', qcAttempt, { outputJson: { l0, l1, gate } });
+      finishStep('qc', qcAttempt, { outputJson: { l0, l1, gate, usageProvider: roleLabel('qc') } });
       chaptersRepo.setVersionParams(db, currentVersion.id, { overall: l1.overall });
       if (!roundVersions.some((rv) => rv.id === currentVersion.id)) roundVersions.push({ id: currentVersion.id, overall: l1.overall ?? -1 });
 
@@ -264,7 +280,7 @@ export async function runChapterPipeline(
               config.budgets.rewrite,
             );
       const rwAssembled = assembleContext(rwSlots, totalBudget);
-      const rwRes = await provider.complete({
+      const rwRes = await roleProvider('rewriter').complete({
         system: rwAssembled.system,
         user: rwAssembled.user,
         temperature: 0.7,
@@ -287,7 +303,7 @@ export async function runChapterPipeline(
         promptHash: hashPrompt(rwAssembled.system, rwAssembled.user),
         model,
         parentVersionId: currentVersion.id,
-        params: { usage: rwRes.usage, round: rounds },
+        params: { usage: rwRes.usage, round: rounds, provider: roleLabel('rewriter') },
       });
       finishStep('rewrite', rwAttempt, { outputVersionId: revised.id });
       rwFlusher.discard();
@@ -297,7 +313,7 @@ export async function runChapterPipeline(
     // ── summarize（T20）──
     ensureStep('summarize', 1);
     throwIfAborted();
-    await runSummarizeStep({ db, provider, config, emit }, {
+    await runSummarizeStep({ db, provider: roleProvider('summarizer'), config, emit }, {
       runId: args.runId,
       chapterId: chapter.id,
       chapterNo: args.chapterNo,
