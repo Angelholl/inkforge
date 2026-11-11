@@ -5,7 +5,7 @@ import type { L0Report } from '../../src/quality/l0';
 const CFG = { scoreThreshold: 8.0, maxRounds: 2, minGain: 0.05 };
 
 function l0(over: Partial<Pick<L0Report, 'hardFail' | 'softMajors'>> = {}): L0Report {
-  return { checks: [], hardFail: over.hardFail ?? false, softMajors: over.softMajors ?? 0, metrics: { charCount: 0, replayRatio: 0 } };
+  return { checks: [], hardFail: over.hardFail ?? false, softMajors: over.softMajors ?? 0, metrics: { charCount: 0, replayRatio: 0 }, clicheHits: [] };
 }
 function l1(over: Partial<L1Report> = {}): L1Report {
   return {

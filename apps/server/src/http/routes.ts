@@ -12,7 +12,6 @@ import * as chaptersRepo from '../db/repositories/chapters';
 import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
-import { randomUUID } from 'node:crypto';
 import { handleSse } from './sse';
 import { blueprintSchema, createBookSchema, createRunSchema, generateSchema } from './schemas';
 import type { AppConfig } from '../config';

@@ -5,8 +5,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config';
 import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
-import { createBook } from '../../src/db/repositories/books';
-import { upsertBlueprint } from '../../src/db/repositories/chapters';
 import { appendStep, createRun, markStep, updateRunStatus } from '../../src/db/repositories/runs';
 import { createPartialFlusher } from '../../src/pipeline/partial';
 import type { ChapterBlueprint } from '@inkforge/shared';
