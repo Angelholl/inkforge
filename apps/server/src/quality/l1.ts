@@ -23,7 +23,7 @@ function qcSlots(input: { draft: string; blueprintText: string; continuityText: 
 /** L1 引用证据质检：送审整章 → 解析 → quote 校验 → 解析失败修复重试一次。 */
 export async function runL1Qc(
   deps: { provider: LlmProvider; config: AppConfig; hardRules?: string },
-  input: { draft: string; blueprintText: string; continuityText: string; round: number; chapterNo?: number },
+  input: { draft: string; blueprintText: string; continuityText: string; round: number; chapterNo?: number; signal?: AbortSignal },
 ): Promise<L1Report> {
   const { config, provider } = deps;
   const profile = pickBudgetProfile(config.providers.local.contextWindow);
@@ -47,6 +47,7 @@ export async function runL1Qc(
     maxOutputTokens: config.providers.local.maxOutput,
     timeoutMs: config.timeouts.qc,
     meta: { step: 'qc', chapterNo: input.chapterNo, round: input.round },
+    signal: input.signal,
   });
 
   const firstUser = `${assembled.user}`;
