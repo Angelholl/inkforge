@@ -19,6 +19,8 @@ export interface L0Report {
   hardFail: boolean;
   softMajors: number;
   metrics: { charCount: number; replayRatio: number };
+  /** 硬禁套话的实际命中句（供重写指令引用） */
+  clicheHits: string[];
 }
 
 /** 套话表：每行一条 JS 正则 source；`!` 前缀=建议级。 */
@@ -83,9 +85,20 @@ export function runL0Checks(input: {
   checks.push({ name: 'length', pass: lengthPass, details: `charCount=${charCount} target=${input.targetChars} band=±${band}` });
 
   // 2. cliche：硬禁命中 fail；建议级命中仅记 details
+  const clicheHits: string[] = [];
   if (input.cliches) {
-    const hardHits = input.cliches.hard.filter((re) => re.test(input.draft)).map((r) => r.source);
-    const softHits = input.cliches.soft.filter((re) => re.test(input.draft)).map((r) => r.source);
+    const hardHits: string[] = [];
+    const softHits: string[] = [];
+    for (const re of input.cliches.hard) {
+      for (const m of input.draft.match(new RegExp(re.source, 'g')) ?? []) {
+        if (!hardHits.includes(m)) hardHits.push(m);
+      }
+    }
+    for (const re of input.cliches.soft) {
+      const m = re.exec(input.draft);
+      if (m && !softHits.includes(m[0])) softHits.push(m[0]);
+    }
+    clicheHits.push(...hardHits);
     checks.push({
       name: 'cliche',
       pass: hardHits.length === 0,
@@ -120,7 +133,7 @@ export function runL0Checks(input: {
   }
 
   const hardFail = checks.some((c) => !c.pass && ['length', 'cliche', 'replay_ngram', 'plagiarism_ngram', 'beat_coverage', 'continuity_facts'].includes(c.name));
-  return { checks, hardFail, softMajors, metrics: { charCount, replayRatio: ratio } };
+  return { checks, hardFail, softMajors, metrics: { charCount, replayRatio: ratio }, clicheHits };
 }
 
 function checkStyleDrift(draft: string, ref: StyleMetrics): { overBandItems: number; details: string } {

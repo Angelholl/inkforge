@@ -15,6 +15,7 @@ function l0(over: Partial<Pick<L0Report, 'hardFail' | 'softMajors' | 'checks'>> 
     hardFail: over.hardFail ?? false,
     softMajors: over.softMajors ?? 0,
     metrics: { charCount: 0, replayRatio: 0 },
+    clicheHits: [],
   };
 }
 function l1(findings: Finding[]): L1Report {

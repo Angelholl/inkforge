@@ -233,12 +233,13 @@ export async function runChapterPipeline(
       throwIfAborted();
       const rwFlusher = createPartialFlusher(db, inflightRef.current!.id);
       const mode = chooseRewriteMode(l0, l1);
+      const clicheFix = l0.clicheHits.length > 0 ? `以下套话句必须整句删除或改写（不得保留原句式）：${l0.clicheHits.map((h) => `「${h}」`).join('、')}。` : '';
       const taskInstruction = renderRewrite({
         findings: l1.findings,
         taskInstruction:
           mode === 'targeted'
-            ? `仅修复所列问题，其余内容保持原样；若正文超长必须压缩到 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字；直接输出修订后的完整章节正文。`
-            : `按硬规则与蓝图整章重写，消除全部所列问题；正文必须写在 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字之间；直接输出完整章节正文。`,
+            ? `仅修复所列问题，其余内容保持原样；若正文超长必须压缩到 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字；${clicheFix}直接输出修订后的完整章节正文。`
+            : `按硬规则与蓝图整章重写，消除全部所列问题；正文必须写在 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字之间；${clicheFix}直接输出完整章节正文。`,
       });
       const rwSlots =
         mode === 'targeted'
