@@ -10,7 +10,7 @@ import * as runsRepo from '../db/repositories/runs';
 import type { RunStep } from '../db/repositories/runs';
 import { assembleContext, draftSlots } from '../context/assembler';
 import type { AppConfig } from '../config';
-import type { CompletionRequest, LlmProvider } from '../llm/types';
+import type { LlmProvider } from '../llm/types';
 import { hashPrompt } from '../llm/hash';
 import { renderDraft, renderRewrite } from '../prompts/render';
 import { loadCliches, runL0Checks } from '../quality/l0';
@@ -144,7 +144,7 @@ export async function runChapterPipeline(
       const v = chaptersRepo.getVersion(db, draftRow.outputVersionId!)!;
       currentVersion = { id: v.id, content: v.content };
     } else {
-      const draftStep = ensureStep('draft', 1);
+      ensureStep('draft', 1);
       throwIfAborted();
       const draftAssembled = assembleContext(
         draftSlots(

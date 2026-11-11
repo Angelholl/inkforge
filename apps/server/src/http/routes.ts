@@ -6,16 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { RunEvent } from '@inkforge/shared';
 import type { Database } from '../db/open';
-import { runChapterPipeline } from '../pipeline/chapter';
 import * as booksRepo from '../db/repositories/books';
 import * as chaptersRepo from '../db/repositories/chapters';
 import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, createBookSchema, generateSchema } from './schemas';
+import { blueprintSchema, createBookSchema, createRunSchema, generateSchema } from './schemas';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
@@ -30,7 +28,7 @@ export interface RouteState {
 }
 
 export async function registerRoutes(app: FastifyInstance, state: RouteState): Promise<void> {
-  const { db, config, provider, bus, runAborts } = state;
+  const { db, config, bus, runAborts } = state;
 
   await app.register(cors, { origin: ['http://localhost:5173', 'tauri://localhost', 'http://tauri.localhost'] });
   if (fs.existsSync(WEB_DIST)) {
@@ -70,37 +68,10 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   });
 
   const startRun = (reply: FastifyReply, bookId: string, scope: { from: number; to: number }, maxRounds?: number): void => {
+    // 委托 runs 队列：创建 run 即 202，执行由队列（inline 或 worker）负责
     const run = runsRepo.createRun(db, { bookId, mode: 'generate', chapterScope: scope, maxRounds });
-    const ac = new AbortController();
-    runAborts.set(run.id, ac);
     reply.code(202).send({ runId: run.id });
-    // Phase A：服务内联异步执行（不 await）；T18 起改走 worker 队列
-    void (async () => {
-      try {
-        updateRunStatusRunning(run.id);
-        for (let no = scope.from; no <= scope.to; no++) {
-          if (ac.signal.aborted) break;
-          await runChapterPipeline({ db, provider, config, emit: (e) => bus.emit(run.id, e) }, { runId: run.id, bookId, chapterNo: no, signal: ac.signal });
-        }
-        updateRunStatusEnd(run.id, ac.signal.aborted ? 'cancelled' : 'done', ac.signal.aborted ? undefined : undefined);
-      } catch (e) {
-        const aborted = ac.signal.aborted || (e as Error).name === 'AbortError';
-        updateRunStatusEnd(run.id, aborted ? 'cancelled' : 'failed', aborted ? undefined : (e as Error).message);
-      } finally {
-        runAborts.delete(run.id);
-      }
-    })();
   };
-  const { updateRunStatus } = runsRepo;
-  function updateRunStatusRunning(runId: string): void {
-    updateRunStatus(db, runId, 'running', { startedAt: new Date().toISOString() });
-    bus.emit(runId, { type: 'run.status', runId, status: 'running', ts: new Date().toISOString() } satisfies RunEvent);
-  }
-  function updateRunStatusEnd(runId: string, status: 'done' | 'cancelled' | 'failed', error?: string): void {
-    updateRunStatus(db, runId, status, { endedAt: new Date().toISOString(), error });
-    bus.emit(runId, { type: 'run.status', runId, status, ts: new Date().toISOString() } satisfies RunEvent);
-  }
-
   app.post('/api/books/:bookId/chapters/:chapterNo/generate', async (req, reply) => {
     const { bookId, chapterNo } = req.params as { bookId: string; chapterNo: string };
     const chapter = chaptersRepo.getChapter(db, bookId, Number(chapterNo));
@@ -121,6 +92,47 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   });
 
   // ── runs ──
+  app.post('/api/runs', async (req, reply) => {
+    const body = parseBody(reply, createRunSchema, req.body);
+    if (!body) return;
+    if (!booksRepo.getBook(db, body.bookId)) return reply.code(404).send({ error: 'not found' });
+    for (let no = body.fromChapter; no <= body.toChapter; no++) {
+      const ch = chaptersRepo.getChapter(db, body.bookId, no);
+      if (!ch || !ch.blueprint) return reply.code(400).send({ error: `chapter ${no} blueprint missing` });
+    }
+    const run = runsRepo.createRun(db, { bookId: body.bookId, mode: 'generate', chapterScope: { from: body.fromChapter, to: body.toChapter }, maxRounds: body.maxRounds });
+    reply.code(202).send({ runId: run.id });
+  });
+
+  app.post('/api/runs/:runId/pause', async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    const run = runsRepo.getRun(db, runId);
+    if (!run) return reply.code(404).send({ error: 'not found' });
+    if (run.status !== 'running' && run.status !== 'queued') return reply.code(409).send({ error: `run is ${run.status}` });
+    runsRepo.updateRunStatus(db, runId, 'paused');
+    reply.code(202).send({ ok: true });
+  });
+
+  app.post('/api/runs/:runId/resume', async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    const run = runsRepo.getRun(db, runId);
+    if (!run) return reply.code(404).send({ error: 'not found' });
+    if (run.status !== 'paused') return reply.code(409).send({ error: `run is ${run.status}` });
+    runsRepo.updateRunStatus(db, runId, 'queued');
+    reply.code(202).send({ ok: true });
+  });
+
+  app.post('/api/runs/:runId/chapters/:chapterNo/rerun', async (req, reply) => {
+    const { runId, chapterNo } = req.params as { runId: string; chapterNo: string };
+    const run = runsRepo.getRun(db, runId);
+    if (!run) return reply.code(404).send({ error: 'not found' });
+    const no = Number(chapterNo);
+    const ch = chaptersRepo.getChapter(db, run.bookId, no);
+    if (!ch || !ch.blueprint) return reply.code(400).send({ error: `chapter ${no} blueprint missing` });
+    const rerun = runsRepo.createRun(db, { bookId: run.bookId, mode: 'generate', chapterScope: { from: no, to: no }, maxRounds: run.maxRounds });
+    reply.code(202).send({ runId: rerun.id });
+  });
+
   app.get('/api/runs/:runId', async (req, reply) => {
     const { runId } = req.params as { runId: string };
     const run = runsRepo.getRun(db, runId);
@@ -146,6 +158,8 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   app.post('/api/runs/:runId/cancel', async (req, reply) => {
     const { runId } = req.params as { runId: string };
     if (!runsRepo.getRun(db, runId)) return reply.code(404).send({ error: 'not found' });
+    // 队列模式：置 cancelled，队列轮询负责 abort 当前章；兼容旧内联 AbortController
+    runsRepo.updateRunStatus(db, runId, 'cancelled');
     runAborts.get(runId)?.abort();
     reply.code(202).send({ ok: true });
   });

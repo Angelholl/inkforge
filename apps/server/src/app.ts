@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { migrate } from './db/migrate';
 import { openDb, type Database } from './db/open';
 import { registerRoutes, type RouteState } from './http/routes';
+import { runQueueLoop } from './worker/queue';
 import type { AppConfig } from './config';
 import type { LlmProvider } from './llm/types';
 
@@ -11,6 +12,8 @@ export interface BuildAppOptions {
   config?: AppConfig;
   provider?: LlmProvider;
   db?: Database;
+  /** true=服务进程内跑并发=1 队列（测试/单进程模式）；生产由 worker 子进程跑 */
+  inlineQueue?: boolean;
 }
 
 /**
@@ -32,7 +35,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     runAborts: new Map(),
   };
   await registerRoutes(app, state);
-  // 静态回退兜底（无 dist 时根路径 404 由 fastify 默认处理）
+  if (opts.inlineQueue) {
+    const queueAbort = new AbortController();
+    app.addHook('onClose', async () => queueAbort.abort());
+    void runQueueLoop({ db, provider: opts.provider, config: opts.config, emit: () => {} }, queueAbort.signal);
+  }
   void fs.existsSync;
   return app;
 }

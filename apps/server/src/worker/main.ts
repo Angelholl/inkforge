@@ -3,6 +3,7 @@ import path from 'node:path';
 import { migrate } from '../db/migrate';
 import { openDb } from '../db/open';
 import { acquireLock } from '../singleinstance';
+import { runQueueLoop } from './queue';
 
 /** worker 入口：acquireLock(worker 锁) → openDb+migrate → 写 worker.pid → ready → 循环（T17 接管前空转）。 */
 async function main(): Promise<void> {
@@ -16,10 +17,12 @@ async function main(): Promise<void> {
     if (process.env.INKFORGE_WORKER_EXIT_ZERO === '1') {
       process.exit(0);
     }
-    // T17：workerLoop；当前空转
-    for (;;) {
-      await new Promise((r) => setTimeout(r, 500));
-    }
+    const { createDefaultMockProvider } = await import('../llm/mock');
+    const { createAnthropicProvider } = await import('../llm/anthropic');
+    const { loadConfig } = await import('../config');
+    const config = loadConfig(process.env);
+    const provider = config.mock ? createDefaultMockProvider() : createAnthropicProvider(config.providers.local);
+    await runQueueLoop({ db, provider, config, emit: () => {} });
   } catch (e) {
     console.error('[worker] fatal:', (e as Error).message);
     process.exit(1);

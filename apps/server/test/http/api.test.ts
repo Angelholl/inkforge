@@ -17,7 +17,7 @@ let runId: string;
 beforeAll(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-api-'));
   const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
-  app = await buildApp({ config, provider: createDefaultMockProvider() });
+  app = await buildApp({ config, provider: createDefaultMockProvider(), inlineQueue: true });
   const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: 'API 测试书', description: 'API 描述', characters: [{ name: '张三' }] } });
   expect(created.statusCode).toBe(201);
   bookId = (created.json() as { id: string }).id;

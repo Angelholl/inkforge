@@ -22,7 +22,7 @@ async function makeApp(provider: ReturnType<typeof createDefaultMockProvider>): 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-e2e-'));
   dirs.push(dataDir);
   const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dataDir });
-  const app = await buildApp({ config, provider });
+  const app = await buildApp({ config, provider, inlineQueue: true });
   apps.push(app);
   const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: 'E2E 书' } });
   const bookId = (created.json() as { id: string }).id;

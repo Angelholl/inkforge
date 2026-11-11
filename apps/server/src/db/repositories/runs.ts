@@ -238,7 +238,7 @@ export function resumePoint(db: Database, runId: string, chapterId: string): Ste
   const rows = listSteps(db, runId).filter((s) => s.chapterId === chapterId);
   const has = (step: StepName) => rows.some((r) => r.step === step && r.status === 'done');
   const pending = rows.some((r) => r.status === 'queued' || r.status === 'inflight');
-  if (!has('draft')) return pending ? 'draft' : null;
+  if (!has('draft')) return 'draft'; // 全新章或 draft 未完成
   if (!has('qc')) return 'qc';
   const lastQc = rows.filter((r) => r.step === 'qc' && r.status === 'done').at(-1)!;
   const gate = (lastQc.outputJson as { gate?: { action?: string } } | undefined)?.gate?.action;

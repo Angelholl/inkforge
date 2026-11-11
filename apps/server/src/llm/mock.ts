@@ -1,4 +1,3 @@
-import { countChars } from '@inkforge/shared';
 import type { StepName } from '@inkforge/shared';
 import { ProviderError, type CompletionRequest, type CompletionResult, type LlmProvider } from './types';
 
@@ -6,6 +5,7 @@ export type MockStepBehavior =
   | { text: string }
   | { textFn: (meta: CompletionRequest['meta']) => string }
   | { text: string; chunks: number; chunkDelayMs: number }
+  | { textFn: (meta: CompletionRequest['meta']) => string; chunks: number; chunkDelayMs: number }
   | { error: 'timeout' | 'http_500'; afterMs: number }
   | { sequence: MockStepBehavior[] }
   | { repeat: MockStepBehavior };
@@ -46,32 +46,41 @@ function trimToCount(s: string, n: number): string {
   return s.slice(0, end);
 }
 
-const STORY = [
-  '山道上雨痕未干，少年背着行囊走向镇子。',
-  '枫叶贴在水洼边，他在岔路口辨认方向。',
-  '茶棚里客商闲谈，风把话音吹散又送来。',
-  '他捧着热茶取暖，目光停在告示墙上。',
-  '新纸墨迹未干，写着一个他熟悉的名字。',
-  '他穿过街面，逐字读完整段告示。',
-  '折好纸角之前，他把要领默记在心。',
-  '夜幕落下，他敲响客栈后院的侧门。',
-  '门内的人看清来客，侧身放行。',
-  '灯芯拨亮，墙上一长一短两个影子。',
-  '这一夜他们谈了很久，直到灯油见底。',
-  '临别时，门内的人塞给他一枚铜牌。',
+// 短句（≤7 字）：保证任意 8 字窗口都含【章N段i】标记 → 章间 8-gram 零重合（L0 重演阈值 0.35 之下）
+const SENTENCES = [
+  '夜雨初歇。',
+  '山道泥泞。',
+  '少年登程。',
+  '枫叶贴石。',
+  '茶棚歇脚。',
+  '客商闲谈。',
+  '告示新贴。',
+  '墨迹未干。',
+  '名字刺目。',
+  '穿街读毕。',
+  '折角记心。',
+  '夜幕低垂。',
+  '叩响侧门。',
+  '来客审视。',
+  '侧身放行。',
+  '灯芯拨亮。',
+  '影子一长一短',
+  '夜谈至深。',
+  '灯油见底。',
+  '临别赠牌。',
 ];
 
 /**
- * 500 字确定性草稿。每句嵌章号标记（【章N段i】），保证章间 8-gram 重合率
- * 远低于 0.35 阈值（固定正文会在多章挂机时误触 L0 重演检查）；无套话表命中。
+ * 500 字确定性草稿。每个 8 字窗口都含章号标记（【章N段i】），章间 8-gram 重合率为 0
+ * （L0 重演阈值 0.35）；无套话表命中。
  */
 export function makeMockDraft(chapterNo: number): string {
-  const parts = STORY.map((s, i) => `【章${chapterNo}段${i}】${s}`);
-  let s = parts.join('');
-  let n = 0;
-  while (countChars(s) < 500) {
-    s += `【章${chapterNo}回${n}】雨点敲着瓦檐，水线在青石上汇成细流。`;
-    n++;
+  let i = 0;
+  let s = '';
+  const unit = (idx: number) => `【章${chapterNo}段${idx}】${SENTENCES[idx % SENTENCES.length]}`;
+  while (true) {
+    s += unit(i++);
+    if (s.length >= 520) break;
   }
   return trimToCount(s, 500);
 }

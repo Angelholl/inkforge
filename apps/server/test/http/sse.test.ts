@@ -23,7 +23,7 @@ beforeAll(async () => {
   const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
   const db = openDb(path.join(dir, 'sse.db'));
   migrate(db);
-  app = await buildApp({ config, provider: createDefaultMockProvider(), db });
+  app = await buildApp({ config, provider: createDefaultMockProvider(), db, inlineQueue: true });
   await app.listen({ port: 0, host: '127.0.0.1' });
   baseUrl = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   process.env.INKFORGE_TEST_SSE_PING_MS = '100';

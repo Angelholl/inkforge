@@ -29,15 +29,17 @@ describe('spawnWorkerSupervisor', () => {
         if ((m as { type?: string }).type === 'ready') readyCount++;
       },
     });
-    await new Promise((r) => setTimeout(r, 800)); // 第一次 ready
+    // 轮询等待首次 ready（并发全量下 subprocess 启动延迟波动）
+    const firstDeadline = Date.now() + 5000;
+    while (Date.now() < firstDeadline && readyCount < 1) await new Promise((r) => setTimeout(r, 100));
     expect(readyCount).toBe(1);
     handle.child.kill();
-    const deadline = Date.now() + 3000;
+    const deadline = Date.now() + 5000;
     while (Date.now() < deadline && readyCount < 2) await new Promise((r) => setTimeout(r, 100));
     expect(readyCount).toBe(2);
     await handle.stop();
     fs.rmSync(dir, { recursive: true, force: true });
-  }, 15000);
+  }, 20000);
 
   it('stop() 后子进程退出且不再重启', async () => {
     const dir = tmpDir();
