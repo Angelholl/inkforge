@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "墨炉默认能力",
+  "windows": ["main"],
+  "permissions": []
+}

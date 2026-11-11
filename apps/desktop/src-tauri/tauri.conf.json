@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "墨炉",
+  "version": "0.1.0",
+  "identifier": "dev.inkforge.app",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../web/dist",
+    "beforeDevCommand": "pnpm --filter @inkforge/web dev",
+    "beforeBuildCommand": "pnpm --filter @inkforge/web build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "墨炉 Inkforge",
+        "width": 1280,
+        "height": 820
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

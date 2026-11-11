@@ -2,34 +2,34 @@
   "model": "iq3_xxs",
   "outcome": "needs_human",
   "rounds": 2,
-  "totalMs": 705738,
-  "firstTokenMs": 6155,
-  "tokPerSec": 30,
+  "totalMs": 510071,
+  "firstTokenMs": 11324,
+  "tokPerSec": 29,
   "perStepMs": {
-    "draft#1": 123694,
-    "qc#1": 205695,
-    "rewrite#2": 62131,
-    "qc#2": 124809,
-    "rewrite#3": 65398,
-    "qc#3": 124002,
+    "draft#1": 82521,
+    "qc#1": 109770,
+    "rewrite#2": 58615,
+    "qc#2": 126446,
+    "rewrite#3": 59874,
+    "qc#3": 72833,
     "finalize#1": 0
   },
   "usagePerStep": {
     "draft#1": {
-      "promptTokens": 434,
-      "completionTokens": 3717
+      "promptTokens": 457,
+      "completionTokens": 2390
     },
     "rewrite#2": {
-      "promptTokens": 364,
-      "completionTokens": 2232
+      "promptTokens": 428,
+      "completionTokens": 1840
     },
     "rewrite#3": {
-      "promptTokens": 364,
-      "completionTokens": 1920
+      "promptTokens": 404,
+      "completionTokens": 1903
     },
     "finalize#1": {
-      "promptTokens": 364,
-      "completionTokens": 1920
+      "promptTokens": 404,
+      "completionTokens": 1903
     }
   },
   "gate": {
@@ -37,13 +37,13 @@
       "checks": [
         {
           "name": "length",
-          "pass": false,
-          "details": "charCount=4933 target=3000 band=±600"
+          "pass": true,
+          "details": "charCount=3122 target=3000 band=±600"
         },
         {
           "name": "cliche",
           "pass": false,
-          "details": "硬禁命中: [不是.{0,8}而是]；建议级命中: []"
+          "details": "硬禁命中: [不是寒气共振，而是]；建议级命中: []"
         },
         {
           "name": "replay_ngram",
@@ -69,9 +69,12 @@
       "hardFail": true,
       "softMajors": 0,
       "metrics": {
-        "charCount": 4933,
+        "charCount": 3122,
         "replayRatio": 0
-      }
+      },
+      "clicheHits": [
+        "不是寒气共振，而是"
+      ]
     },
     "l1": {
       "findings": [],
@@ -90,5 +93,5 @@
       ]
     }
   },
-  "timestamp": "2026-11-11T18:07:15.846Z"
+  "timestamp": "2026-11-11T18:41:09.120Z"
 }
