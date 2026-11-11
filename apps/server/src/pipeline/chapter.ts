@@ -7,6 +7,7 @@ import * as chaptersRepo from '../db/repositories/chapters';
 import * as continuityRepo from '../db/repositories/continuity';
 import * as ftsRepo from '../db/repositories/fts';
 import * as runsRepo from '../db/repositories/runs';
+import type { RunStep } from '../db/repositories/runs';
 import { assembleContext, draftSlots } from '../context/assembler';
 import type { AppConfig } from '../config';
 import type { CompletionRequest, LlmProvider } from '../llm/types';
@@ -47,8 +48,12 @@ function blueprintText(bp: ChapterBlueprint): string {
   return JSON.stringify(bp);
 }
 
-/** 单章管线：draft → qc → (rewrite → qc)×n → finalize（summarize 由 T20 插入）。 */
-export async function runChapterPipeline(deps: PipelineDeps, args: { runId: string; bookId: string; chapterNo: number; signal?: AbortSignal }): Promise<RunOutcome> {
+/** 单章管线：draft → qc → (rewrite → qc)×n → finalize（summarize 由 T20 插入）。
+ * resumeFrom：该步之前已 done 的步直接跳过，draft 已有版本则复用不重生成（T17）。 */
+export async function runChapterPipeline(
+  deps: PipelineDeps,
+  args: { runId: string; bookId: string; chapterNo: number; signal?: AbortSignal; resumeFrom?: StepName },
+): Promise<RunOutcome> {
   const { db, provider, config, emit } = deps;
   const signal = args.signal;
   const throwIfAborted = () => {
@@ -62,7 +67,6 @@ export async function runChapterPipeline(deps: PipelineDeps, args: { runId: stri
   const targetChars = chapter.targetChars;
   const cliches = loadCliches(CLIQUES_PATH);
   const model = config.providers.local.model;
-  // 轮数上限取 run 行（每 run 可覆盖），缺省回退 config
   const runRow = runsRepo.getRun(db, args.runId);
   const maxRounds = runRow?.maxRounds ?? config.quality.maxRounds;
 
@@ -78,7 +82,7 @@ export async function runChapterPipeline(deps: PipelineDeps, args: { runId: stri
   const hardRules = [
     '【硬规则】',
     `1. 正文字数目标 ${targetChars} 字，允许偏差 ±20%。`,
-    '2. 禁止套话句式（如"不是A而是B""这一刻，他明白了""空气仿佛凝固"）。', 
+    '2. 禁止套话句式（如"不是A而是B""这一刻，他明白了""空气仿佛凝固"）。',
     '3. 直接输出正文，不要任何标题、解释或元信息。',
   ].join('\n');
 
@@ -86,69 +90,108 @@ export async function runChapterPipeline(deps: PipelineDeps, args: { runId: stri
   chaptersRepo.setChapterStatus(db, chapter.id, 'drafting');
 
   const totalBudget = config.providers.local.contextWindow - config.providers.local.maxOutput - 500;
-  let rounds = 0;
-  let currentVersion!: { id: string; content: string };
+  const priorSteps = runsRepo.listSteps(db, args.runId).filter((s) => s.chapterId === chapter.id);
+  const resumeFrom = args.resumeFrom ?? null;
+  const doneCount = (step: StepName) => priorSteps.filter((s) => s.step === step && s.status === 'done').length;
+  const inflightRef: { current: { id: string; step: StepName; attempt: number } | null } = { current: null };
+
+  /** 取 queued 行复用（崩溃续跑）或按 attempt 规则新建，置 inflight。 */
+  const ensureStep = (step: StepName, preferredAttempt: number): RunStep => {
+    const rows = runsRepo.listSteps(db, args.runId).filter((s) => s.chapterId === chapter.id && s.step === step);
+    const active = rows.find((r) => r.status === 'queued' || r.status === 'inflight');
+    if (active) {
+      emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step, attempt: active.attempt, status: 'inflight', ts: now() });
+      runsRepo.markStep(db, active.id, { status: 'inflight', startedAt: now() });
+      inflightRef.current = { id: active.id, step, attempt: active.attempt };
+      return active;
+    }
+    const maxAttempt = rows.reduce((m, r) => Math.max(m, r.attempt), 0);
+    const attempt = Math.max(maxAttempt + 1, preferredAttempt);
+    const row = runsRepo.appendStep(db, { runId: args.runId, chapterId: chapter.id, step, attempt });
+    emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step, attempt, status: 'inflight', ts: now() });
+    runsRepo.markStep(db, row.id, { status: 'inflight', startedAt: now() });
+    inflightRef.current = { id: row.id, step, attempt };
+    return row;
+  };
+  const finishStep = (step: StepName, attempt: number, patch: { outputVersionId?: string; outputJson?: object }) => {
+    const row = inflightRef.current;
+    if (row && row.step === step) {
+      runsRepo.markStep(db, row.id, { status: 'done', endedAt: now(), ...patch });
+      emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step, attempt: row.attempt, status: 'done', ts: now() });
+      inflightRef.current = null;
+    }
+  };
+
+  let rounds = doneCount('rewrite');
+  const lastQcDone = priorSteps.filter((s) => s.step === 'qc' && s.status === 'done').at(-1);
+  let prevOverall: number | null | undefined =
+    lastQcDone && resumeFrom ? ((lastQcDone.outputJson as { l1?: { overall?: number } } | undefined)?.l1?.overall ?? undefined) : undefined;
   const roundVersions: Array<{ id: string; overall: number }> = [];
-  let inflight: { id: string; step: StepName; attempt: number } | null = null;
+  // 恢复时把既往轮次的 overall 计入最佳版本比较
+  if (resumeFrom) {
+    for (const r of priorSteps.filter((s) => s.status === 'done' && s.outputVersionId && ['draft', 'rewrite'].includes(s.step))) {
+      const v = chaptersRepo.getVersion(db, r.outputVersionId!);
+      const overall = (v?.params as { overall?: number } | undefined)?.overall;
+      if (v && overall != null) roundVersions.push({ id: v.id, overall });
+    }
+  }
+  let currentVersion!: { id: string; content: string };
 
   try {
-    // ── draft ──
-    const draftStep = runsRepo.appendStep(db, { runId: args.runId, chapterId: chapter.id, step: 'draft', attempt: 1 });
-    emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'draft', attempt: 1, status: 'inflight', ts: now() });
-    runsRepo.markStep(db, draftStep.id, { status: 'inflight', startedAt: now() });
-    inflight = { id: draftStep.id, step: 'draft', attempt: 1 };
-    throwIfAborted();
-    const draftAssembled = assembleContext(
-      draftSlots(
-        {
-          hardRules,
-          worldview: book.description,
-          blueprint: blueprintText(blueprint),
-          continuity: continuityText,
-          prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
-          task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }),
+    // ── draft（复用或新建）──
+    if (resumeFrom && resumeFrom !== 'draft' && doneCount('draft') > 0) {
+      const draftRow = priorSteps.find((s) => s.step === 'draft' && s.status === 'done')!;
+      const v = chaptersRepo.getVersion(db, draftRow.outputVersionId!)!;
+      currentVersion = { id: v.id, content: v.content };
+    } else {
+      const draftStep = ensureStep('draft', 1);
+      throwIfAborted();
+      const draftAssembled = assembleContext(
+        draftSlots(
+          {
+            hardRules,
+            worldview: book.description,
+            blueprint: blueprintText(blueprint),
+            continuity: continuityText,
+            prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
+            task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }),
+          },
+          config.budgets.draft,
+        ),
+        totalBudget,
+      );
+      const draftRes = await provider.complete({
+        system: draftAssembled.system,
+        user: draftAssembled.user,
+        temperature: 0.9,
+        topP: 0.9,
+        maxOutputTokens: config.providers.local.maxOutput,
+        timeoutMs: config.timeouts.draft,
+        meta: { step: 'draft', chapterNo: args.chapterNo },
+        signal,
+        onDelta: (t) => {
+          emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'draft', text: t, ts: now() });
+          deps.onPartial?.(t);
         },
-        config.budgets.draft,
-      ),
-      totalBudget,
-    );
-    const draftReq: CompletionRequest = {
-      system: draftAssembled.system,
-      user: draftAssembled.user,
-      temperature: 0.9,
-      topP: 0.9,
-      maxOutputTokens: config.providers.local.maxOutput,
-      timeoutMs: config.timeouts.draft,
-      meta: { step: 'draft', chapterNo: args.chapterNo },
-      signal,
-      onDelta: (t) => {
-        emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'draft', text: t, ts: now() });
-        deps.onPartial?.(t);
-      },
-    };
-    const draftRes = await provider.complete(draftReq);
-    const draftVersion = chaptersRepo.appendChapterVersion(db, {
-      chapterId: chapter.id,
-      kind: 'draft',
-      content: draftRes.text,
-      runId: args.runId,
-      promptHash: hashPrompt(draftAssembled.system, draftAssembled.user),
-      model,
-      params: { usage: draftRes.usage },
-    });
-    runsRepo.markStep(db, draftStep.id, { status: 'done', endedAt: now(), outputVersionId: draftVersion.id });
-    emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'draft', attempt: 1, status: 'done', ts: now() });
-    inflight = null;
-    currentVersion = { id: draftVersion.id, content: draftVersion.content };
+      });
+      const draftVersion = chaptersRepo.appendChapterVersion(db, {
+        chapterId: chapter.id,
+        kind: 'draft',
+        content: draftRes.text,
+        runId: args.runId,
+        promptHash: hashPrompt(draftAssembled.system, draftAssembled.user),
+        model,
+        params: { usage: draftRes.usage },
+      });
+      finishStep('draft', 1, { outputVersionId: draftVersion.id });
+      currentVersion = { id: draftVersion.id, content: draftVersion.content };
+    }
 
     // ── qc / rewrite 循环 ──
-    let prevOverall: number | null | undefined = undefined;
-      for (;;) {
+    for (;;) {
       chaptersRepo.setChapterStatus(db, chapter.id, 'in_qc');
-      const qcStep = runsRepo.appendStep(db, { runId: args.runId, chapterId: chapter.id, step: 'qc', attempt: rounds + 1 });
-      emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'qc', attempt: rounds + 1, status: 'inflight', ts: now() });
-      runsRepo.markStep(db, qcStep.id, { status: 'inflight', startedAt: now() });
-      inflight = { id: qcStep.id, step: 'qc', attempt: rounds + 1 };
+      const qcStep = ensureStep('qc', rounds + 1);
+      const qcAttempt = qcStep.attempt;
       throwIfAborted();
       const l0 = runL0Checks({
         draft: currentVersion.content,
@@ -170,11 +213,9 @@ export async function runChapterPipeline(deps: PipelineDeps, args: { runId: stri
         },
       );
       const gate = decideGate({ l0, l1, roundsUsed: rounds, prevOverall }, { ...config.quality, maxRounds });
-      runsRepo.markStep(db, qcStep.id, { status: 'done', endedAt: now(), outputJson: { l0, l1, gate } });
-      emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'qc', attempt: rounds + 1, status: 'done', ts: now() });
-      inflight = null;
+      finishStep('qc', qcAttempt, { outputJson: { l0, l1, gate } });
       chaptersRepo.setVersionParams(db, currentVersion.id, { overall: l1.overall });
-      roundVersions.push({ id: currentVersion.id, overall: l1.overall ?? -1 });
+      if (!roundVersions.some((rv) => rv.id === currentVersion.id)) roundVersions.push({ id: currentVersion.id, overall: l1.overall ?? -1 });
 
       if (gate.action === 'pass') break;
       if (gate.action === 'needs_human') {
@@ -182,10 +223,8 @@ export async function runChapterPipeline(deps: PipelineDeps, args: { runId: stri
       }
       // gate.action === 'rewrite' → 轮数已由 decideGate 保证未满
       rounds++;
-      const rewriteStep = runsRepo.appendStep(db, { runId: args.runId, chapterId: chapter.id, step: 'rewrite', attempt: rounds + 1 });
-      emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'rewrite', attempt: rounds + 1, status: 'inflight', ts: now() });
-      runsRepo.markStep(db, rewriteStep.id, { status: 'inflight', startedAt: now() });
-      inflight = { id: rewriteStep.id, step: 'rewrite', attempt: rounds + 1 };
+      const rewriteStep = ensureStep('rewrite', rounds + 1);
+      const rwAttempt = rewriteStep.attempt;
       throwIfAborted();
       const mode = chooseRewriteMode(l0, l1);
       const taskInstruction = renderRewrite({
@@ -242,18 +281,24 @@ export async function runChapterPipeline(deps: PipelineDeps, args: { runId: stri
         parentVersionId: currentVersion.id,
         params: { usage: rwRes.usage, round: rounds },
       });
-      runsRepo.markStep(db, rewriteStep.id, { status: 'done', endedAt: now(), outputVersionId: revised.id });
-      emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'rewrite', attempt: rounds + 1, status: 'done', ts: now() });
-      inflight = null;
+      finishStep('rewrite', rwAttempt, { outputVersionId: revised.id });
       currentVersion = { id: revised.id, content: revised.content };
       prevOverall = l1.overall;
     }
     return finalize(db, chapter.id, roundVersions, 'done', args, emit);
   } catch (e) {
     const err = e as Error;
-    if (inflight) {
-      runsRepo.markStep(db, inflight.id, { status: 'failed', endedAt: now(), error: err.message });
-      emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: inflight.step, attempt: inflight.attempt, status: 'failed', ts: now() });
+    if (inflightRef.current) {
+      runsRepo.markStep(db, inflightRef.current.id, { status: 'failed', endedAt: now(), error: err.message });
+      emit({
+        type: 'step.status',
+        runId: args.runId,
+        chapterNo: args.chapterNo,
+        step: inflightRef.current.step,
+        attempt: inflightRef.current.attempt,
+        status: 'failed',
+        ts: now(),
+      });
     }
     emit({ type: 'run.status', runId: args.runId, status: 'failed', ts: now() });
     throw err;

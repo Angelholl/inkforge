@@ -169,10 +169,82 @@ export function markStep(
 }
 
 export function listSteps(db: Database, runId: string): RunStep[] {
-  // rowid = 插入序（started_at 有 NULL 会扰动排序）
   return (db.prepare('SELECT * FROM run_steps WHERE run_id = ? ORDER BY rowid').all(runId) as StepRow[]).map(toStep);
 }
 
 export function listRunsByBook(db: Database, bookId: string): Run[] {
   return (db.prepare('SELECT * FROM runs WHERE book_id = ? ORDER BY created_at DESC').all(bookId) as RunRow[]).map(toRun);
+}
+
+// ── 租约与恢复（T17）──
+
+const STEP_ORDER: Record<StepName, number> = { draft: 0, qc: 1, rewrite: 2, summarize: 3, finalize: 4 };
+
+/** 事务内 claim：最早活跃 run（queued/running 按创建序）→ 其 (chapter_no, 步序, attempt) 最早的 queued step → inflight+租约。 */
+export function claimNextStep(db: Database, workerId: string): RunStep | null {
+  const tx = db.transaction((): RunStep | null => {
+    const runs = db
+      .prepare("SELECT * FROM runs WHERE status IN ('queued','running') ORDER BY created_at, rowid")
+      .all() as RunRow[];
+    for (const r of runs) {
+      const rows = db
+        .prepare("SELECT * FROM run_steps WHERE run_id = ? AND status = 'queued'")
+        .all(r.id) as StepRow[];
+      if (rows.length === 0) continue;
+      rows.sort((a, b) => {
+        const cnA = (db.prepare('SELECT chapter_no FROM chapters WHERE id = ?').get(a.chapter_id) as { chapter_no: number }).chapter_no;
+        const cnB = (db.prepare('SELECT chapter_no FROM chapters WHERE id = ?').get(b.chapter_id) as { chapter_no: number }).chapter_no;
+        if (cnA !== cnB) return cnA - cnB;
+        const ord = STEP_ORDER[a.step as StepName] - STEP_ORDER[b.step as StepName];
+        if (ord !== 0) return ord;
+        return a.attempt - b.attempt;
+      });
+      const target = rows[0];
+      const now = new Date().toISOString();
+      db.prepare("UPDATE run_steps SET status='inflight', lease_owner=?, heartbeat_at=?, started_at=? WHERE id=?").run(workerId, now, now, target.id);
+      return getStep(db, target.id)!;
+    }
+    return null;
+  });
+  return tx();
+}
+
+/** 心跳：owner 不匹配则 no-op。 */
+export function heartbeatStep(db: Database, stepId: string, workerId: string): void {
+  db.prepare("UPDATE run_steps SET heartbeat_at = ? WHERE id = ? AND lease_owner = ? AND status = 'inflight'").run(
+    new Date().toISOString(),
+    stepId,
+    workerId,
+  );
+}
+
+/** inflight 且心跳超时 → queued + attempt+1，清租约；返回接管数。 */
+export function takeoverStaleSteps(db: Database, staleMs = 30000): number {
+  const cutoff = new Date(Date.now() - staleMs).toISOString();
+  const rows = db
+    .prepare("SELECT id, attempt FROM run_steps WHERE status = 'inflight' AND (heartbeat_at IS NULL OR heartbeat_at < ?)")
+    .all(cutoff) as Array<{ id: string; attempt: number }>;
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      db.prepare("UPDATE run_steps SET status='queued', attempt=attempt+1, lease_owner=NULL, heartbeat_at=NULL WHERE id=?").run(r.id);
+    }
+  });
+  tx();
+  return rows.length;
+}
+
+/** 断点判定：最后 done 步的下一序；无 queued → null。 */
+export function resumePoint(db: Database, runId: string, chapterId: string): StepName | null {
+  const rows = listSteps(db, runId).filter((s) => s.chapterId === chapterId);
+  const has = (step: StepName) => rows.some((r) => r.step === step && r.status === 'done');
+  const pending = rows.some((r) => r.status === 'queued' || r.status === 'inflight');
+  if (!has('draft')) return pending ? 'draft' : null;
+  if (!has('qc')) return 'qc';
+  const lastQc = rows.filter((r) => r.step === 'qc' && r.status === 'done').at(-1)!;
+  const gate = (lastQc.outputJson as { gate?: { action?: string } } | undefined)?.gate?.action;
+  if (gate === 'rewrite') return 'rewrite';
+  if (has('rewrite') && gate !== 'pass') return 'qc';
+  if (has('summarize')) return 'finalize';
+  if (gate === 'pass') return rows.some((r) => r.step === 'finalize' && r.status !== 'done') ? 'finalize' : null;
+  return pending ? 'qc' : null;
 }
