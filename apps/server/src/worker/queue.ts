@@ -2,7 +2,7 @@ import type { Database } from '../db/open';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 import { backupBook } from '../db/backup';
-import { getRun, resumePoint, updateRunStatus, listSteps } from '../db/repositories/runs';
+import { getRun, resumePoint, updateRunStatus, listSteps, takeoverStaleSteps } from '../db/repositories/runs';
 import { getChapter, setChapterStatus } from '../db/repositories/chapters';
 import { runChapterPipeline } from '../pipeline/chapter';
 import { keepSystemAwake } from '../power';
@@ -24,8 +24,10 @@ export interface QueueDeps {
  */
 export async function runQueueLoop(deps: QueueDeps, signal?: AbortSignal): Promise<void> {
   const { db } = deps;
+  const staleMs = Number(process.env.INKFORGE_STALE_MS ?? 30000);
   for (;;) {
     if (signal?.aborted) return;
+    takeoverStaleSteps(db, staleMs); // 周期性接管死亡 worker 的 inflight 步
     const row = db
       .prepare("SELECT id FROM runs WHERE status IN ('queued','running') ORDER BY created_at, rowid LIMIT 1")
       .get() as { id: string } | undefined;
