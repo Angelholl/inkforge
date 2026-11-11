@@ -1,11 +1,11 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { RunEvent, StepName } from '@inkforge/shared';
+import type { ChapterBlueprint, RunEvent, StepName } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import * as booksRepo from '../db/repositories/books';
 import * as chaptersRepo from '../db/repositories/chapters';
 import * as continuityRepo from '../db/repositories/continuity';
+import * as ftsRepo from '../db/repositories/fts';
 import * as runsRepo from '../db/repositories/runs';
 import { assembleContext, draftSlots } from '../context/assembler';
 import type { AppConfig } from '../config';
@@ -43,7 +43,7 @@ function makeAbort(): Error {
   return e;
 }
 
-function blueprintText(bp: NonNullable<ReturnType<typeof chaptersRepo.getChapter>['blueprint']>): string {
+function blueprintText(bp: ChapterBlueprint): string {
   return JSON.stringify(bp);
 }
 
@@ -277,6 +277,7 @@ function finalize(
   emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'finalize', attempt: 1, status: 'inflight', ts: now() });
   chaptersRepo.setCurrentVersion(db, chapterId, best.id);
   const content = chaptersRepo.getVersion(db, best.id)!.content;
+  ftsRepo.syncFts(db, chapterId, content);
   chaptersRepo.setChapterStatus(db, chapterId, outcome === 'done' ? 'done' : 'needs_human');
   runsRepo.markStep(db, finStep.id, { status: 'done', endedAt: now(), outputVersionId: best.id });
   emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'finalize', attempt: 1, status: 'done', ts: now() });

@@ -68,7 +68,7 @@ export function upsertForeshadowing(
 }
 
 export function listForeshadowings(db: Database, bookId: string): Foreshadowing[] {
-  return db.prepare('SELECT * FROM foreshadowings WHERE book_id = ? ORDER BY planted_ch').all(bookId) as Array<Record<string, unknown>> as Foreshadowing[];
+  return db.prepare('SELECT * FROM foreshadowings WHERE book_id = ? ORDER BY planted_ch').all(bookId) as unknown as Foreshadowing[];
 }
 
 export function resolveForeshadowing(db: Database, id: string, chapterNo: number, status: 'advanced' | 'resolved'): void {

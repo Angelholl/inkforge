@@ -1,16 +1,38 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { migrate } from './db/migrate';
+import { openDb, type Database } from './db/open';
+import { registerRoutes, type RouteState } from './http/routes';
+import type { AppConfig } from './config';
+import type { LlmProvider } from './llm/types';
 
 export interface BuildAppOptions {
-  config?: unknown;
-  provider?: unknown;
+  config?: AppConfig;
+  provider?: LlmProvider;
+  db?: Database;
 }
 
 /**
- * 构建 Fastify 应用。opts 类型在 T01（config）/T14（routes）补实。
+ * 构建 Fastify 应用。无 config/provider/db 时仅挂 health（T00 最小形态）；
+ * 齐备时挂全部 REST/SSE 路由（T14）。
  */
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   app.get('/api/health', async () => ({ ok: true, version: '0.1.0' }));
-  void opts;
+  if (!opts.config || !opts.provider) return app;
+
+  const db = opts.db ?? openDb(path.join(opts.config.dataDir, 'inkforge.db'));
+  migrate(db);
+  const state: RouteState = {
+    db,
+    config: opts.config,
+    provider: opts.provider,
+    bus: new (await import('node:events')).EventEmitter(),
+    runAborts: new Map(),
+  };
+  await registerRoutes(app, state);
+  // 静态回退兜底（无 dist 时根路径 404 由 fastify 默认处理）
+  void fs.existsSync;
   return app;
 }

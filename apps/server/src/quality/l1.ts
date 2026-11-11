@@ -1,7 +1,6 @@
 import { assembleContext, type ContextSlot } from '../context/assembler';
 import { pickBudgetProfile, type AppConfig } from '../config';
 import { parseFindings } from '../llm/plainproto';
-import { renderQc } from '../prompts/render';
 import type { LlmProvider, CompletionRequest } from '../llm/types';
 import type { L1Report } from './gate';
 

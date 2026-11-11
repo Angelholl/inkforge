@@ -86,7 +86,7 @@ async function* readSse(resp: Response): AsyncGenerator<SseEvent> {
   if (!body) throw new ProviderError('empty stream body', 'other');
   const decoder = new TextDecoder();
   let buffer = '';
-  for await (const chunk of body) {
+  for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
     buffer += decoder.decode(chunk as Uint8Array, { stream: true });
     const blocks = buffer.split(/\n\n/);
     buffer = blocks.pop() ?? '';
