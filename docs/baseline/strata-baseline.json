@@ -1,0 +1,94 @@
+{
+  "model": "iq3_xxs",
+  "outcome": "needs_human",
+  "rounds": 2,
+  "totalMs": 705738,
+  "firstTokenMs": 6155,
+  "tokPerSec": 30,
+  "perStepMs": {
+    "draft#1": 123694,
+    "qc#1": 205695,
+    "rewrite#2": 62131,
+    "qc#2": 124809,
+    "rewrite#3": 65398,
+    "qc#3": 124002,
+    "finalize#1": 0
+  },
+  "usagePerStep": {
+    "draft#1": {
+      "promptTokens": 434,
+      "completionTokens": 3717
+    },
+    "rewrite#2": {
+      "promptTokens": 364,
+      "completionTokens": 2232
+    },
+    "rewrite#3": {
+      "promptTokens": 364,
+      "completionTokens": 1920
+    },
+    "finalize#1": {
+      "promptTokens": 364,
+      "completionTokens": 1920
+    }
+  },
+  "gate": {
+    "l0": {
+      "checks": [
+        {
+          "name": "length",
+          "pass": false,
+          "details": "charCount=4933 target=3000 band=±600"
+        },
+        {
+          "name": "cliche",
+          "pass": false,
+          "details": "硬禁命中: [不是.{0,8}而是]；建议级命中: []"
+        },
+        {
+          "name": "replay_ngram",
+          "pass": true,
+          "details": "replayRatio=0.000 (n=8, 阈值 0.35)"
+        },
+        {
+          "name": "plagiarism_ngram",
+          "pass": true,
+          "details": "无 ≥15 连续字重合"
+        },
+        {
+          "name": "beat_coverage",
+          "pass": true,
+          "details": "必含节拍全覆盖"
+        },
+        {
+          "name": "continuity_facts",
+          "pass": true,
+          "details": "无已故/离场角色现身"
+        }
+      ],
+      "hardFail": true,
+      "softMajors": 0,
+      "metrics": {
+        "charCount": 4933,
+        "replayRatio": 0
+      }
+    },
+    "l1": {
+      "findings": [],
+      "invalidQuotes": 0,
+      "overall": null,
+      "parseErrors": [
+        "块缺失字段: SEVERITY,DIMENSION,QUOTE,COMMENT",
+        "缺少 OVERALL 行"
+      ],
+      "repaired": true
+    },
+    "gate": {
+      "action": "rewrite",
+      "reasons": [
+        "L0 硬失败"
+      ]
+    }
+  },
+  "timestamp": "2026-11-11T18:07:15.846Z"
+}

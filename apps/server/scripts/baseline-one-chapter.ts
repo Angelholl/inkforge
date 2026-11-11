@@ -16,7 +16,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** R1 关口：Strata 真模型单章全流程基线（draft+qc+重写+summarize+finalize），totalMs ≤ 2700000 判 PASS。 */
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
-  const dataDir = path.join(HERE, '../../data-baseline');
+  const dataDir = path.join(HERE, '../data-baseline');
   const db = openDb(path.join(dataDir, 'baseline.db'));
   migrate(db);
 
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
     gate: getStep(db, steps.find((s) => s.step === 'qc')!.id)?.outputJson ?? null,
     timestamp: new Date().toISOString(),
   };
-  const outPath = path.join(HERE, '../../docs/baseline/strata-baseline.json');
+  const outPath = path.join(HERE, '../../../docs/baseline/strata-baseline.json');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(result, null, 2), 'utf8');
   console.log(`[baseline] outcome=${outcome.status} rounds=${outcome.rounds} totalMs=${totalMs} tokPerSec=${tokPerSec}`);
