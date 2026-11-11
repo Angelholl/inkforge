@@ -73,7 +73,13 @@ export function listBooks(db: Database): Book[] {
 }
 
 export function listCharacters(db: Database, bookId: string): Array<{ id: string; name: string; baseSetting: string }> {
-  return db.prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? ORDER BY created_at').all(bookId) as Array<{ id: string; name: string; base_setting: string }>;
+  return (
+    db.prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? ORDER BY created_at').all(bookId) as Array<{
+      id: string;
+      name: string;
+      base_setting: string;
+    }>
+  ).map((r) => ({ id: r.id, name: r.name, baseSetting: r.base_setting }));
 }
 
 export function setBookStyleProfile(db: Database, bookId: string, profileId: string | null): void {

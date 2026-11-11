@@ -20,7 +20,6 @@ async function main(): Promise<void> {
   const db = openDb(path.join(dataDir, 'baseline.db'));
   migrate(db);
 
-  const now = new Date().toISOString();
   const bookId = createBook(db, {
     title: 'R1 基线书',
     description:

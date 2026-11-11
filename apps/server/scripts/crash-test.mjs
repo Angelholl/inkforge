@@ -115,12 +115,12 @@ function killPort(port) {
       try {
         execSync(`taskkill /T /F /PID ${pid}`, { shell: 'cmd.exe' });
         console.log('[crash] killed leftover pid', pid);
-      } catch {
-        /* ignore */
+      } catch (e) {
+        void e;
       }
     }
-  } catch {
-    /* 端口空闲 */
+  } catch (e) {
+    void e; // 端口空闲
   }
 }
 
@@ -267,7 +267,9 @@ async function main() {
         try {
           const j = JSON.parse(g.output_json);
           console.error(`[crash] gate ${g.step}#${g.attempt}:`, JSON.stringify(j.gate), '| l0 hardFail:', j.l0?.hardFail, '| l1 findings:', j.l1?.findings?.length, 'invalidQuotes:', j.l1?.invalidQuotes, 'parseErrors:', JSON.stringify(j.l1?.parseErrors));
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       }
       d.close();
     } catch (e) {

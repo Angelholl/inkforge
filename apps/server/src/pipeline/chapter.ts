@@ -82,8 +82,8 @@ export async function runChapterPipeline(
   }
   const hardRules = [
     '【硬规则】',
-    `1. 正文字数目标 ${targetChars} 字，允许偏差 ±20%。`,
-    '2. 禁止套话句式（如"不是A而是B""这一刻，他明白了""空气仿佛凝固"）。',
+    `1. 正文字数硬约束：正文必须写在 ${Math.round(targetChars * 0.8)} 至 ${Math.round(targetChars * 1.2)} 字之间（目标 ${targetChars} 字）。超过上限视为废稿。`,
+    '2. 严禁套话句式，包括但不限于：「不是…而是…」「这一刻，他明白了」「空气仿佛凝固」「宛如」。',
     '3. 直接输出正文，不要任何标题、解释或元信息。',
   ].join('\n');
 
@@ -232,8 +232,8 @@ export async function runChapterPipeline(
         findings: l1.findings,
         taskInstruction:
           mode === 'targeted'
-            ? '仅修复所列问题，其余内容保持原样；直接输出修订后的完整章节正文。'
-            : '按硬规则与蓝图整章重写，消除全部所列问题；直接输出完整章节正文。',
+            ? `仅修复所列问题，其余内容保持原样；若正文超长必须压缩到 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字；直接输出修订后的完整章节正文。`
+            : `按硬规则与蓝图整章重写，消除全部所列问题；正文必须写在 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字之间；直接输出完整章节正文。`,
       });
       const rwSlots =
         mode === 'targeted'

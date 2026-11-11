@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import type { RunWithStepsDto } from '@inkforge/shared';
 import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
-import { createDefaultMockProvider, createMockProvider } from '../../src/llm/mock';
+import { createDefaultMockProvider } from '../../src/llm/mock';
 
 const BP = (i: number) => ({ goal: `试炼第${i}层`, beats: [`进${i}`, `试${i}`, `收${i}`], mustHaveBeats: [], bannedTopics: [] });
 
@@ -79,7 +79,7 @@ describe('Phase B batch20 e2e', () => {
       },
     } as never;
     const { app, bookId } = await makeApp(provider);
-    const { runId, status } = await runAll(app, bookId);
+    const { status } = await runAll(app, bookId);
     expect(status).toBe('done'); // skip_failures=1
     const book = (await app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as {
       chapters: Array<{ chapterNo: number; status: string; currentVersionId?: string }>;
