@@ -17,6 +17,7 @@ import { loadCliches, runL0Checks } from '../quality/l0';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
+import { createPartialFlusher } from './partial';
 import { runSummarizeStep } from './summarize';
 
 const CLIQUES_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
@@ -147,6 +148,7 @@ export async function runChapterPipeline(
     } else {
       ensureStep('draft', 1);
       throwIfAborted();
+      const draftFlusher = createPartialFlusher(db, inflightRef.current!.id);
       const draftAssembled = assembleContext(
         draftSlots(
           {
@@ -173,8 +175,9 @@ export async function runChapterPipeline(
         onDelta: (t) => {
           emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'draft', text: t, ts: now() });
           deps.onPartial?.(t);
+          draftFlusher.push(t);
         },
-      });
+      }).finally(() => draftFlusher.flush());
       const draftVersion = chaptersRepo.appendChapterVersion(db, {
         chapterId: chapter.id,
         kind: 'draft',
@@ -185,6 +188,7 @@ export async function runChapterPipeline(
         params: { usage: draftRes.usage },
       });
       finishStep('draft', 1, { outputVersionId: draftVersion.id });
+      draftFlusher.discard();
       currentVersion = { id: draftVersion.id, content: draftVersion.content };
     }
 
@@ -227,6 +231,7 @@ export async function runChapterPipeline(
       const rewriteStep = ensureStep('rewrite', rounds + 1);
       const rwAttempt = rewriteStep.attempt;
       throwIfAborted();
+      const rwFlusher = createPartialFlusher(db, inflightRef.current!.id);
       const mode = chooseRewriteMode(l0, l1);
       const taskInstruction = renderRewrite({
         findings: l1.findings,
@@ -270,8 +275,9 @@ export async function runChapterPipeline(
         onDelta: (t) => {
           emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'rewrite', text: t, ts: now() });
           deps.onPartial?.(t);
+          rwFlusher.push(t);
         },
-      });
+      }).finally(() => rwFlusher.flush());
       const revised = chaptersRepo.appendChapterVersion(db, {
         chapterId: chapter.id,
         kind: 'revised',
@@ -283,6 +289,7 @@ export async function runChapterPipeline(
         params: { usage: rwRes.usage, round: rounds },
       });
       finishStep('rewrite', rwAttempt, { outputVersionId: revised.id });
+      rwFlusher.discard();
       currentVersion = { id: revised.id, content: revised.content };
       prevOverall = l1.overall;
     }

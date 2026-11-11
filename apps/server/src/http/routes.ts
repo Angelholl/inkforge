@@ -12,6 +12,7 @@ import * as chaptersRepo from '../db/repositories/chapters';
 import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
+import { randomUUID } from 'node:crypto';
 import { handleSse } from './sse';
 import { blueprintSchema, createBookSchema, createRunSchema, generateSchema } from './schemas';
 import type { AppConfig } from '../config';
@@ -162,6 +163,44 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     runsRepo.updateRunStatus(db, runId, 'cancelled');
     runAborts.get(runId)?.abort();
     reply.code(202).send({ ok: true });
+  });
+
+  // ── partial 残稿（T19）──
+  app.get('/api/runs/:runId/chapters/:chapterNo/partial', async (req, reply) => {
+    const { runId, chapterNo } = req.params as { runId: string; chapterNo: string };
+    const row = db
+      .prepare(
+        `SELECT po.content, po.updated_at FROM partial_outputs po
+         JOIN run_steps rs ON rs.id = po.run_step_id
+         JOIN chapters c ON c.id = rs.chapter_id
+         WHERE rs.run_id = ? AND c.chapter_no = ?
+         ORDER BY po.updated_at DESC LIMIT 1`,
+      )
+      .get(runId, Number(chapterNo)) as { content: string; updated_at: string } | undefined;
+    if (!row) return reply.code(404).send({ error: 'not found' });
+    reply.send({ content: row.content, updatedAt: row.updated_at });
+  });
+
+  app.post('/api/runs/:runId/chapters/:chapterNo/partial/adopt', async (req, reply) => {
+    const { runId, chapterNo } = req.params as { runId: string; chapterNo: string };
+    const stepRow = db
+      .prepare(
+        `SELECT po.content, rs.chapter_id, rs.run_id FROM partial_outputs po
+         JOIN run_steps rs ON rs.id = po.run_step_id
+         JOIN chapters c ON c.id = rs.chapter_id
+         WHERE rs.run_id = ? AND c.chapter_no = ?
+         ORDER BY po.updated_at DESC LIMIT 1`,
+      )
+      .get(runId, Number(chapterNo)) as { content: string; chapter_id: string; run_id: string } | undefined;
+    if (!stepRow) return reply.code(404).send({ error: 'not found' });
+    const version = chaptersRepo.appendChapterVersion(db, {
+      chapterId: stepRow.chapter_id,
+      kind: 'draft',
+      content: stepRow.content,
+      runId: stepRow.run_id,
+      params: { salvaged: true },
+    });
+    reply.code(201).send(version); // 不移动 current 指针
   });
 
   // ── versions ──
