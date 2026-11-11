@@ -1,0 +1,32 @@
+{
+  "name": "inkforge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=22.11 <25"
+  },
+  "scripts": {
+    "dev:server": "pnpm --filter @inkforge/server dev",
+    "dev:web": "pnpm --filter @inkforge/web dev",
+    "build:web": "pnpm --filter @inkforge/web build",
+    "test": "pnpm -r --if-present run test",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "@types/node": "^22",
+    "eslint": "^9",
+    "prettier": "^3",
+    "typescript-eslint": "^8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "koffi"
+    ]
+  }
+}
