@@ -13,7 +13,7 @@ import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, createBookSchema, createRunSchema, generateSchema } from './schemas';
+import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, styleBindSchema } from './schemas';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
@@ -200,6 +200,17 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       params: { salvaged: true },
     });
     reply.code(201).send(version); // 不移动 current 指针
+  });
+
+  app.put('/api/books/:bookId/style', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, styleBindSchema, req.body);
+    if (!body) return;
+    const profile = db.prepare('SELECT id FROM style_profiles WHERE id = ?').get(body.profileId) as { id: string } | undefined;
+    if (!profile) return reply.code(404).send({ error: 'profile not found' });
+    booksRepo.setBookStyleProfile(db, bookId, body.profileId);
+    reply.send({ ok: true, styleProfileId: body.profileId });
   });
 
   // ── versions ──

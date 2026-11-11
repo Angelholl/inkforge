@@ -18,6 +18,9 @@ import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
+import { getLatestProfile } from '../style/distill';
+import { pickStyleSamples, renderStyleBlock } from '../style/inject';
+import type { StyleSample } from '../style/distill';
 import { runSummarizeStep } from './summarize';
 
 const CLIQUES_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
@@ -156,6 +159,20 @@ export async function runChapterPipeline(
   let currentVersion!: { id: string; content: string };
 
   try {
+    // ── 风格注入素材（book 绑定档案时；0.1 挂机路径恒无档案 → 跳过）──
+    let styleRulesText = '';
+    let styleSamples: StyleSample[] = [];
+    let styleSampleIds: string[] = [];
+    if (book.styleProfileId) {
+      const profile = getLatestProfile(db, book.styleProfileId);
+      if (profile) {
+        const rulesData = JSON.parse(profile.rules_json) as { rulesText?: string };
+        styleRulesText = rulesData.rulesText ?? '';
+        styleSamples = pickStyleSamples(JSON.parse(profile.samples_json) as StyleSample[], args.chapterNo);
+        styleSampleIds = styleSamples.map((x) => x.id);
+      }
+    }
+
     // ── draft（复用或新建）──
     if (resumeFrom && resumeFrom !== 'draft' && doneCount('draft') > 0) {
       const draftRow = priorSteps.find((s) => s.step === 'draft' && s.status === 'done')!;
@@ -202,6 +219,7 @@ export async function runChapterPipeline(
         promptHash: hashPrompt(draftAssembled.system, draftAssembled.user),
         model,
         params: { usage: draftRes.usage, provider: roleLabel('drafter') },
+        styleSampleIds,
       });
       finishStep('draft', 1, { outputVersionId: draftVersion.id });
       draftFlusher.discard();
