@@ -5,6 +5,7 @@ import { backupBook } from '../db/backup';
 import { getRun, resumePoint, updateRunStatus, listSteps } from '../db/repositories/runs';
 import { getChapter, setChapterStatus } from '../db/repositories/chapters';
 import { runChapterPipeline } from '../pipeline/chapter';
+import { keepSystemAwake } from '../power';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -49,6 +50,7 @@ async function processRun(deps: QueueDeps, runId: string): Promise<void> {
     const cur = getRun(db, runId);
     if (!cur || cur.status === 'cancelled') ac.abort();
   }, 400);
+  keepSystemAwake(true); // 活跃章阻止睡眠
   try {
     for (let no = run.chapterScope.from; no <= run.chapterScope.to; no++) {
       if (ac.signal.aborted) break;
@@ -78,6 +80,7 @@ async function processRun(deps: QueueDeps, runId: string): Promise<void> {
     }
   } finally {
     clearInterval(poll);
+    keepSystemAwake(false); // 空闲恢复
     void listSteps;
   }
 }
