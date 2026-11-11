@@ -17,6 +17,7 @@ import { loadCliches, runL0Checks } from '../quality/l0';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
+import { runSummarizeStep } from './summarize';
 
 const CLIQUES_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
 
@@ -285,6 +286,18 @@ export async function runChapterPipeline(
       currentVersion = { id: revised.id, content: revised.content };
       prevOverall = l1.overall;
     }
+    // ── summarize（T20）──
+    ensureStep('summarize', 1);
+    throwIfAborted();
+    await runSummarizeStep({ db, provider, config, emit }, {
+      runId: args.runId,
+      chapterId: chapter.id,
+      chapterNo: args.chapterNo,
+      bookId: args.bookId,
+      finalContent: currentVersion.content,
+      signal,
+    });
+    finishStep('summarize', 1, {});
     return finalize(db, chapter.id, roundVersions, 'done', args, emit);
   } catch (e) {
     const err = e as Error;

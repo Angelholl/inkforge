@@ -244,6 +244,7 @@ export function resumePoint(db: Database, runId: string, chapterId: string): Ste
   const gate = (lastQc.outputJson as { gate?: { action?: string } } | undefined)?.gate?.action;
   if (gate === 'rewrite') return 'rewrite';
   if (has('rewrite') && gate !== 'pass') return 'qc';
+  if (gate === 'pass' && !has('summarize')) return 'summarize';
   if (has('summarize')) return 'finalize';
   if (gate === 'pass') return rows.some((r) => r.step === 'finalize' && r.status !== 'done') ? 'finalize' : null;
   return pending ? 'qc' : null;

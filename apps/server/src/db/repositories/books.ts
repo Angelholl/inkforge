@@ -72,6 +72,10 @@ export function listBooks(db: Database): Book[] {
   return (db.prepare('SELECT * FROM books ORDER BY created_at DESC').all() as BookRow[]).map(toBook);
 }
 
+export function listCharacters(db: Database, bookId: string): Array<{ id: string; name: string; baseSetting: string }> {
+  return db.prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? ORDER BY created_at').all(bookId) as Array<{ id: string; name: string; base_setting: string }>;
+}
+
 export function setBookStyleProfile(db: Database, bookId: string, profileId: string | null): void {
   db.prepare('UPDATE books SET style_profile_id = ?, updated_at = ? WHERE id = ?').run(
     profileId,

@@ -82,7 +82,7 @@ describe('runChapterPipeline', () => {
     expect(outcome).toMatchObject({ status: 'done', rounds: 0 });
     expect(outcome.finalVersionId).toBeDefined();
     const steps = listSteps(db, runId);
-    expect(steps.map((s) => `${s.step}:${s.status}`)).toEqual(['draft:done', 'qc:done', 'finalize:done']);
+    expect(steps.map((s) => `${s.step}:${s.status}`)).toEqual(['draft:done', 'qc:done', 'summarize:done', 'finalize:done']);
     expect(events[0]).toMatchObject({ type: 'run.status', status: 'running' });
     expect(events[events.length - 1]).toMatchObject({ type: 'run.status', status: 'done' });
     const ch = getChapter(db, bookId, 1)!;
@@ -104,7 +104,7 @@ COMMENT: 引文锚定测试块（blocker）`;
       draft: { textFn: (m) => `【章${m.chapterNo}改】独有开头。` + '线'.repeat(480) },
       qc: { sequence: [{ text: blockerQc }, { repeat: { text: goodQc } }] },
       rewrite: { textFn: (m) => `【章${m.chapterNo}修】重写后开头。` + '改'.repeat(480) },
-      summarize: { text: 'SUMMARY: x' },
+      summarize: { text: 'SUMMARY: 第2章推进完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
     });
     const outcome = await runChapterPipeline({ db, provider, config, emit: () => {} }, { runId, bookId, chapterNo: 2 });
     expect(outcome.status).toBe('done');
@@ -115,7 +115,7 @@ COMMENT: 引文锚定测试块（blocker）`;
     expect(outcome.finalVersionId).toBe(versions[0].id);
     expect(getChapter(db, bookId, 2)!.status).toBe('done');
     const steps = listSteps(db, runId);
-    expect(steps.map((s) => s.step)).toEqual(['draft', 'qc', 'rewrite', 'qc', 'finalize']);
+    expect(steps.map((s) => s.step)).toEqual(['draft', 'qc', 'rewrite', 'qc', 'summarize', 'finalize']);
   }, 30000);
 
   it('场景三 永不通过（maxRounds=1）：needs_human rounds=1，状态 needs_human', async () => {
@@ -131,6 +131,7 @@ COMMENT: 恒定 blocker`;
       draft: { textFn: (m) => `【章${m.chapterNo}三】开头。` + '三'.repeat(480) },
       qc: { repeat: { text: blockerQc } },
       rewrite: { textFn: (m) => `【章${m.chapterNo}三】开头。` + '三'.repeat(480) },
+      summarize: { text: 'SUMMARY: 第3章停滞。\nBEATS:\nTHREADS:\nSTATE:' },
     });
     const outcome = await runChapterPipeline({ db, provider, config, emit: () => {} }, { runId, bookId, chapterNo: 3 });
     expect(outcome.status).toBe('needs_human');
