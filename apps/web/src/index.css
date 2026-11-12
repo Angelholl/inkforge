@@ -1,1 +1,11 @@
 @import 'tailwindcss';
+
+/* 固定浅色配色：桌面 WebView 跟随系统深色模式时，未显式设色的页面会黑底黑字（2026-11-12 GUI 目验缺陷） */
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
