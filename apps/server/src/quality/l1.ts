@@ -1,4 +1,5 @@
 import { assembleContext, type ContextSlot } from '../context/assembler';
+import { renderQcTask } from '../prompts/render';
 import { pickBudgetProfile, type AppConfig } from '../config';
 import { parseFindings } from '../llm/plainproto';
 import type { LlmProvider, CompletionRequest } from '../llm/types';
@@ -13,7 +14,7 @@ function repairPrompt(errors: string[]): string {
 function qcSlots(input: { draft: string; blueprintText: string; continuityText: string; hardRules: string }): ContextSlot[] {
   return [
     { name: 'hardRules', content: input.hardRules, budgetChars: 0, stable: true, keep: 'head' }, // budget 后填
-    { name: 'draft', content: input.draft, budgetChars: 0, stable: false, keep: 'head' },
+    { name: 'draft', content: `【待审正文开始】\n${input.draft}\n【待审正文结束】`, budgetChars: 0, stable: false, keep: 'head' },
     { name: 'blueprint', content: input.blueprintText, budgetChars: 0, stable: false, keep: 'head' },
     { name: 'continuity', content: input.continuityText, budgetChars: 0, stable: false, keep: 'head' },
   ];
@@ -49,7 +50,7 @@ export async function runL1Qc(
     signal: input.signal,
   });
 
-  const firstUser = `${assembled.user}`;
+  const firstUser = `${assembled.user}\n\n${renderQcTask()}`;
   const first = parseFindings((await provider.complete(baseReq(firstUser))).text);
 
   let report = first;

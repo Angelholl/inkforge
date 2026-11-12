@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
-import { renderDraft, renderHardRules, renderQc, renderRewrite, renderSummarize } from '../../src/prompts/render';
+import { renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize } from '../../src/prompts/render';
 
 const BP: ChapterBlueprint = {
   goal: '主角进入书房取得密信',
@@ -11,14 +11,19 @@ const BP: ChapterBlueprint = {
 const DRAFT = '他推开门。雨停了。庭院里的积水映着月光。少年快步穿过回廊，来到书房门前。';
 
 describe('prompt 渲染契约', () => {
-  it('renderQc：四字段标记 + 七维度各一次 + 嵌入 draft 前 20 字符', () => {
-    const out = renderQc({ draft: DRAFT, blueprint: BP, continuityText: '前情提要' });
-    for (const marker of ['SEVERITY:', 'QUOTE:', 'OVERALL']) expect(out).toContain(marker);
+  it('renderQcTask：四字段标记 + 七维度各一次 + 负约束 + 示例块', () => {
+    const out = renderQcTask();
+    for (const marker of ['SEVERITY:', 'QUOTE:', 'OVERALL', 'COMMENT:']) expect(out).toContain(marker);
     for (const d of DIMENSIONS) {
       expect(out.split(d).length - 1).toBe(1);
     }
-    expect(out).toContain(DRAFT.slice(0, 20));
-    expect(out).toContain(DRAFT);
+    expect(out).toContain('不要输出 JSON');
+    expect(out).toContain('示例维度');
+  });
+
+  it('renderQcTask 不嵌入正文', () => {
+    const out = renderQcTask();
+    expect(out).not.toContain(DRAFT);
   });
 
   it('renderDraft：含世界观前 20 字符与禁区文本', () => {

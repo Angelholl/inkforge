@@ -53,4 +53,24 @@ describe('runL1Qc', () => {
     expect(r.findings.length).toBe(2);
     expect(r.invalidQuotes).toBe(1);
   });
+
+  it('qc 请求携带输出协议与待审正文标记', async () => {
+    const seen: string[] = [];
+    const p = createMockProvider({ qc: { text: GOOD_QC } });
+    const wrapper = { complete: async (req: Parameters<typeof p.complete>[0]) => { seen.push(req.user); return p.complete(req); } };
+    await runL1Qc({ provider: wrapper, config }, { draft: DRAFT, blueprintText: '目标', continuityText: '', round: 0 });
+    expect(seen[0]).toContain('OVERALL');
+    expect(seen[0]).toContain('SEVERITY:');
+    expect(seen[0]).toContain('【待审正文开始】');
+    expect(seen[0]).toContain('设定一致');
+    expect(seen[0]).toContain('不要输出 JSON');
+  });
+
+  it('修复重试请求同样携带协议', async () => {
+    const seen: string[] = [];
+    const p = createMockProvider({ qc: { sequence: [{ text: '坏格式' }, { repeat: { text: GOOD_QC } }] } });
+    const wrapper = { complete: async (req: Parameters<typeof p.complete>[0]) => { seen.push(req.user); return p.complete(req); } };
+    await runL1Qc({ provider: wrapper, config }, { draft: DRAFT, blueprintText: '目标', continuityText: '', round: 0 });
+    expect(seen[1]).toContain('OVERALL');
+  });
 });

@@ -25,22 +25,24 @@ export function renderDraft(input: { chapterNo: number; targetChars: number; wor
   return lines.join('\n');
 }
 
-/** qc 步送审段：七维度 + 输出协议 + 待审正文全文嵌入。 */
-export function renderQc(input: { draft: string; blueprint: ChapterBlueprint; continuityText: string }): string {
+/** qc 步输出协议块：评审任务 + 七维度清单 + 输出格式与示例 + 负约束。不嵌入正文（正文由槽承载）。 */
+export function renderQcTask(): string {
   return [
-    `【待审正文开始】`,
-    input.draft,
-    `【待审正文结束】`,
-    `【本章目标】${input.blueprint.goal}`,
-    `【连续性基线】${input.continuityText || '（无）'}`,
-    `【评审维度】（逐项检查）：`,
+    `【评审任务】请逐项检查以下七个维度，找出正文中存在的问题：`,
     ...DIMENSIONS.map((d) => `- ${d}`),
-    `【输出格式】第一行 OVERALL: <1-10 整数>；随后每个问题一块，块间以单独一行 --- 分隔，每块四行：`,
+    `【输出格式】第一行输出 OVERALL: <1-10 整数>（整体评分）；若存在问题，随后每个问题输出一块，块间以单独一行 --- 分隔，每块恰好四行：`,
     `SEVERITY: blocker|major|minor`,
-    `DIMENSION: <维度名>`,
+    `DIMENSION: <维度名，取自上述七维度之一>`,
     `QUOTE: <从正文中原样摘录的引文>`,
     `COMMENT: <一句评审意见>`,
-    `无问题则只输出 OVERALL 行。`,
+    `示例：`,
+    `OVERALL: 6`,
+    `---`,
+    `SEVERITY: major`,
+    `DIMENSION: 示例维度`,
+    `QUOTE: 示例引文`,
+    `COMMENT: 示例评审意见`,
+    `不要输出 JSON、markdown 代码块或任何解释；QUOTE 必须从正文原样摘录，不超过 30 字；无问题则只输出 OVERALL 行。`,
   ].join('\n');
 }
 
