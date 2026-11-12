@@ -138,7 +138,7 @@ COMMENT: 恒定 blocker`;
     expect(outcome.rounds).toBe(1);
     expect(getChapter(db, bookId, 3)!.status).toBe('needs_human');
     const steps = listSteps(db, runId);
-    expect(steps.map((s) => s.step)).toEqual(['draft', 'qc', 'rewrite', 'qc', 'finalize']);
+    expect(steps.map((s) => s.step)).toEqual(['draft', 'qc', 'rewrite', 'qc', 'summarize', 'finalize']); // 裁决 B：needs_human 走 summarize→finalize 公共路径（D3）
     // 计划原文"current version=draft"与"相等取新"规则冲突：重写内容与原稿相同时按取新规则取 revised（内容等价），此处断言等价性
     const cur = getCurrentVersion(db, chapterIdOf(3))!;
     const draftV = versionsByKind(chapterIdOf(3), 'draft');

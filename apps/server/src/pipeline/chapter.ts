@@ -229,6 +229,7 @@ export async function runChapterPipeline(
     }
 
     // ── qc / rewrite 循环 ──
+    let finalOutcome: 'done' | 'needs_human' = 'done';
     for (;;) {
       chaptersRepo.setChapterStatus(db, chapter.id, 'in_qc');
       const qcStep = ensureStep('qc', rounds + 1);
@@ -260,7 +261,8 @@ export async function runChapterPipeline(
 
       if (gate.action === 'pass') break;
       if (gate.action === 'needs_human') {
-        return finalize(db, chapter.id, roundVersions, 'needs_human', args, emit);
+        finalOutcome = 'needs_human';
+        break;
       }
       // gate.action === 'rewrite' → 轮数已由 decideGate 保证未满
       rounds++;
@@ -330,19 +332,27 @@ export async function runChapterPipeline(
       currentVersion = { id: revised.id, content: revised.content };
       prevOverall = l1.overall;
     }
-    // ── summarize（T20）──
-    ensureStep('summarize', 1);
-    throwIfAborted();
-    await runSummarizeStep({ db, provider: roleProvider('summarizer'), config, emit }, {
-      runId: args.runId,
-      chapterId: chapter.id,
-      chapterNo: args.chapterNo,
-      bookId: args.bookId,
-      finalContent: currentVersion.content,
-      signal,
-    });
-    finishStep('summarize', 1, {});
-    return finalize(db, chapter.id, roundVersions, 'done', args, emit);
+    // ── finalize 同规则先选 best：overall 最大、相等取追加序后者 ──
+    const best = roundVersions.reduce((b, v) => (v.overall >= b.overall ? v : b), roundVersions[0]);
+    // ── summarize（T20）：摘要必须取 finalize 将落指针的 best 版正文 ──
+    try {
+      ensureStep('summarize', 1);
+      throwIfAborted();
+      await runSummarizeStep({ db, provider: roleProvider('summarizer'), config, emit }, {
+        runId: args.runId,
+        chapterId: chapter.id,
+        chapterNo: args.chapterNo,
+        bookId: args.bookId,
+        finalContent: chaptersRepo.getVersion(db, best.id)!.content,
+        signal,
+      });
+      finishStep('summarize', 1, {});
+    } catch (e) {
+      if (finalOutcome === 'done') throw e;
+      runsRepo.markStep(db, inflightRef.current!.id, { status: 'failed', endedAt: now(), error: (e as Error).message });
+      inflightRef.current = null;
+    }
+    return finalize(db, chapter.id, best, finalOutcome, args, emit);
   } catch (e) {
     const err = e as Error;
     if (inflightRef.current) {
@@ -365,25 +375,28 @@ export async function runChapterPipeline(
 function finalize(
   db: Database,
   chapterId: string,
-  roundVersions: Array<{ id: string; overall: number }>,
+  best: { id: string; overall: number },
   outcome: 'done' | 'needs_human',
   args: { runId: string; bookId: string; chapterNo: number },
   emit: (e: RunEvent) => void,
 ): RunOutcome {
-  // 最佳版本：overall 最大者（相等取新 = 追加序在后）
-  let best = roundVersions[0];
-  for (const v of roundVersions.slice(1)) {
-    if (v.overall >= best.overall) best = v;
+  // 幂等：同章已有 finalize 行则复用（不重 appendStep，消除重入 UNIQUE 冲突）
+  const existingFin = runsRepo.listSteps(db, args.runId).find((s) => s.chapterId === chapterId && s.step === 'finalize');
+  const finAttempt = existingFin ? existingFin.attempt : 1;
+  if (existingFin) {
+    runsRepo.markStep(db, existingFin.id, { status: 'done', endedAt: now(), outputVersionId: best.id });
+  } else {
+    const finStep = runsRepo.appendStep(db, { runId: args.runId, chapterId, step: 'finalize', attempt: 1 });
+    runsRepo.markStep(db, finStep.id, { status: 'done', endedAt: now(), outputVersionId: best.id });
   }
-  const finStep = runsRepo.appendStep(db, { runId: args.runId, chapterId, step: 'finalize', attempt: 1 });
-  emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'finalize', attempt: 1, status: 'inflight', ts: now() });
+  emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'finalize', attempt: finAttempt, status: 'inflight', ts: now() });
   chaptersRepo.setCurrentVersion(db, chapterId, best.id);
   const content = chaptersRepo.getVersion(db, best.id)!.content;
   ftsRepo.syncFts(db, chapterId, content);
   chaptersRepo.setChapterStatus(db, chapterId, outcome === 'done' ? 'done' : 'needs_human');
-  runsRepo.markStep(db, finStep.id, { status: 'done', endedAt: now(), outputVersionId: best.id });
-  emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'finalize', attempt: 1, status: 'done', ts: now() });
+  emit({ type: 'step.status', runId: args.runId, chapterNo: args.chapterNo, step: 'finalize', attempt: finAttempt, status: 'done', ts: now() });
   // run 层语义：本章处理完毕即 done（needs_human 是章状态，由章节行承载）
   emit({ type: 'run.status', runId: args.runId, status: 'done', ts: now() });
-  return { status: outcome, finalVersionId: best.id, rounds: roundVersions.length - 1 };
+  const rounds = runsRepo.listSteps(db, args.runId).filter((s) => s.chapterId === chapterId && s.step === 'rewrite' && s.status === 'done').length;
+  return { status: outcome, finalVersionId: best.id, rounds };
 }

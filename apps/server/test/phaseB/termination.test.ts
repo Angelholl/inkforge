@@ -10,6 +10,7 @@ import { upsertBlueprint, listVersions, getCurrentVersion, getChapter } from '..
 import { createRun, listSteps } from '../../src/db/repositories/runs';
 import { runChapterPipeline } from '../../src/pipeline/chapter';
 import { createMockProvider } from '../../src/llm/mock';
+import type { CompletionRequest } from '../../src/llm/types';
 import type { ChapterBlueprint } from '@inkforge/shared';
 
 const BP: ChapterBlueprint = { goal: 'g', beats: [], mustHaveBeats: [], bannedTopics: [] };
@@ -68,6 +69,13 @@ describe('终止条件回归（基线只增不减）', () => {
     const cur = getCurrentVersion(db, versions[0].chapterId)!;
     expect(cur.id).toBe(versions[0].id); // overall 相等取新
     expect(getChapter(db, bookId, 1)!.status).toBe('needs_human');
+    // D3 追加断言：needs_human 终态也必须落 summarize 与摘要，且 finalize 指针=最佳版本
+    expect(steps.some((s) => s.step === 'summarize' && s.status === 'done')).toBe(true);
+    const summaryCount = (db.prepare('SELECT COUNT(*) AS c FROM chapter_summaries WHERE book_id=? AND chapter_no=1').get(bookId) as { c: number }).c;
+    expect(summaryCount).toBe(1);
+    const finRow = steps.find((s) => s.step === 'finalize' && s.status === 'done');
+    expect(finRow).toBeTruthy();
+    expect(finRow!.outputVersionId).toBe(versions[0].id);
   }, 30000);
 
   it('no-improve：overall [5.0→5.2] 增益 4%<5% → rewrite×1 无改善停（早于轮数）', async () => {
@@ -86,5 +94,36 @@ describe('终止条件回归（基线只增不减）', () => {
     const steps = listSteps(db, run.id);
     expect(steps.filter((s) => s.step === 'rewrite')).toHaveLength(1); // 无改善停早于轮数停（maxRounds=5 未用满）
     expect(getChapter(db, bookId, 2)!.status).toBe('needs_human');
+  }, 30000);
+
+  it('no-improve 三版 6/7/5：摘要取 best 版正文且重入幂等', async () => {
+    upsertBlueprint(db, { bookId, chapterNo: 3, title: '章三', blueprint: BP, targetChars: 500 });
+    const run = createRun(db, { bookId, mode: 'generate', chapterScope: { from: 3, to: 3 }, maxRounds: 2 });
+    const provider = createMockProvider({
+      draft: { text: '【甲版】' + 'x'.repeat(485) },
+      rewrite: { sequence: [{ text: '【乙版】' + 'y'.repeat(485) }, { text: '【丙版】' + 'z'.repeat(485) }] },
+      qc: { sequence: [{ text: 'OVERALL: 6' }, { text: 'OVERALL: 7' }, { text: 'OVERALL: 5' }, { repeat: { text: 'OVERALL: 5' } }] },
+      summarize: { text: 'SUMMARY: x' },
+    });
+    const summarizeUsers: string[] = [];
+    const wrappingProvider = {
+      complete: async (req: CompletionRequest) => {
+        if (req.meta.step === 'summarize') summarizeUsers.push(req.user);
+        return provider.complete(req);
+      },
+    };
+    const outcome = await runChapterPipeline({ db, provider: wrappingProvider, config, emit: () => {} }, { runId: run.id, bookId, chapterNo: 3 });
+    expect(outcome.status).toBe('needs_human');
+    expect(outcome.rounds).toBe(2);
+    expect(summarizeUsers).toHaveLength(1);
+    // 摘要请求必须携带 best（7 分乙版）正文，而非 currentVersion（丙版）或首版（甲版）
+    expect(summarizeUsers[0]).toContain('【乙版】');
+    expect(summarizeUsers[0]).not.toContain('【丙版】');
+    expect(summarizeUsers[0]).not.toContain('【甲版】');
+    // 重入：同 runId 同章 resumeFrom 'qc' → 不抛（finalize 幂等消除 UNIQUE 冲突）
+    await runChapterPipeline({ db, provider: wrappingProvider, config, emit: () => {} }, { runId: run.id, bookId, chapterNo: 3, resumeFrom: 'qc' });
+    const summaryCount = (db.prepare('SELECT COUNT(*) AS c FROM chapter_summaries WHERE book_id=? AND chapter_no=3').get(bookId) as { c: number }).c;
+    expect(summaryCount).toBe(1);
+    expect(listSteps(db, run.id).filter((s) => s.step === 'finalize').length).toBeLessThanOrEqual(2);
   }, 30000);
 });

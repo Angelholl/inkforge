@@ -237,7 +237,8 @@ export function takeoverStaleSteps(db: Database, staleMs = 30000): number {
 export function resumePoint(db: Database, runId: string, chapterId: string): StepName | null {
   const rows = listSteps(db, runId).filter((s) => s.chapterId === chapterId);
   const has = (step: StepName) => rows.some((r) => r.step === step && r.status === 'done');
-  const pending = rows.some((r) => r.status === 'queued' || r.status === 'inflight');
+  // 完成只认 finalize done 行（pending 不得代理已完成）
+  if (rows.some((r) => r.step === 'finalize' && r.status === 'done')) return null;
   if (!has('draft')) return 'draft'; // 全新章或 draft 未完成
   if (!has('qc')) return 'qc';
   const lastQc = rows.filter((r) => r.step === 'qc' && r.status === 'done').at(-1)!;
@@ -245,10 +246,8 @@ export function resumePoint(db: Database, runId: string, chapterId: string): Ste
   if (gate === 'rewrite') return 'rewrite';
   if (has('rewrite') && gate !== 'pass') return 'qc';
   if (gate === 'pass') {
-    if (!has('summarize')) return 'summarize';
-    const fin = rows.find((r) => r.step === 'finalize');
-    if (!fin || fin.status !== 'done') return 'finalize';
-    return null; // 本章已全部完成
+    return has('summarize') ? 'finalize' : 'summarize';
   }
-  return pending ? 'qc' : null;
+  // needs_human / 未知 gate：重跑质检（finalize 幂等保证收敛）
+  return 'qc';
 }
