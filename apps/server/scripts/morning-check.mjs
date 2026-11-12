@@ -10,7 +10,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_DIR = path.resolve(HERE, '..');
 const DATA_DIR = path.resolve(SERVER_DIR, 'data');
 const BASE = 'http://127.0.0.1:8787';
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const hang = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'hang-run.json'), 'utf8'));
 
@@ -23,7 +22,6 @@ function reportFromDb() {
   const db = new Database(path.join(DATA_DIR, 'inkforge.db'), { readonly: true });
   const steps = db.prepare('SELECT * FROM run_steps WHERE run_id = ? ORDER BY rowid').all(hang.runId);
   const chapters = db.prepare('SELECT * FROM chapters WHERE book_id = ? ORDER BY chapter_no').all(hang.bookId);
-  const chById = new Map(chapters.map((c) => [c.id, c]));
   const lines = [];
   let doneCh = 0;
   let needsHuman = 0;

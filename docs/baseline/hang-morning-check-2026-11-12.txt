@@ -1,0 +1,29 @@
+挂机终态: done
+第1章: status=needs_human steps=7 完成
+第2章: status=needs_human steps=7 完成
+第3章: status=needs_human steps=7 完成
+第4章: status=needs_human steps=7 完成
+第5章: status=needs_human steps=7 完成
+第6章: status=needs_human steps=7 完成
+第7章: status=needs_human steps=7 完成
+第8章: status=needs_human steps=7 完成
+第9章: status=needs_human steps=7 完成
+第10章: status=needs_human steps=7 完成
+第11章: status=needs_human steps=7 完成
+第12章: status=needs_human steps=7 完成
+第13章: status=needs_human steps=7 完成
+第14章: status=needs_human steps=7 完成
+第15章: status=needs_human steps=7 完成
+第16章: status=needs_human steps=7 完成
+第17章: status=needs_human steps=7 完成
+第18章: status=needs_human steps=7 完成
+第19章: status=needs_human steps=7 完成
+第20章: status=needs_human steps=7 完成
+
+判定（钉死）: done ≥18/20 且无 failed 未恢复 → PASS；needs_human >2 → PASS+缺陷清单进 0.2
+实测: done=20/20 needs_human 相关=0
+导出: 20 个 md 文件 → data/exports/
+
+抽查第5章（前 120 字）: # 第5章 第5层  林澈踏上第五层的平台时，并没有感到预想中的轻松。第四层收束后的认知重构仍在脑海中剧烈震荡，那些关于秩序与混乱并非两极的领悟，像是一根根细针扎在神经末梢上。他低头看向自己的双手，指尖还残留着上一场试炼崩解时的灰蓝色纹路，
+
+抽查第20章（前 120 字）: # 第20章 第20层  林澈跨过那道门时，没有回头。第19层的平原在他身后迅速塌陷，那些曾作为路标矗立的枯骨被某种无形的力量碾碎，化作齑粉融入黑暗。他感到脊背上一阵剧烈的抽痛，像是有什么东西正试图从他的骨骼缝隙中剥离出来。掌心的黑色纹路已
