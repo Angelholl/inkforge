@@ -17,7 +17,12 @@ export default function BooksPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-bold">墨炉 · 书架</h1>
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-2xl font-bold">墨炉 · 书架</h1>
+        <Link to="/settings" className="text-sm text-blue-700">
+          设置
+        </Link>
+      </div>
       <div className="mt-4 flex gap-2">
         <input
           className="flex-1 rounded border px-3 py-2"
