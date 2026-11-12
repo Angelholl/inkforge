@@ -14,13 +14,13 @@ const DATA_DIR = path.join(SERVER_DIR, 'data-crash-test');
 const FAKE_PORT = 47900;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** 章 uniq 草稿（每 8 字窗口含章号标记 → 章间零重合） */
+/** 章 uniq 草稿（每 8 字窗口含章号标记 + 句序按章号轮转 → 章间近零重合，主审裁决 F：末 200 字须独立过 tail_replay 0.20，旧版共享句位致 0.31 误判，与裁决 D 同族） */
 function draftText(chapterNo) {
   const sents = ['夜雨初歇。', '山道泥泞。', '少年登程。', '枫叶贴石。', '茶棚歇脚。', '客商闲谈。', '告示新贴。', '墨迹未干。', '名字刺目。', '穿街读毕。'];
   let s = '';
   let i = 0;
   while (s.length < 520) {
-    s += `【章${chapterNo}段${i}】${sents[i % sents.length]}`;
+    s += `【章${chapterNo}段${i}】${sents[(i + chapterNo * 3) % sents.length]}`;
     i++;
   }
   return s.slice(0, 520);
