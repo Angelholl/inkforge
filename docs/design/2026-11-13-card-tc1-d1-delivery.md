@@ -8,7 +8,7 @@
 
 - Modify `apps/server/src/prompts/render.ts`（:19-35 区域 `renderQc` 删除，新增 `renderQcTask()`；注意 T-D1 已在本文件加入 `renderHardRules`，勿动之）
 - Modify `apps/server/src/quality/l1.ts`（qcSlots draft 槽包裹待审标记；firstUser 尾接协议）
-- Modify `apps/server/test/prompts/contract.test.ts`（renderQc 用例就地改 renderQcTask + 新增 1 用例：4→5）
+- Modify `apps/server/test/prompts/contract.test.ts`（renderQc 用例就地改 renderQcTask + 新增 1 用例：5→6——主审勘正，T-D1 已先行 +1）
 - Modify `apps/server/test/quality/l1.test.ts`（3→5，+2 用例）
 - server 基线 142→145（+3）。前置：T-A/T-B/T-D1 已合入。
 
@@ -22,12 +22,12 @@
 ## 四、先红后绿回归测试
 
 1. 先红：l1.test.ts 新增 `'qc 请求携带输出协议与待审正文标记'`——自定义包装 provider（`complete(req)` 先 `seen.push(req.user)` 再透传 `createMockProvider({qc:{text:GOOD_QC}})`），断言 `seen[0]` 依次 toContain `'OVERALL'`、`'SEVERITY:'`、`'【待审正文开始】'`、`'设定一致'`、`'不要输出 JSON'`；再增 `'修复重试请求同样携带协议'`（mock sequence 坏格式→repeat GOOD_QC，断言 `seen[1]` 含 `'OVERALL'`）→ `pnpm --filter @inkforge/server exec vitest run test/quality/l1.test.ts` 红。
-2. 实现 → 同命令 5 passed；contract.test.ts：原用例就地改 `'renderQcTask：四字段标记 + 七维度各一次 + 负约束 + 示例块'`（断言含四字段标记、`for (const d of DIMENSIONS) expect(out.split(d).length - 1).toBe(1)`、负约束、`'示例维度'`）+ 新增用例 `'renderQcTask 不嵌入正文'`（`expect(out).not.toContain(DRAFT)`）→ `vitest run test/prompts/contract.test.ts` 5 passed。
+2. 实现 → 同命令 5 passed；contract.test.ts：原用例就地改 `'renderQcTask：四字段标记 + 七维度各一次 + 负约束 + 示例块'`（断言含四字段标记、`for (const d of DIMENSIONS) expect(out.split(d).length - 1).toBe(1)`、负约束、`'示例维度'`）+ 新增用例 `'renderQcTask 不嵌入正文'`（`expect(out).not.toContain(DRAFT)`）→ `vitest run test/prompts/contract.test.ts` 6 passed（勘正：基数 5 含 T-D1 用例）。
 3. 全量：`pnpm --filter @inkforge/server exec vitest run` 全绿 145（mock 路径零破坏）。
 
 ## 五、验收命令（主审独立复核）
 
-- 四、三命令重跑（l1 5、contract 5、全量 145）；`grep -rn "renderQc\b" apps/server/src` 仅命中 `renderQcTask`（旧名零残留）；`grep -c "示例维度" apps/server/src/prompts/render.ts` ≥1。
+- 四、三命令重跑（l1 5、contract 6、全量 145）；`grep -rn "renderQc\b" apps/server/src` 仅命中 `renderQcTask`（旧名零残留）；`grep -c "示例维度" apps/server/src/prompts/render.ts` ≥1。
 - `git log -1 --stat` 仅触及二、四文件；diff 抽查：renderHardRules（T-D1 产物）未被误删；l1.ts 两处接线与卡面逐字一致。
 
 ## 六、约束
