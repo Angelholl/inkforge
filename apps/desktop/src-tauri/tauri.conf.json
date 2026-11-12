@@ -5,7 +5,7 @@
   "identifier": "dev.inkforge.app",
   "build": {
     "devUrl": "http://localhost:5173",
-    "frontendDist": "../web/dist",
+    "frontendDist": "../../web/dist",
     "beforeDevCommand": "pnpm --filter @inkforge/web dev",
     "beforeBuildCommand": "pnpm --filter @inkforge/web build"
   },
@@ -22,6 +22,23 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "template": "nsis/inkforge-installer.nsi",
+        "installMode": "currentUser"
+      }
+    },
+    "resources": {
+      "resources/server/server.mjs": "resources/server/server.mjs",
+      "resources/server/worker": "resources/server/worker",
+      "resources/server/node_modules": "resources/server/node_modules",
+      "resources/server/config": "resources/server/config",
+      "resources/server/db": "resources/server/db",
+      "resources/web/dist": "resources/web/dist",
+      "resources/runtime/node.exe": "resources/runtime/node.exe"
+    }
   }
 }

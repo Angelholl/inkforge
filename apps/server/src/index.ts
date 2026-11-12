@@ -7,7 +7,7 @@ import { spawnWorkerSupervisor, type SupervisorHandle } from './worker/superviso
 import { createDefaultMockProvider } from './llm/mock';
 import { createAnthropicProvider } from './llm/anthropic';
 
-const WORKER_ENTRY = path.join(path.dirname(fileURLToPath(import.meta.url)), 'worker/main.ts');
+const WORKER_ENTRY = process.env.INKFORGE_WORKER_ENTRY ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'worker/main.ts');
 
 const port = Number(process.env.INKFORGE_PORT ?? 8787);
 let supervisor: SupervisorHandle | null = null;

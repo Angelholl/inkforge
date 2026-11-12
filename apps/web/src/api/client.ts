@@ -10,8 +10,14 @@ import type {
   BlueprintPutBody,
 } from '@inkforge/shared';
 
+export function resolveApiBase(isDev: boolean): string {
+  return isDev ? '' : 'http://127.0.0.1:8787';
+}
+
+export const API_BASE = resolveApiBase(import.meta.env.DEV);
+
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, {
+  const r = await fetch(`${API_BASE}${url}`, {
     headers: { 'content-type': 'application/json' },
     ...init,
   });
@@ -54,7 +60,7 @@ export const api = {
     }),
 };
 
-export const SSE_BASE = '';
+export const SSE_BASE = API_BASE;
 export function runEventsUrl(runId: string): string {
-  return `${SSE_BASE}/api/runs/${runId}/events`;
+  return `${API_BASE}/api/runs/${runId}/events`;
 }

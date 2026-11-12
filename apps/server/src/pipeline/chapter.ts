@@ -23,7 +23,7 @@ import { pickStyleSamples, renderStyleBlock } from '../style/inject';
 import type { StyleSample } from '../style/distill';
 import { runSummarizeStep } from './summarize';
 
-const CLIQUES_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
+const CLIQUES_PATH = process.env.INKFORGE_CLIQUES_PATH ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
 
 export interface RunOutcome {
   status: 'done' | 'needs_human' | 'failed';

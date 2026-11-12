@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Database } from './open';
 
-const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
+const MIGRATIONS_DIR = process.env.INKFORGE_MIGRATIONS_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
 
 /**
  * 顺序迁移：按文件名序执行 user_version < N 的脚本，每脚本单事务并推进 user_version。幂等。

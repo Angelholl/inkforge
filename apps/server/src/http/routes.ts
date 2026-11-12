@@ -15,10 +15,21 @@ import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
 import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
+import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
-const WEB_DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../web/dist');
+const WEB_DIST = process.env.INKFORGE_WEB_DIST ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../web/dist');
+
+const settingsPutSchema = z.object({
+  strataBaseUrl: z.string().optional(),
+  strataApiKey: z.string().optional(),
+  strataModel: z.string().optional(),
+  cloudBaseUrl: z.string().optional(),
+  cloudApiKey: z.string().optional(),
+  cloudModel: z.string().optional(),
+  mock: z.boolean().optional(),
+});
 
 export interface RouteState {
   db: Database;
@@ -330,6 +341,41 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const q = (req.query as { q?: string }).q ?? '';
     if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
     reply.send(searchChapters(db, bookId, q));
+  });
+
+  // ── settings ──
+  app.get('/api/settings', async () => {
+    const s = readSettingsFile();
+    return {
+      strataBaseUrl: s.STRATA_BASE_URL ?? '',
+      strataModel: s.STRATA_MODEL ?? '',
+      hasApiKey: Boolean(s.STRATA_API_KEY),
+      cloudBaseUrl: s.INKFORGE_CLOUD_BASE_URL ?? '',
+      cloudModel: s.INKFORGE_CLOUD_MODEL ?? '',
+      hasCloudApiKey: Boolean(s.INKFORGE_CLOUD_API_KEY),
+      mock: s.INKFORGE_MOCK === '1',
+      configPath: configFilePath(),
+    };
+  });
+
+  app.put('/api/settings', async (req, reply) => {
+    const body = parseBody(reply, settingsPutSchema, req.body ?? {});
+    if (!body) return;
+    const next = { ...readSettingsFile() };
+    const setOrDelete = (key: string, value: string | undefined): void => {
+      if (value === undefined) return;
+      if (value === '') delete next[key];
+      else next[key] = value;
+    };
+    setOrDelete('STRATA_BASE_URL', body.strataBaseUrl);
+    setOrDelete('STRATA_API_KEY', body.strataApiKey);
+    setOrDelete('STRATA_MODEL', body.strataModel);
+    setOrDelete('INKFORGE_CLOUD_BASE_URL', body.cloudBaseUrl);
+    setOrDelete('INKFORGE_CLOUD_API_KEY', body.cloudApiKey);
+    setOrDelete('INKFORGE_CLOUD_MODEL', body.cloudModel);
+    if (body.mock !== undefined) next.INKFORGE_MOCK = body.mock ? '1' : '0';
+    writeSettingsFile(next);
+    reply.send({ saved: true, restartRequired: true });
   });
 }
 

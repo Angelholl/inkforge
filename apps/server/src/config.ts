@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { StepName } from '@inkforge/shared';
+import { readSettingsFile } from './settings';
 
 export type RoleName = 'planner' | 'drafter' | 'qc' | 'rewriter' | 'summarizer';
 
@@ -106,7 +107,8 @@ export function pickBudgetProfile(contextWindow: number): 'draft' | 'draft8k' {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
-  const e = envSchema.parse(env);
+  const merged = { ...env, ...readSettingsFile() };
+  const e = envSchema.parse(merged);
   const local: ProviderConfig = {
     name: 'local',
     baseURL: e.STRATA_BASE_URL,

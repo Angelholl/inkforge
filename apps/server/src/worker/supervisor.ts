@@ -9,7 +9,8 @@ export interface SupervisorHandle {
 }
 
 /**
- * worker supervisor：spawn `node --import tsx <entryPath>`；
+ * worker supervisor：默认 spawn `node --import tsx <entryPath>`（dev，跑 TS 源）；
+ * INKFORGE_WORKER_TSX=0 时免 tsx 直跑编译产物（打包态）；tsx 不可用即 worker 无限重启，打包态必须置 0。
  * 退避重启（序列 ×2^n，稳定运行 60s 重置）；exit 0 视为主动退出不再重启；
  * INKFORGE_SUPERVISOR_BACKOFF_MS 覆盖基准退避（测试用 100）。
  */
@@ -31,7 +32,9 @@ export function spawnWorkerSupervisor(opts: {
 
   const launch = () => {
     if (stopped.value) return;
-    child = spawn(process.execPath, ['--import', 'tsx', opts.entryPath], {
+    const useTsx = opts.env.INKFORGE_WORKER_TSX !== '0';
+    const args = useTsx ? ['--import', 'tsx', opts.entryPath] : [opts.entryPath];
+    child = spawn(process.execPath, args, {
       env: opts.env,
       stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     });

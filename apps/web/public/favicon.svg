@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- 墨炉 Inkforge · 书入传送带，穿安检门：自动化质检加工（CineSort 二元色风格） -->
+  <rect width="256" height="256" rx="56" fill="#F8FAFC"/>
+
+  <!-- 动势线：书刚被放上传送带（双弧，更有动感） -->
+  <path d="M38 92 Q52 74 72 80" stroke="#2B3A5C" stroke-width="5" fill="none" stroke-linecap="round" opacity=".3"/>
+  <path d="M28 106 Q36 96 48 98" stroke="#2B3A5C" stroke-width="4" fill="none" stroke-linecap="round" opacity=".2"/>
+
+  <!-- 右：安检门（描边门框，同书架空框语言） -->
+  <path d="M150 202 L150 90 L228 90 L228 202" fill="none" stroke="#2B3A5C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 门楣指示灯：右灯带提示波纹 -->
+  <rect x="162" y="102" width="16" height="8" rx="4" fill="#2B3A5C"/>
+  <rect x="200" y="102" width="16" height="8" rx="4" fill="#2B3A5C" opacity=".55"/>
+  <path d="M222 99 Q228 106 222 113" stroke="#2B3A5C" stroke-width="3" fill="none" stroke-linecap="round" opacity=".45"/>
+  <!-- 扫描线：微斜虚线，正在扫过 -->
+  <path d="M160 152 L218 158" stroke="#2B3A5C" stroke-width="4" stroke-linecap="round" opacity=".35" stroke-dasharray="9 7"/>
+
+  <!-- 左：摞书堆（三册错位叠放，顶册倾斜刚落） -->
+  <rect x="44" y="138" width="52" height="38" rx="5" fill="#2B3A5C"/>
+  <rect x="54" y="150" width="24" height="5" rx="2.5" fill="#F8FAFC" opacity=".7"/>
+  <rect x="48" y="116" width="46" height="22" rx="5" fill="#2B3A5C"/>
+  <rect x="60" y="124" width="20" height="5" rx="2.5" fill="#F8FAFC" opacity=".7"/>
+  <g transform="rotate(-12 76 107)">
+    <rect x="56" y="96" width="40" height="18" rx="5" fill="#2B3A5C"/>
+    <rect x="66" y="102" width="16" height="4.5" rx="2.25" fill="#F8FAFC" opacity=".7"/>
+  </g>
+
+  <!-- 传送带：穿门而过 -->
+  <rect x="24" y="176" width="208" height="24" rx="12" fill="#2B3A5C"/>
+  <circle cx="46" cy="188" r="5.5" fill="#F8FAFC"/>
+  <circle cx="88" cy="188" r="5.5" fill="#F8FAFC"/>
+  <circle cx="130" cy="188" r="5.5" fill="#F8FAFC"/>
+  <circle cx="172" cy="188" r="5.5" fill="#F8FAFC"/>
+  <circle cx="214" cy="188" r="5.5" fill="#F8FAFC"/>
+  <!-- 带面运动短划：正在移动 -->
+  <rect x="58" y="186" width="10" height="3.5" rx="1.75" fill="#F8FAFC" opacity=".45"/>
+  <rect x="100" y="186" width="10" height="3.5" rx="1.75" fill="#F8FAFC" opacity=".45"/>
+  <rect x="184" y="186" width="10" height="3.5" rx="1.75" fill="#F8FAFC" opacity=".45"/>
+</svg>

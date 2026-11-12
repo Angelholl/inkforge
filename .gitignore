@@ -6,3 +6,4 @@ data-*/
 *.log
 .vitest/
 target/
+apps/desktop/src-tauri/resources/
