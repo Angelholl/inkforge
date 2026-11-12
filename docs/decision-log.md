@@ -77,3 +77,19 @@
 4. 发布阻断门（critic 三条件）：① DriveType=3 云盘实测（本机 F: Google Drive）；② 校验矩阵（/D、目录页手输、junction/UNC、无合规盘、目标盘不可写）；③ CLI 版本锁定。任一失败回 critic 复议。
 5. Q1 射程：窄口径临时执行——仅程序目录禁 C；%APPDATA% config/data、快捷方式、注册表留 C，待 owner 裁定不阻塞 0.1。
 6. 产品后果：仅 C 盘机器不可安装，发布说明与 README 明示；owner 放宽须另立决策。
+
+## DEC-2026-1113-01 [PROXY-DECISION] 0.1.2 轮 D1 路线/排期/图标债务代决与发版放行挂回（2026-11-13）
+
+**背景：** owner 无人值守轮（owner 原话「本次为无人值守，本轮任务完成后继续推进」+ 两项书面拍板：①范围=图标接线+D1/D3 收口发 0.1.2（含"真模型 3 章验证放行后发版"）；②追加=D2/D4 修复、QC 回归集+夹具库、过夜 20 章挂机复跑）。计划 `docs/plans/2026-11-13-inkforge-0.1.2.md` 经 decision-critic 评议（必改项 M1-M9，其中基线口径一条为 [HIGH_RISK_OBJECTION]，主模型全部采纳消解）后，decision-proxy 按四门对四项待决点代拍板。
+
+**裁决内容：**
+1. **D1 采纳路线一**：`renderQc`→`renderQcTask` 协议投递接线 + 解析器最小加固（围栏/全角冒号/杂质分值）+ 真模型 replay 夹具过门；过门不达标再叠路线二；路线三（切 JSON）违 DEC-2026-1111-01 第 2 条子项（分隔符纯文本协议，理由=iq3_xxs JSON 遵循不可靠，decision-log.md:13）+ config.ts:119 supportsJsonSchema=false，属架构级 owner 保留，本轮不采；路线 2.5（Anthropic tool_use）登记为 0.2 候选。闭合判据以 critic M4 修订版为准（3 份 good 语料合计 ≥1 条 quote⊆draft 合法 finding），未落地则本裁决基础失效须重入。
+2. **D2 采纳执行顺序**：T-A→T-B→T-D1→T-C1→T-C2→T-C3→T-D2→T-E→T-F→T-H 三章早门→T-G 打包装机→T-H 20 章过夜→T-I 存证与 push；发版门=早门三判据加固版 + T-F 全绿 + T-G 装机目验过；20 章不达标→不发版、不撤本机、0.1.1 保持线上最新。
+3. **D4 采纳 INSTALLERICON 空置推迟 0.2**：影响面仅 setup.exe/uninstall.exe 文件图标走 NSIS 默认（nsi:42/:45 空置、:147 条件生效）；ARP DisplayIcon（:5262）/桌面/开始菜单均随 exe 内嵌新图标；本轮 .nsi 禁改不变。观察项入账：nsi 模板 :37 `!define VERSION "0.1.0"` 冻结（0.1.1 构建产物 target/…/installer.nsi:37 同值）→ 0.1.2 安装包 ARP DisplayVersion 将显示 0.1.0，记入发版已知债务，T-G 记录实测值不阻断。
+4. **D3 拒裁挂回 owner** [OUT-OF-SCOPE]+[MATERIAL_CONFLICT]：owner「发 0.1.2」是否覆盖 git tag + GitHub Release 上载存在歧义，且与计划 T-I 原有"打 tag 前 owner 放行"前置门自相矛盾、缺 critic/planner 表态。临时推进：commit/push/发版存证照走，tag 与 `gh release create` 挂起，安装包留本机。
+
+**一致推荐名单：** D1=planner（推荐路线一）+critic（有条件支持，M4 已闭环）+主模型；D2=三方一致；D4=planner（本轮不动）+critic（影响面核实无异议）+主模型；D3 仅主模型单方认定，无一致性。
+
+**风险与驳回回滚清单：** owner 驳回 D1→revert T-C1/T-C2 提交（夹具可留），成本 1 次 revert；驳回 D2→剩余卡重排，已提交不回滚；驳回 D4→补两行 define+重打包≈1 次 tauri build；tag/Release 未创建，全程无不可逆。
+
+**owner 驳回/放行方式：** 任何后续表态即覆盖本裁决触发复议。D3 需 owner 逐字回答四问：①早门+T-F+T-G 通过后是否授权创建 tag v0.1.2 并 gh release 上载安装包；②或 Release 页只挂 notes+S码不上载安装包；③20 章复跑不达标时 Release 是否同样不发、只交晨检报告；④是否授权按①答复改写计划 T-I 前置门行。
