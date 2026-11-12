@@ -34,6 +34,14 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   await app.register(cors, { origin: ['http://localhost:5173', 'tauri://localhost', 'http://tauri.localhost'] });
   if (fs.existsSync(WEB_DIST)) {
     await app.register(fastifyStatic, { root: WEB_DIST });
+    // SPA history 回退：非 /api 的 GET 未命中路由时回 index.html（深链接刷新/直开不 404）
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method === 'GET' && !req.url.startsWith('/api/')) {
+        reply.type('text/html').send(fs.readFileSync(path.join(WEB_DIST, 'index.html')));
+        return;
+      }
+      reply.code(404).send({ message: `Route ${req.method}:${req.url} not found`, error: 'Not Found', statusCode: 404 });
+    });
   }
 
   // ── books ──

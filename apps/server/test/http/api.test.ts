@@ -95,4 +95,14 @@ describe('REST API', () => {
     const r = await app.inject({ method: 'POST', url: `/api/runs/${runId}/cancel` });
     expect(r.statusCode).toBe(202);
   });
+
+  it('SPA history 回退：深链接 GET 回 index.html，未知 API 仍 404 JSON（回归：2026-11-12 GUI 目验发现）', async () => {
+    const deep = await app.inject({ method: 'GET', url: `/books/${bookId}/chapters/1` });
+    expect(deep.statusCode).toBe(200);
+    expect(deep.headers['content-type']).toContain('text/html');
+    expect(deep.body).toContain('<div id="root">');
+    const apiMiss = await app.inject({ method: 'GET', url: '/api/definitely-not-a-route' });
+    expect(apiMiss.statusCode).toBe(404);
+    expect(apiMiss.headers['content-type']).toContain('application/json');
+  });
 });
