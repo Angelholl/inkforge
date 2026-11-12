@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadCliches, runL0Checks } from '../../../src/quality/l0';
 import { parseFindings } from '../../../src/llm/plainproto';
-import { BOOK_ID, CAPTURE_CHAPTERS, DB_PATH, L0_BAD, L0_GOOD, L1_BAD_RAW, L1_GOOD_RAW, type L0Sample } from './corpus';
+import { BOOK_ID, DB_PATH, L0_BAD, L0_GOOD, L1_BAD_RAW, L1_GOOD_RAW, type L0Sample } from './corpus';
 
 const cliches = loadCliches(path.join(process.cwd(), 'config/quality/cliches.default.txt'));
 
