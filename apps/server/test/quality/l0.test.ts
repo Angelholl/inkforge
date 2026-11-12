@@ -13,6 +13,8 @@ import {
   REPLAY_DRAFT,
   REPLAY_PREV,
   SHORT_DRAFT,
+  TAIL_REPLAY_DRAFT,
+  TAIL_REPLAY_PREV,
 } from './fixtures';
 
 const cliches = loadCliches(path.join(process.cwd(), 'config/quality/cliches.default.txt'));
@@ -95,5 +97,28 @@ describe('L0 beat/continuity + 全过基线', () => {
     for (const c of r.checks) {
       expect(c.pass).toBe(true);
     }
+  });
+});
+
+describe('L0 tail_replay + 实证套话', () => {
+  it('tail_replay：章尾复现前文尾段 → 硬失败', () => {
+    const r = runL0Checks({ draft: TAIL_REPLAY_DRAFT, targetChars: 500, prevTexts: [TAIL_REPLAY_PREV], blueprint: BP_EMPTY, continuity: { characters: [] }, cliches });
+    const c = r.checks.find((c) => c.name === 'tail_replay')!;
+    expect(c.pass).toBe(false);
+    expect(r.hardFail).toBe(true);
+  });
+
+  it('tail_replay：独立章尾 → 通过', () => {
+    const r = runL0Checks({ draft: HAPPY_DRAFT, targetChars: 120, prevTexts: [TAIL_REPLAY_PREV], blueprint: BP_EMPTY, continuity: { characters: [] }, cliches });
+    const c = r.checks.find((c) => c.name === 'tail_replay')!;
+    expect(c.pass).toBe(true);
+    expect(r.hardFail).toBe(false);
+  });
+
+  it('cliche：新增实证套话句命中', () => {
+    const r = runL0Checks({ draft: '事了之后，他步伐沉稳，眼神冷峻地离开。', targetChars: 100, prevTexts: [], blueprint: BP_EMPTY, continuity: { characters: [] }, cliches });
+    const c = r.checks.find((c) => c.name === 'cliche')!;
+    expect(c.pass).toBe(false);
+    expect(r.clicheHits).toContain('步伐沉稳，眼神冷峻');
   });
 });

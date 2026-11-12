@@ -70,19 +70,28 @@ const SENTENCES = [
   '临别赠牌。',
 ];
 
+/** 专属章尾句：按 chapterNo 确定性构造（无随机/时钟），章号每 ≤7 字出现一次，保证尾部任意 8 字窗口均含章号。 */
+function chapterTail(chapterNo: number): string {
+  const unit = `夜${chapterNo}灯灭，更${chapterNo}鼓歇。`;
+  return unit.repeat(8);
+}
+
 /**
- * 500 字确定性草稿。每个 8 字窗口都含章号标记（【章N段i】），章间 8-gram 重合率为 0
- * （L0 重演阈值 0.35）；无套话表命中。
+ * 500 字确定性草稿。句体以章号专属字母包裹（句距 ≤8 字，任意 8 字窗口必含该字母或章号位），
+ * 尾部再追加专属章尾句，使任意两章去空白末 200 字 8-gram 重合 < tail_replay 阈值 0.20；
+ * 无套话表命中。
  */
 export function makeMockDraft(chapterNo: number): string {
   let i = 0;
   let s = '';
-  const unit = (idx: number) => `【章${chapterNo}段${idx}】${SENTENCES[idx % SENTENCES.length]}`;
+  const tail = chapterTail(chapterNo);
+  const mark = String.fromCharCode(65 + ((chapterNo - 1) % 26));
+  const unit = (idx: number) => `【章${chapterNo}段${idx}】${mark}${SENTENCES[idx % SENTENCES.length]}${mark}`;
   while (true) {
     s += unit(i++);
     if (s.length >= 520) break;
   }
-  return trimToCount(s, 500);
+  return trimToCount(s, 500 - tail.length) + tail;
 }
 
 const SUMMARY_SAMPLE = `SUMMARY: 主角抵达镇上，发现告示与故人相关，夜里与故人会面密谈。

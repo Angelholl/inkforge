@@ -35,3 +35,10 @@ export const DECEASED_BP = BP_EMPTY;
 export const DECEASED_APPEAR_DRAFT = '长谈之后，李慕白送他出门，临别赠言半句。';
 
 export const SENTIMENT_DRAFT = '清点行装，把拓片夹进书册，他连夜返回山门。';
+
+/** 章尾 200 字复演：PREV 为前文（末句「步伐沉稳，眼神冷峻地走远。」），DRAFT 末 200 字复制 PREV 末段。 */
+export const TAIL_REPLAY_PREV =
+  '山道尽头的石台被岁月磨得光滑。他站在台上，回望来路，云雾在脚下翻涌聚散。这一夜的守御远比想象中凶险，傀儡阵的间隙一次比一次狭窄，他几次险些被绞入其中，全凭一线直觉避开。石台四周的火把尽数熄灭，唯余月光落在他染血的衣襟上。伤处隐隐作痛，他却无暇包扎，只将断刃插回鞘中，深吸一口气，整了整衣冠，步伐沉稳，眼神冷峻地走远。';
+export const TAIL_REPLAY_DRAFT =
+  '清晨的集市人声鼎沸，他买了一笼炊饼，又去驿馆打探北境的消息，问遍了几个南来北往的行商。' +
+  TAIL_REPLAY_PREV.slice(TAIL_REPLAY_PREV.length - 200);

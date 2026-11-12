@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { countChars, type ChapterBlueprint } from '@inkforge/shared';
 
 export interface L0Check {
-  name: 'length' | 'cliche' | 'replay_ngram' | 'plagiarism_ngram' | 'beat_coverage' | 'continuity_facts' | 'style_drift';
+  name: 'length' | 'cliche' | 'replay_ngram' | 'plagiarism_ngram' | 'beat_coverage' | 'continuity_facts' | 'style_drift' | 'tail_replay';
   pass: boolean;
   details: string;
 }
@@ -48,6 +48,18 @@ function replayRatio(draft: string, prevTexts: string[], n = 8): number {
   if (grams.size === 0) return 0;
   const prev = new Set<string>();
   for (const t of prevTexts) for (const g of ngramSet(t, n)) prev.add(g);
+  let hit = 0;
+  for (const g of grams) if (prev.has(g)) hit++;
+  return hit / grams.size;
+}
+
+/** 章尾 200 字复演率：draft 与各 prev 各取去空白后末 200 字，n=8 ngram 集合重合率（占 draft 尾段）。 */
+function tailReplayRatio(draft: string, prevTexts: string[], n = 8, tail = 200): number {
+  const tailOf = (t: string) => t.replace(/\s/g, '').slice(-tail);
+  const grams = ngramSet(tailOf(draft), n);
+  if (grams.size === 0) return 0;
+  const prev = new Set<string>();
+  for (const t of prevTexts) for (const g of ngramSet(tailOf(t), n)) prev.add(g);
   let hit = 0;
   for (const g of grams) if (prev.has(g)) hit++;
   return hit / grams.size;
@@ -110,6 +122,10 @@ export function runL0Checks(input: {
   const ratio = replayRatio(input.draft, input.prevTexts);
   checks.push({ name: 'replay_ngram', pass: ratio < 0.35 || input.prevTexts.length === 0, details: `replayRatio=${ratio.toFixed(3)} (n=8, 阈值 0.35)` });
 
+  // 3b. tail_replay：章尾 200 字复演 n=8 阈值 0.20（硬失败，拦章尾集中复现）
+  const tailRatio = tailReplayRatio(input.draft, input.prevTexts);
+  checks.push({ name: 'tail_replay', pass: input.prevTexts.length === 0 || tailRatio < 0.20, details: `tailRatio=${tailRatio.toFixed(3)} (n=8, tail=200字, 阈值 0.20)` });
+
   // 4. plagiarism ≥15 连续字命中 few-shot/参考
   const copied = input.referenceTexts ? hasLongCopy(input.draft, input.referenceTexts) : false;
   checks.push({ name: 'plagiarism_ngram', pass: !copied, details: copied ? '发现 ≥15 连续字与参考文本重合' : '无 ≥15 连续字重合' });
@@ -132,7 +148,7 @@ export function runL0Checks(input: {
     checks.push({ name: 'style_drift', pass: drift.overBandItems === 0, details: drift.details });
   }
 
-  const hardFail = checks.some((c) => !c.pass && ['length', 'cliche', 'replay_ngram', 'plagiarism_ngram', 'beat_coverage', 'continuity_facts'].includes(c.name));
+  const hardFail = checks.some((c) => !c.pass && ['length', 'cliche', 'replay_ngram', 'tail_replay', 'plagiarism_ngram', 'beat_coverage', 'continuity_facts'].includes(c.name));
   return { checks, hardFail, softMajors, metrics: { charCount, replayRatio: ratio }, clicheHits };
 }
 
