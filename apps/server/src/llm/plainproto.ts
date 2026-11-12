@@ -12,7 +12,11 @@ export interface ParsedFindings {
 /** 分隔符纯文本 findings 解析（iq3_xxs JSON 遵循不可靠，DEC-01 ④）。容忍 CRLF 与多余空行。 */
 export function parseFindings(raw: string): ParsedFindings {
   const errors: string[] = [];
-  const text = raw.replace(/\r\n/g, '\n');
+  const text = raw
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('```'))
+    .join('\n');
   let overall: number | null = null;
   let overallSeen = false;
 
@@ -29,7 +33,7 @@ export function parseFindings(raw: string): ParsedFindings {
   for (const lines of blocks) {
     const fields = new Map<string, string>();
     for (const line of lines) {
-      const m = /^([A-Z]+):\s*(.*)$/.exec(line);
+      const m = /^([A-Z]+)\s*[:：]\s*(.*)$/.exec(line);
       if (m && (KEYS as readonly string[]).includes(m[1]) || (m && m[1] === 'OVERALL')) {
         fields.set(m[1], m[2].trim());
       }
@@ -37,7 +41,8 @@ export function parseFindings(raw: string): ParsedFindings {
     const ov = fields.get('OVERALL');
     if (ov !== undefined) {
       overallSeen = true;
-      const n = Number(ov);
+      const m = /(\d+)/.exec(ov);
+      const n = m ? Number(m[1]) : NaN;
       if (Number.isInteger(n) && n >= 1 && n <= 10) overall = n;
       else errors.push(`OVERALL 非法: ${ov}`);
       continue;
