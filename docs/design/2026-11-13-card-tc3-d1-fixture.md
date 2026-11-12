@@ -16,7 +16,7 @@
 ## 三、改法（钉死）
 
 1. **capture-qc-raw.mjs**（计划 :140）：`--chapter <N> --out <path> [--pre]`；better-sqlite3 readonly 读 `data/inkforge.db` 取挂机书 chapter N 的 current 版本 content、blueprint JSON、target_chars → 按 l1.ts qcSlots 同构装配（hardRules=renderHardRules(targetChars)/draft/blueprint/continuity='' 四槽，budgets.qc，**system 发 assembled.system**，温度 0.2，maxOutput 8192）→ 不带 --pre：draft 槽包裹 `【待审正文开始/结束】` 且 user 尾接 renderQcTask()；`--pre`：裸 draft 无标记、user 尾不接协议（完整复现修前形状）→ `POST {STRATA_BASE_URL}/messages`（headers：`x-api-key`、`anthropic-version: 2023-06-01`）→ raw text 原样写 --out。运行钉死：`node --import tsx --env-file=../../.env scripts/capture-qc-raw.mjs ...`（cwd=apps/server）。脚本任何输出不得打印 apiKey 值。
-2. **语料**：先 `--pre` 采 bad 三份（chapter 5/8/12）→ 各 >200 字节且与对应章 draft 非逐字节相等；再采 good 三份（不带 --pre）。**raw 原样入库，禁止任何编辑修剪**。
+2. **语料**：先 `--pre` 采 bad 三份（chapter 5/8/12）→ 各 >200 字节；与 draft 逐字节相等时按主审裁决 C 处理：复读正文=修前无协议形状的真实行为，接受入库（bad 用例判据 errors>0 不受影响），出处旁证=任一章非等输出+502 类 HTTP 错误不落夹具；不得为凑"非等"改 --pre 形状或反复重采。再采 good 三份（不带 --pre；预算主审已扩至每文件至多 2 次重采，每次重采在报告注明）。**raw 原样入库，禁止任何编辑修剪**。
 
 ## 四、先红后绿回归测试（M4 判据）
 
