@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
-import { renderDraft, renderQc, renderRewrite, renderSummarize } from '../../src/prompts/render';
+import { renderDraft, renderHardRules, renderQc, renderRewrite, renderSummarize } from '../../src/prompts/render';
 
 const BP: ChapterBlueprint = {
   goal: '主角进入书房取得密信',
@@ -39,6 +39,15 @@ describe('prompt 渲染契约', () => {
     expect(out).toContain('他拔出佩剑');
     expect(out).toContain('佩剑已折断');
     expect(out).toContain('仅修复所列问题');
+  });
+
+  it('renderHardRules：目标带 0.9-1.1 与自检指令、硬上限 1.2', () => {
+    const out = renderHardRules(3000);
+    expect(out).toContain('2700');
+    expect(out).toContain('3300');
+    expect(out).toContain('3600');
+    expect(out).toContain('清点一遍字数');
+    expect(out).not.toContain('必须写在');
   });
 
   it('renderSummarize：四个格式标记齐备', () => {

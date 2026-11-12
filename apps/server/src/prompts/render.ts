@@ -2,6 +2,16 @@ import { DIMENSIONS, type ChapterBlueprint, type Finding } from '@inkforge/share
 
 const LENGTH_RULE = (target: number) => `字数目标 ${target} 字，允许偏差 ±20%。`;
 
+/** 硬规则三行：长度带 0.9-1.1 + 字数自检 + 套话禁令 + 纯正文输出。 */
+export function renderHardRules(targetChars: number): string {
+  return [
+    '【硬规则】',
+    `1. 正文字数硬约束：以 ${targetChars} 字为目标写作，落在 ${Math.round(targetChars * 0.9)} 至 ${Math.round(targetChars * 1.1)} 字之间；${Math.round(targetChars * 1.2)} 字为绝对上限，超过视为废稿。写完正文后清点一遍字数，超出区间必须自行删改到区间内再输出。`,
+    '2. 严禁套话句式，包括但不限于：「不是…而是…」「这一刻，他明白了」「空气仿佛凝固」「宛如」。',
+    '3. 直接输出正文，不要任何标题、解释或元信息。',
+  ].join('\n');
+}
+
 /** draft 步任务段：含世界观要点、章节蓝图（goal/beats/mustHave/banned）与硬性要求。 */
 export function renderDraft(input: { chapterNo: number; targetChars: number; worldview: string; blueprint: ChapterBlueprint }): string {
   const lines = [

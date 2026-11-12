@@ -12,7 +12,7 @@ import { assembleContext, draftSlots } from '../context/assembler';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 import { hashPrompt } from '../llm/hash';
-import { renderDraft, renderRewrite } from '../prompts/render';
+import { renderDraft, renderHardRules, renderRewrite } from '../prompts/render';
 import { loadCliches, runL0Checks } from '../quality/l0';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
@@ -100,12 +100,7 @@ export async function runChapterPipeline(
     const cur = prevChapter.currentVersionId ? chaptersRepo.getVersion(db, prevChapter.currentVersionId) : undefined;
     if (cur) prevTexts.push(cur.content);
   }
-  const hardRules = [
-    '【硬规则】',
-    `1. 正文字数硬约束：正文必须写在 ${Math.round(targetChars * 0.8)} 至 ${Math.round(targetChars * 1.2)} 字之间（目标 ${targetChars} 字）。超过上限视为废稿。`,
-    '2. 严禁套话句式，包括但不限于：「不是…而是…」「这一刻，他明白了」「空气仿佛凝固」「宛如」。',
-    '3. 直接输出正文，不要任何标题、解释或元信息。',
-  ].join('\n');
+  const hardRules = renderHardRules(targetChars);
 
   emit({ type: 'run.status', runId: args.runId, status: 'running', ts: now() });
   chaptersRepo.setChapterStatus(db, chapter.id, 'drafting');
@@ -276,8 +271,8 @@ export async function runChapterPipeline(
         findings: l1.findings,
         taskInstruction:
           mode === 'targeted'
-            ? `仅修复所列问题，其余内容保持原样；若正文超长必须压缩到 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字；${clicheFix}直接输出修订后的完整章节正文。`
-            : `按硬规则与蓝图整章重写，消除全部所列问题；正文必须写在 ${Math.round(targetChars * 0.8)}-${Math.round(targetChars * 1.2)} 字之间；${clicheFix}直接输出完整章节正文。`,
+            ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${clicheFix}直接输出修订后的完整章节正文。`
+            : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${clicheFix}直接输出完整章节正文。`,
       });
       const rwSlots =
         mode === 'targeted'
