@@ -11,7 +11,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/server/scripts/**/*.mjs'],
+    files: ['apps/server/scripts/**/*.mjs', 'apps/desktop/scripts/**/*.mjs'],
     languageOptions: {
       globals: {
         setTimeout: 'readonly',

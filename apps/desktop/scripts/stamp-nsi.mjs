@@ -3,7 +3,7 @@
 // --out <path> 模式不改原文件，落一份盖章副本（T14 芽构建用，可与 --version 连用）。
 // 与 cwd 无关：全部路径以 import.meta.url 相对解析。任一定位失败/多命中 → exit 1 不落盘；幂等。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));

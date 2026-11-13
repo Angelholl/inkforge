@@ -1,5 +1,4 @@
 // Fetch the pinned standalone node.exe for the desktop sidecar.
-/* global console, fetch, process */
 // Reads apps/desktop/NODE_VERSION, downloads the matching win-x64 binary from
 // nodejs.org and writes it to src-tauri/resources/runtime/node.exe.
 import fs from 'node:fs';
