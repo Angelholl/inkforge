@@ -4,6 +4,8 @@ import type {
   ChapterDto,
   CreateBookBody,
   BlueprintSuggestBody,
+  OutlineSuggestBody,
+  OutlineSuggestResult,
   CreateRunBody,
   ImportOriginalBody,
   ImportOriginalResult,
@@ -49,6 +51,11 @@ export const api = {
     req<ImportOriginalResult>(`/api/books/${bookId}/import-original`, { method: 'POST', body: JSON.stringify(body) }),
   suggestBlueprint: (bookId: string, body: BlueprintSuggestBody) =>
     req<{ blueprint: unknown; source: 'llm' | 'manual' }>(`/api/books/${bookId}/blueprint-suggest`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  suggestOutline: (bookId: string, body: OutlineSuggestBody) =>
+    req<OutlineSuggestResult>(`/api/books/${bookId}/outline-suggest`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

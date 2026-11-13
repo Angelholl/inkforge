@@ -44,7 +44,7 @@ export function parseOutline(raw: string, expectedCount?: number): ParsedOutline
 // 行为：`# <n>` 行切块（全角＃容忍）；块内 parseBlueprint；块错 → `第n章: <err>` 前缀；
 // expectedCount 给定时缺块 → `缺少第n章块`；n 非连续/重复不报错（按 n 排序去重首现）
 // render.ts
-export function renderOutlineTask(args: { bookTitle: string; worldview: string; chapterCount: number }): string;
+export function renderOutlineTask(args: { bookTitle: string; chapterCount: number }): string;
 // 输出钉死含：【任务】为《书名》拟全书 ${chapterCount} 章蓝图（第 1..N 章，每章一块）、
 // 【输出格式】每章以 `# 章号` 行开头，块内 GOAL:/BEATS:/HOOK: 同单章协议、
 // 负约束（不输出 JSON/markdown/解释；不得复述世界观原文；每块必须含 GOAL/BEATS/HOOK）、【世界观】全文
@@ -110,3 +110,10 @@ server 173 ─EB-1 +3→ 176 ─EB-2 +2→ 178；web 19 ─EB-3 +1→ 20；share
 3. **签名一致**：parseOutline/renderOutlineTask/OutlineBudgets 三处同名同形；OutlineSuggestResult 与端点返回同形；createRun body 与 CreateRunBody 同形。
 4. **输入类测试**：空/缺块（parseOutline 缺块报错）、越界（chapterCount 0→400）、502 显性（EB-3 步骤 4）、mock 502 兜底（R7 注记）。
 5. **比例**：3 任务覆盖 5 src + 4 test + 2 shared/client；测试净 +6 对新增 1 端点 1 解析器 1 向导，健康。
+
+---
+
+## 修订记录（实施期，2026-11-14）
+
+1. **EB-1 renderOutlineTask 签名去 worldview 参数**：世界观经独立 worldview 槽入装配（budgets.outline.worldview=5000），任务段只承载协议行——若把全文嵌入任务段会被 task 槽 600 字预算截断。槽位=hardRules/worldview/task 三槽，worldview 槽 keep='head'。此为槽位装配正确性修正，接口面收敛（参数更少）。
+2. **server 测试封闭性加固（vitest.config.ts + test/setup.env.ts）**：GUI 目验事故（设置保存写 ~/.inkforge/config.json 污染 loadConfig 既有断言，事故已于当日修复且确认无预存配置被覆盖）后，测试全局设 INKFORGE_CONFIG_FILE 指向 tmp，双向隔离（防宿主污染测试、防测试污染宿主）。

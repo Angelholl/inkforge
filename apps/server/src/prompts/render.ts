@@ -106,3 +106,18 @@ export function renderBlueprintTask(args: {
     `【连续性摘要】${headExcerpt(args.continuityText, 30) || '（无）'}`,
   ].join('\n');
 }
+
+/**
+ * planner 全书蓝图任务段（入口 B）：每章一块行协议 + 负约束。
+ * 世界观走独立 worldview 槽（budgets.outline.worldview），任务段只承载协议保证不被截断。
+ */
+export function renderOutlineTask(args: { bookTitle: string; chapterCount: number }): string {
+  return [
+    `【任务】为《${args.bookTitle}》拟全书蓝图，共 ${args.chapterCount} 章（第 1..${args.chapterCount} 章，每章一块，章号连续）。`,
+    `【输出格式】每章以「# 章号」行开头，块内：`,
+    `GOAL: 一句话本章目标`,
+    `BEATS: 每行一条 2-4 节拍`,
+    `HOOK: 结尾钩子一句`,
+    `不要输出 JSON、markdown 代码块或任何解释；不要复述世界观原文；每块必须含 GOAL/BEATS/HOOK 三行。`,
+  ].join('\n');
+}

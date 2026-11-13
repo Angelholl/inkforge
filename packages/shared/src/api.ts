@@ -115,6 +115,20 @@ export interface BlueprintSuggestBody {
   chapterNo: number;
 }
 
+export interface OutlineSuggestBody {
+  chapterCount: number;
+}
+
+export interface OutlineItemDto {
+  chapterNo: number;
+  blueprint: ChapterBlueprint;
+}
+
+export interface OutlineSuggestResult {
+  outline: OutlineItemDto[];
+  source: 'llm';
+}
+
 export interface GenerateChapterBody {
   maxRounds?: number;
 }

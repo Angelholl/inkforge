@@ -47,6 +47,12 @@ export interface PlannerBudgets {
   task: number;
 }
 
+export interface OutlineBudgets {
+  hardRules: number;
+  worldview: number;
+  task: number;
+}
+
 export interface AppConfig {
   port: number;
   dataDir: string;
@@ -60,6 +66,7 @@ export interface AppConfig {
     qc8k: QcBudgets;
     rewrite: RewriteBudgets;
     planner: PlannerBudgets;
+    outline: OutlineBudgets;
   };
   quality: { targetChars: number; scoreThreshold: number; minGain: number; maxRounds: number };
   timeouts: Record<Exclude<StepName, 'finalize'>, number>;
@@ -116,6 +123,7 @@ const BUDGETS_REWRITE: RewriteBudgets = {
   task: 500,
 };
 const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 300 };
+const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 5000, task: 600 };
 
 export function pickBudgetProfile(contextWindow: number): 'draft' | 'draft8k' {
   return contextWindow <= 8192 ? 'draft8k' : 'draft';
@@ -165,6 +173,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       qc8k: BUDGETS_QC_8K,
       rewrite: BUDGETS_REWRITE,
       planner: BUDGETS_PLANNER,
+      outline: BUDGETS_OUTLINE,
     },
     quality: { targetChars: 3000, scoreThreshold: 8.0, minGain: 0.05, maxRounds: 2 },
     timeouts: { draft: 3600000, qc: 900000, rewrite: 3600000, summarize: 1200000 },

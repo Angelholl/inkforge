@@ -106,3 +106,10 @@ describe('pickBudgetProfile', () => {
     expect(pickBudgetProfile(524288)).toBe('draft');
   });
 });
+
+describe('budgets.outline', () => {
+  it('钉值', () => {
+    const c = loadConfig(LEGAL_ENV);
+    expect(c.budgets.outline).toEqual({ hardRules: 300, worldview: 5000, task: 600 });
+  });
+});

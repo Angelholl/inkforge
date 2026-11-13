@@ -197,3 +197,48 @@ export function parseBlueprint(raw: string): ParsedBlueprint {
     errors,
   };
 }
+
+export interface OutlineItem {
+  chapterNo: number;
+  blueprint: ChapterBlueprint;
+}
+
+export interface ParsedOutline {
+  outline: OutlineItem[];
+  errors: string[];
+}
+
+/** 全书蓝图解析：`# <章号>` 行分块（容忍全角＃与多 #），块内逐块 parseBlueprint；
+ *  expectedCount 给定时缺块报「缺少第N章块」；块内错误以 `第n章:` 前缀入 errors；按章号升序。 */
+export function parseOutline(raw: string, expectedCount?: number): ParsedOutline {
+  const errors: string[] = [];
+  const blocks = new Map<number, string[]>();
+  let current: number | null = null;
+  for (const line of raw.replace(/\r\n/g, '\n').split('\n')) {
+    const text = line.trim();
+    if (text.startsWith('```')) continue;
+    const head = /^[#＃]+\s*(\d{1,3})\s*$/.exec(text);
+    if (head) {
+      const n = Number(head[1]);
+      if (!blocks.has(n)) blocks.set(n, []);
+      current = n;
+      continue;
+    }
+    if (current !== null) blocks.get(current)!.push(line);
+  }
+
+  const outline: OutlineItem[] = [];
+  for (const [n, lines] of blocks) {
+    const { blueprint, errors: blockErrors } = parseBlueprint(lines.join('\n'));
+    for (const e of blockErrors) errors.push(`第${n}章: ${e}`);
+    outline.push({ chapterNo: n, blueprint });
+  }
+  outline.sort((a, b) => a.chapterNo - b.chapterNo);
+
+  if (expectedCount !== undefined) {
+    for (let i = 1; i <= expectedCount; i++) {
+      if (!blocks.has(i)) errors.push(`缺少第${i}章块`);
+    }
+  }
+  return { outline, errors };
+}

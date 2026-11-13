@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
 import { renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize } from '../../src/prompts/render';
-import { parseBlueprint } from '../../src/llm/plainproto';
+import { parseBlueprint, parseOutline } from '../../src/llm/plainproto';
 
 const BP: ChapterBlueprint = {
   goal: '主角进入书房取得密信',
@@ -76,5 +76,41 @@ describe('prompt 渲染契约', () => {
     const { blueprint, errors } = parseBlueprint('BEATS:\n- 发现入口\nHOOK: 石门闭合');
     expect(errors.some((e) => e.includes('GOAL'))).toBe(true);
     expect(blueprint.beats).toEqual(['发现入口', '石门闭合']);
+  });
+});
+
+describe('parseOutline 契约', () => {
+  it('parseOutline：两块合格文样往返（块内 GOAL/BEATS/HOOK 逐条）', () => {
+    const raw = [
+      '# 1',
+      'GOAL: 少年踏上旅途',
+      'BEATS:',
+      '- 告别村落',
+      '- 初遇同伴',
+      'HOOK: 身后炊烟散尽',
+      '# 2',
+      'GOAL: 入城遇阻',
+      'BEATS:',
+      '- 守卫盘查',
+      '- 遇贵人相助',
+      'HOOK: 贵人身份成谜',
+    ].join('\n');
+    const { outline, errors } = parseOutline(raw, 2);
+    expect(errors).toEqual([]);
+    expect(outline).toHaveLength(2);
+    expect(outline[0].chapterNo).toBe(1);
+    expect(outline[0].blueprint.goal).toBe('少年踏上旅途');
+    expect(outline[0].blueprint.beats).toEqual(['告别村落', '初遇同伴', '身后炊烟散尽']);
+    expect(outline[1].chapterNo).toBe(2);
+    expect(outline[1].blueprint.goal).toBe('入城遇阻');
+    expect(outline[1].blueprint.beats).toEqual(['守卫盘查', '遇贵人相助', '身份成谜'.replace('身份成谜', '贵人身份成谜')]);
+  });
+
+  it('parseOutline：缺第2章块 → errors 含「缺少第2章块」且首块蓝图仍收', () => {
+    const raw = '# 1\nGOAL: 只有一章\nBEATS:\n- 孤章\nHOOK: 门关上了';
+    const { outline, errors } = parseOutline(raw, 2);
+    expect(errors.some((e) => e.includes('缺少第2章块'))).toBe(true);
+    expect(outline).toHaveLength(1);
+    expect(outline[0].blueprint.goal).toBe('只有一章');
   });
 });
