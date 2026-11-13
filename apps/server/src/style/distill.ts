@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from '../db/open';
 import type { LlmProvider } from '../llm/types';
+import { computeStyleMetrics } from './metrics';
 
 export interface StyleSample {
   id: string;
@@ -25,16 +26,18 @@ RULES: <一条规则>
 每条规则须可执行、可判分，例如：平均句长区间、对话占比区间、段落长度、叙事人称、标点习惯、禁用句式。输出 5-10 条，不要其他内容。
 【样本开始】`;
 
-/** 蒸馏：LLM 仅产出量化规则；few-shot 客户端确定性选取；同 source_hash version+1 新行（旧行永不改）。 */
+/** 蒸馏：LLM 仅产出量化规则；few-shot 客户端确定性选取；同 source_hash version+1 新行（旧行永不改）。
+ * sourceText（inline 文本，source_path 记 `inline:<sha256 前8位>`）与 sourcePath（文件路径）二选一。 */
 export async function distillStyleProfile(
   deps: { db: Database; provider: LlmProvider },
-  input: { name: string; sourcePath: string; samples: Array<StyleSample | string> },
+  input: { name: string; sourcePath?: string; sourceText?: string; samples: Array<StyleSample | string> },
 ): Promise<string> {
-  const source = fs.readFileSync(input.sourcePath, 'utf8');
+  const source = input.sourceText ?? (input.sourcePath !== undefined ? fs.readFileSync(input.sourcePath, 'utf8') : '');
   if (source.replace(/\s/g, '') === '') {
     throw new Error('样本为空，禁止蒸馏');
   }
   const sourceHash = createHash('sha256').update(source).digest('hex');
+  const sourcePath = input.sourceText !== undefined ? `inline:${sourceHash.slice(0, 8)}` : input.sourcePath!;
   const user = `${RULES_INSTRUCTION}\n${input.samples.join('\n----\n')}\n【样本结束】`;
   const res = await deps.provider.complete({
     system: '你是文风分析师。',
@@ -61,7 +64,7 @@ export async function distillStyleProfile(
     .prepare(
       'INSERT INTO style_profiles(id, name, source_path, source_hash, version, rules_json, samples_json, metrics_json, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
     )
-    .run(id, input.name, input.sourcePath, sourceHash, version, JSON.stringify({ rulesText }), JSON.stringify(normalized), '{}', new Date().toISOString());
+    .run(id, input.name, sourcePath, sourceHash, version, JSON.stringify({ rulesText }), JSON.stringify(normalized), JSON.stringify(computeStyleMetrics(source)), new Date().toISOString());
   return id;
 }
 

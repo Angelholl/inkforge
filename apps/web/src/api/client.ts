@@ -8,6 +8,9 @@ import type {
   RunWithStepsDto,
   VersionDto,
   BlueprintPutBody,
+  StyleProfileDto,
+  StyleBindBody,
+  DistillStyleBody,
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
@@ -53,6 +56,11 @@ export const api = {
   adoptPartial: (runId: string, chapterNo: number) =>
     req<VersionDto>(`/api/runs/${runId}/chapters/${chapterNo}/partial/adopt`, { method: 'POST', body: '{}' }),
   getReport: (runId: string) => req<ReportDto>(`/api/runs/${runId}/report`),
+  listStyleProfiles: () => req<StyleProfileDto[]>('/api/style-profiles'),
+  distillStyle: (body: DistillStyleBody) =>
+    req<{ profileId: string }>('/api/style-profiles/distill', { method: 'POST', body: JSON.stringify(body) }),
+  bindStyle: (bookId: string, body: StyleBindBody) =>
+    req<{ ok: boolean; styleProfileId: string }>(`/api/books/${bookId}/style`, { method: 'PUT', body: JSON.stringify(body) }),
   rewriteSelection: (versionId: string, selection: string, instruction: string) =>
     req<VersionDto>(`/api/versions/${versionId}/rewrite-selection`, {
       method: 'POST',

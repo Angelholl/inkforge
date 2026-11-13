@@ -134,3 +134,17 @@ export interface RewriteSelectionBody {
   selection: string;
   instruction: string;
 }
+
+export interface StyleProfileDto {
+  id: string;
+  name: string;
+  version: number;
+  createdAt: string;
+  metrics: Record<string, number | string>;
+  sourcePath: string;
+}
+
+export interface DistillStyleBody {
+  name: string;
+  text: string;
+}

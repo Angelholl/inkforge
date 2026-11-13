@@ -15,7 +15,9 @@ import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
+import { blueprintSchema, createBookSchema, createRunSchema, distillStyleSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
+import { distillStyleProfile } from '../style/distill';
+import { pickFewShotSamples } from '../style/sample';
 import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
 import { parseBlueprint } from '../llm/plainproto';
@@ -47,6 +49,7 @@ export interface RouteState {
   provider: LlmProvider;
   /** planner 角色注入缝；缺省由 createRoleProvider(config,'planner') 构造 */
   plannerProvider?: LlmProvider;
+  summarizerProvider?: LlmProvider;
   bus: EventEmitter;
   runAborts: Map<string, AbortController>;
 }
@@ -312,6 +315,34 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     if (!profile) return reply.code(404).send({ error: 'profile not found' });
     booksRepo.setBookStyleProfile(db, bookId, body.profileId);
     reply.send({ ok: true, styleProfileId: body.profileId });
+  });
+
+  app.get('/api/style-profiles', async () => {
+    const rows = db
+      .prepare('SELECT id, name, version, source_path, metrics_json, created_at FROM style_profiles ORDER BY created_at DESC')
+      .all() as Array<{ id: string; name: string; version: number; source_path: string; metrics_json: string; created_at: string }>;
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      version: r.version,
+      createdAt: r.created_at,
+      metrics: JSON.parse(r.metrics_json) as Record<string, number | string>,
+      sourcePath: r.source_path,
+    }));
+  });
+
+  app.post('/api/style-profiles/distill', async (req, reply) => {
+    const body = parseBody(reply, distillStyleSchema, req.body);
+    if (!body) return;
+    if (body.text.replace(/\s/g, '').length < 200) {
+      return reply.code(400).send({ error: '样本为空，禁止蒸馏' });
+    }
+    const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
+    const profileId = await distillStyleProfile(
+      { db, provider },
+      { name: body.name, sourceText: body.text, samples: pickFewShotSamples(body.text) },
+    );
+    reply.code(201).send({ profileId });
   });
 
   // ── versions ──
