@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { countChars } from '@inkforge/shared';
 import type { ChapterBlueprint, ChapterKind, ChapterStatus } from '@inkforge/shared';
 import type { Database } from '../open';
+import { syncFts } from './fts';
 
 export interface Chapter {
   id: string;
@@ -129,6 +130,36 @@ export function getChapterById(db: Database, chapterId: string): Chapter | undef
 
 export function listChapters(db: Database, bookId: string): Chapter[] {
   return (db.prepare('SELECT * FROM chapters WHERE book_id = ? ORDER BY chapter_no').all(bookId) as ChapterRow[]).map(toChapter);
+}
+
+/**
+ * 入口 A：原文章节批量导入（零模型调用）。
+ * 章号自 max(chapter_no)+1 接续（空书从 1），每章 is_original=1 / status=done /
+ * blueprint_json=NULL / target_chars=3000 + kind 'original' 版本 + current 指针 + FTS。
+ * 事务包裹，重复导入允许（接续而非覆盖）。
+ */
+export function importOriginalChapters(
+  db: Database,
+  input: { bookId: string; chapters: Array<{ title: string; content: string }> },
+): { imported: number; firstChapterNo: number; lastChapterNo: number } {
+  const tx = db.transaction(() => {
+    const row = db.prepare('SELECT MAX(chapter_no) AS maxNo FROM chapters WHERE book_id = ?').get(input.bookId) as { maxNo: number | null };
+    const firstChapterNo = (row.maxNo ?? 0) + 1;
+    const now = new Date().toISOString();
+    let chapterNo = firstChapterNo;
+    for (const ch of input.chapters) {
+      const chapterId = randomUUID();
+      db.prepare(
+        "INSERT INTO chapters(id, book_id, chapter_no, title, is_original, blueprint_json, target_chars, status, created_at) VALUES(?,?,?,?,1,NULL,3000,'done',?)",
+      ).run(chapterId, input.bookId, chapterNo, ch.title, now);
+      const version = appendChapterVersion(db, { chapterId, kind: 'original', content: ch.content });
+      setCurrentVersion(db, chapterId, version.id);
+      syncFts(db, chapterId, ch.content);
+      chapterNo++;
+    }
+    return { imported: input.chapters.length, firstChapterNo, lastChapterNo: chapterNo - 1 };
+  });
+  return tx();
 }
 
 export function setChapterStatus(db: Database, chapterId: string, status: ChapterStatus): void {

@@ -14,7 +14,7 @@ import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
+import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
 import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
@@ -63,6 +63,14 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   });
 
   app.get('/api/books', async () => booksRepo.listBooks(db));
+
+  app.post('/api/books/:bookId/import-original', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, importOriginalSchema, req.body);
+    if (!body) return;
+    reply.code(201).send(chaptersRepo.importOriginalChapters(db, { bookId, chapters: body.chapters }));
+  });
 
   app.get('/api/books/:bookId', async (req, reply) => {
     const { bookId } = req.params as { bookId: string };

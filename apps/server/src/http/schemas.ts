@@ -28,6 +28,10 @@ export const createRunSchema = z.object({
   maxRounds: z.number().int().min(1).max(5).optional(),
 });
 
+export const importOriginalSchema = z.object({
+  chapters: z.array(z.object({ title: z.string().min(1), content: z.string().min(1) })).min(1).max(500),
+});
+
 export const styleBindSchema = z.object({
   profileId: z.string().min(1),
 });
