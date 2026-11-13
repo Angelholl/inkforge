@@ -33,7 +33,7 @@ function stubFetch(calls: Call[]) {
 
 function setInput(sel: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const proto = sel instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(proto, 'value')!.set.call(sel, value);
+  Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(sel, value);
   sel.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
@@ -72,7 +72,7 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
 
     const create = calls.find((c) => c.url.endsWith('/api/books'));
     expect(create).toBeTruthy();
-    expect(JSON.parse(String(create?.[1 as never]?.body ?? (create!.init as RequestInit).body))).toEqual({
+    expect(JSON.parse(String((create!.init as RequestInit).body))).toEqual({
       title: '入口B向导书',
       description: '修真大陆，少年逆天改命。',
     });
