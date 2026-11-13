@@ -25,6 +25,7 @@ export const createRunSchema = z.object({
   bookId: z.string().min(1),
   fromChapter: z.number().int().positive(),
   toChapter: z.number().int().positive(),
+  mode: z.enum(['generate', 'continue']).default('generate'),
   maxRounds: z.number().int().min(1).max(5).optional(),
 });
 

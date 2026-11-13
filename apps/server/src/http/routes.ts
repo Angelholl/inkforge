@@ -187,12 +187,21 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   app.post('/api/runs', async (req, reply) => {
     const body = parseBody(reply, createRunSchema, req.body);
     if (!body) return;
+    // ① book 存在
     if (!booksRepo.getBook(db, body.bookId)) return reply.code(404).send({ error: 'not found' });
+    // ② continue 锚点先验（M11：必须先于 ③ blueprint 校验）
+    if (body.mode === 'continue') {
+      const anchorNo = body.fromChapter - 1;
+      const anchor = chaptersRepo.getChapter(db, body.bookId, anchorNo);
+      if (!anchor || !anchor.currentVersionId) return reply.code(400).send({ error: `chapter ${anchorNo} 无续写锚点` });
+    }
+    // ③ blueprint 逐章校验（generate/continue 共用）
     for (let no = body.fromChapter; no <= body.toChapter; no++) {
       const ch = chaptersRepo.getChapter(db, body.bookId, no);
       if (!ch || !ch.blueprint) return reply.code(400).send({ error: `chapter ${no} blueprint missing` });
     }
-    const run = runsRepo.createRun(db, { bookId: body.bookId, mode: 'generate', chapterScope: { from: body.fromChapter, to: body.toChapter }, maxRounds: body.maxRounds });
+    // ④ createRun 透传 mode
+    const run = runsRepo.createRun(db, { bookId: body.bookId, mode: body.mode, chapterScope: { from: body.fromChapter, to: body.toChapter }, maxRounds: body.maxRounds });
     reply.code(202).send({ runId: run.id });
   });
 

@@ -20,6 +20,7 @@ import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
 import { getLatestProfile } from '../style/distill';
 import { pickStyleSamples, renderStyleBlock } from '../style/inject';
+import { computeStyleMetrics } from '../style/metrics';
 import type { StyleSample } from '../style/distill';
 import { runSummarizeStep } from './summarize';
 
@@ -86,6 +87,7 @@ export async function runChapterPipeline(
   const cliches = loadCliches(CLIQUES_PATH);
   const model = config.providers.local.model;
   const runRow = runsRepo.getRun(db, args.runId);
+  const runMode = runRow?.mode ?? 'generate';
   const maxRounds = runRow?.maxRounds ?? config.quality.maxRounds;
 
   const fallback = deps.provider;
@@ -100,6 +102,8 @@ export async function runChapterPipeline(
     const cur = prevChapter.currentVersionId ? chaptersRepo.getVersion(db, prevChapter.currentVersionId) : undefined;
     if (cur) prevTexts.push(cur.content);
   }
+  // continue 续写：以锚点前文为声线基准启用 style_drift（经既有 softMajor 门控，零新增放行）
+  const voiceRefMetrics = runMode === 'continue' && prevTexts.length > 0 ? computeStyleMetrics(prevTexts.join('\n')) : undefined;
   const hardRules = renderHardRules(targetChars);
 
   emit({ type: 'run.status', runId: args.runId, status: 'running', ts: now() });
@@ -158,7 +162,7 @@ export async function runChapterPipeline(
     let styleRulesText = '';
     let styleSamples: StyleSample[] = [];
     let styleSampleIds: string[] = [];
-    if (book.styleProfileId) {
+    if (book.styleProfileId && runMode !== 'continue') {
       const profile = getLatestProfile(db, book.styleProfileId);
       if (profile) {
         const rulesData = JSON.parse(profile.rules_json) as { rulesText?: string };
@@ -236,6 +240,7 @@ export async function runChapterPipeline(
         prevTexts,
         blueprint,
         continuity: { characters: snapshot.characters },
+        voiceRefMetrics,
         cliches,
       });
       const l1: L1Report = await runL1Qc(
