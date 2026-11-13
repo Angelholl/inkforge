@@ -150,3 +150,15 @@
 2. **目标指令**：项目继续推进，**直到项目立项时的功能全部落地实现**（docs/intent/novel-pipeline.md 全项）。据此：0.2 计划收尾（T05/T15 + N-CLI 视窗口）照走；web 四 TAB 壳计划（docs/plans/2026-11-13-web-four-tab-shell.md）执行；**入口 B 生成模式（预设世界观/角色卡 → 蓝图 → 全新生成）纳入本期实现**——覆盖四 TAB 计划第二节待确认项 1 的「本期只交付占位」，T-02 占位页照计划落地后由入口 B 计划升级为真实向导。
 3. **事实锚定**：实测基线 shared 2 / web 14 / server 173 = 189 全绿（lint/typecheck 同绿）；生产库 user_version=3（0.2-T02b 实迁已完成）；挂机 run `1dd814ed` 终态 done（M4 worker 落盘守卫解除）；Strata 端点 HTTP:000 离线 → 0.2-T05 replay 语料卡挂起待窗口（浮动卡属性，不阻塞功能交付）。
 4. **T14 装机态动作维持待 owner 表态**：卸芽+回装 0.1.2 物证（incident-0.2-t14-arp-hijack.md 待决项）未经 owner 不执行；本指令不构成对该项的授权。
+
+## DEC-2026-1114-01 [主模型] 入口 B 生成模式方案定案与四 TAB 壳收口（2026-11-14）
+
+**背景：** owner 指令（DEC-2026-1113-07）下四 TAB 壳 T-01..T-07 全部完成收口（验证链全绿 194、GUI 黑盒 7 项过、commit 至 07b46db）；入口 B 为立项功能最后一项缺口，按指令授权实施，方案由主模型自定并归档（不外派模式，无 critic 评议轮）。
+
+**裁决内容：**
+1. **方案按 docs/plans/2026-11-14-entry-b-generate-mode.md 执行**：全书蓝图 = 行协议分块（`# 章号` + 块内 GOAL/BEATS/HOOK），一次 planner 调用产出；禁 JSON（DEC-2026-1111-01 第 2 条）；世界观直存 books.description 零迁移；绑定 UI 延续四 TAB D5 留书详情；生成复用 generate 管线。
+2. **mock 态 outline-suggest 必然 502**（mock summarize 文样非蓝图协议，0.2 R7 同源）：GUI 验收以「502 显性暴露 + 手填兜底可用」为准；真模型验证并入 Strata 在线窗口。
+3. **测试账本**：194 → 200（server +5、web +1），每 commit 点只增不减。
+4. **版本冻结 0.1.2 不变**（入口 B 属 0.2 功能补全轮范围）。
+
+**回滚：** 全部为新增文件/新增 key/页面重写，revert 三 commit 即净回退，无数据迁移无不可逆。
