@@ -1,26 +1,211 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { api } from '../api/client';
+import type { OutlineItemDto } from '@inkforge/shared';
+
+type Step = 'setup' | 'review' | 'launch';
+
+/**
+ * 入口 B 生成模式三步向导（docs/plans/2026-11-14-entry-b-generate-mode.md）：
+ * ①书名 + 世界观/角色卡/规则 + 章节数 → 建书并一次生成全书蓝图（行协议分块）；
+ * ②蓝图审阅（逐章采用/编辑）→ 批量 PUT 蓝图；③发起 generate run（1..N）。
+ */
 export default function NewBookIdeaPage() {
+  const navigate = useNavigate();
+  const [step, setStep] = useState<Step>('setup');
+  const [title, setTitle] = useState('');
+  const [worldview, setWorldview] = useState('');
+  const [chapterCount, setChapterCount] = useState(8);
+  const [bookId, setBookId] = useState('');
+  const [items, setItems] = useState<OutlineItemDto[]>([]);
+  const [adopted, setAdopted] = useState<Set<number>>(new Set());
+  const [editing, setEditing] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const start = async () => {
+    setError('');
+    if (!title.trim()) {
+      setError('请填写书名');
+      return;
+    }
+    setBusy(true);
+    try {
+      const book = await api.createBook({ title: title.trim(), description: worldview.trim() });
+      setBookId(book.id);
+      const r = await api.suggestOutline(book.id, { chapterCount });
+      setItems(r.outline);
+      setAdopted(new Set(r.outline.map((o) => o.chapterNo)));
+      setStep('review');
+    } catch (e) {
+      setError(`蓝图生成失败：${(e as Error).message}\n可到书详情页手填蓝图后从书架发起生成。`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = (n: number) => {
+    setAdopted((prev) => {
+      const next = new Set(prev);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
+  };
+
+  const editBlueprint = (n: number, raw: string) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.chapterNo !== n) return it;
+        try {
+          return { ...it, blueprint: JSON.parse(raw) as OutlineItemDto['blueprint'] };
+        } catch {
+          return it; // 非法 JSON 暂不更新，保存前以最后合法值兜底
+        }
+      }),
+    );
+  };
+
+  const saveAndContinue = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      for (const it of items.filter((i) => adopted.has(i.chapterNo))) {
+        await api.putBlueprint(bookId, it.chapterNo, {
+          title: `第${it.chapterNo}章`,
+          blueprint: it.blueprint,
+          targetChars: 3000,
+        });
+      }
+      setStep('launch');
+    } catch (e) {
+      setError(`蓝图保存失败：${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const launch = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const toChapter = items.length > 0 ? items[items.length - 1].chapterNo : chapterCount;
+      const r = await api.createRun({ bookId, mode: 'generate', fromChapter: 1, toChapter });
+      navigate(`/runs/${r.runId}`);
+    } catch (e) {
+      setError(`发起生成失败：${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-bold">新书</h1>
-      <p className="mt-2 text-sm text-gray-500">
-        以「立项意向书」起步：预设世界观与角色卡 → 生成蓝图 → 全新成书。该流程本期尚未开放。
-      </p>
-      <div className="mt-6 space-y-3">
-        <input
-          className="w-full rounded border px-3 py-2"
-          placeholder="世界观预设（如：修真大陆、末世废土…）"
-          disabled
-        />
-        <textarea
-          className="w-full rounded border px-3 py-2"
-          rows={4}
-          placeholder="角色卡（主角/配角/关系…）"
-          disabled
-        />
-        <button className="rounded bg-blue-600 px-4 py-2 text-white" disabled title="本期未开放">
-          生成立项蓝图
-        </button>
-      </div>
+      <p className="mt-1 text-sm text-gray-500">① 设定 → ② 蓝图审阅 → ③ 发起生成（全新成书，生成模式注入风格档案）</p>
+      {error && <p className="mt-4 whitespace-pre-line rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {step === 'setup' && (
+        <div className="mt-6 space-y-3">
+          <input
+            className="w-full rounded border px-3 py-2"
+            placeholder="书名"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <textarea
+            className="w-full rounded border px-3 py-2"
+            rows={8}
+            placeholder="世界观 / 角色卡 / 规则（越具体越好）"
+            value={worldview}
+            onChange={(e) => setWorldview(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <label htmlFor="new-book-chapter-count" className="text-sm">
+              章节数
+            </label>
+            <input
+              id="new-book-chapter-count"
+              className="w-24 rounded border px-3 py-2"
+              type="number"
+              min={1}
+              max={50}
+              value={chapterCount}
+              onChange={(e) => setChapterCount(Number(e.target.value) || 1)}
+            />
+          </div>
+          <button
+            className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void start()}
+          >
+            建书并生成蓝图
+          </button>
+          {busy && <p className="text-sm text-gray-500">蓝图勾画中…约需数分钟</p>}
+        </div>
+      )}
+
+      {step === 'review' && (
+        <div className="mt-6">
+          <div className="space-y-3">
+            {items.map((it) => (
+              <div key={it.chapterNo} className="rounded border px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    aria-label={`采用第${it.chapterNo}章`}
+                    checked={adopted.has(it.chapterNo)}
+                    onChange={() => toggle(it.chapterNo)}
+                  />
+                  <span className="font-medium">第{it.chapterNo}章</span>
+                  <span className="text-sm">{it.blueprint.goal}</span>
+                  <button
+                    className="ml-auto text-sm text-blue-700"
+                    onClick={() => setEditing(editing === it.chapterNo ? null : it.chapterNo)}
+                  >
+                    {editing === it.chapterNo ? '收起' : '编辑'}
+                  </button>
+                </div>
+                <ul className="mt-1 list-disc pl-6 text-sm text-gray-600">
+                  {it.blueprint.beats.map((b, i) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+                {editing === it.chapterNo && (
+                  <textarea
+                    className="mt-2 w-full rounded border px-3 py-2 font-mono text-xs"
+                    rows={5}
+                    defaultValue={JSON.stringify(it.blueprint, null, 2)}
+                    onBlur={(e) => editBlueprint(it.chapterNo, e.target.value)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            className="mt-4 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            disabled={busy || adopted.size === 0}
+            onClick={() => void saveAndContinue()}
+          >
+            保存蓝图并继续（{adopted.size}/{items.length} 章）
+          </button>
+        </div>
+      )}
+
+      {step === 'launch' && (
+        <div className="mt-6">
+          <p className="text-sm text-gray-700">
+            将从第 1 章生成到第 {items.length > 0 ? items[items.length - 1].chapterNo : chapterCount} 章。生成前可到书详情页绑定风格档案（生成模式注入）。
+          </p>
+          <button
+            className="mt-3 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void launch()}
+          >
+            发起生成（1..{items.length > 0 ? items[items.length - 1].chapterNo : chapterCount}）
+          </button>
+        </div>
+      )}
     </main>
   );
 }
