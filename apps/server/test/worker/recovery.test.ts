@@ -92,6 +92,7 @@ describe('claimNextStep + heartbeatStep', () => {
     expect(c3.runId).toBe(runB);
     expect(claimNextStep(db, 'w2')).toBeNull(); // 无 queued
 
+    db.prepare('UPDATE run_steps SET heartbeat_at = ? WHERE id = ?').run(new Date(Date.now() - 60000).toISOString(), c1.id);
     const before = (db.prepare('SELECT heartbeat_at FROM run_steps WHERE id = ?').get(c1.id) as { heartbeat_at: string }).heartbeat_at;
     heartbeatStep(db, c1.id, 'wrong-owner');
     const after = (db.prepare('SELECT heartbeat_at FROM run_steps WHERE id = ?').get(c1.id) as { heartbeat_at: string }).heartbeat_at;
@@ -99,6 +100,7 @@ describe('claimNextStep + heartbeatStep', () => {
     heartbeatStep(db, c1.id, 'w1');
     const after2 = (db.prepare('SELECT heartbeat_at FROM run_steps WHERE id = ?').get(c1.id) as { heartbeat_at: string }).heartbeat_at;
     expect(after2).not.toBe(before);
+    expect(new Date(after2).getTime()).toBeGreaterThan(new Date(before).getTime());
     updateRunStatus(db, runA, 'cancelled');
     updateRunStatus(db, runB, 'cancelled');
   });
