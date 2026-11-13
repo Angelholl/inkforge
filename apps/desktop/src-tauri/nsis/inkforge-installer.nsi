@@ -5224,10 +5224,11 @@ Section Install
     File /a "/oname=resources\server\node_modules\zod\v4-mini\package.json" "I:\inkforge\apps\desktop\src-tauri\resources\server\node_modules\zod\v4-mini\package.json"
     File /a "/oname=resources\server\server.mjs" "I:\inkforge\apps\desktop\src-tauri\resources\server\server.mjs"
     File /a "/oname=resources\server\worker\worker.mjs" "I:\inkforge\apps\desktop\src-tauri\resources\server\worker\worker.mjs"
-    File /a "/oname=resources\web\dist\assets\index-DEGTf3r0.css" "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\assets\index-DEGTf3r0.css"
-    File /a "/oname=resources\web\dist\assets\index-zzF0optP.js" "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\assets\index-zzF0optP.js"
-    File /a "/oname=resources\web\dist\favicon.svg" "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\favicon.svg"
-    File /a "/oname=resources\web\dist\index.html" "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\index.html"
+    SetOutPath "$INSTDIR\resources\web\dist"
+    File /r "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\assets\*"
+    File "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\favicon.svg"
+    File "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\index.html"
+    SetOutPath "$INSTDIR"
 
   ; Copy external binaries
 
@@ -9065,8 +9066,7 @@ Section Uninstall
     Delete "$INSTDIR\resources\server\node_modules\zod\v4-mini\package.json"
     Delete "$INSTDIR\resources\server\server.mjs"
     Delete "$INSTDIR\resources\server\worker\worker.mjs"
-    Delete "$INSTDIR\resources\web\dist\assets\index-DEGTf3r0.css"
-    Delete "$INSTDIR\resources\web\dist\assets\index-zzF0optP.js"
+    Delete "$INSTDIR\resources\web\dist\assets\*"
     Delete "$INSTDIR\resources\web\dist\favicon.svg"
     Delete "$INSTDIR\resources\web\dist\index.html"
 
