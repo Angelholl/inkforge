@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { API_BASE } from '../api/client';
+import StyleProfilesSection from './StyleProfilesSection';
 
 type SettingsResponse = {
   strataBaseUrl?: string;
@@ -131,6 +132,8 @@ export default function SettingsPage() {
       </form>
       {message && <p className="mt-4 text-sm text-green-700">{message}</p>}
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+
+      <StyleProfilesSection />
     </main>
   );
 }

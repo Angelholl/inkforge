@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SettingsPage from './SettingsPage';
 
 const settingsResponse = {
@@ -20,8 +21,9 @@ function jsonResponse(data: unknown, status = 200) {
 }
 
 function stubFetch() {
-  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') return jsonResponse({ saved: true, restartRequired: true });
+    if (url.endsWith('/api/style-profiles') && init?.method !== 'PUT') return jsonResponse([]);
     return jsonResponse(settingsResponse);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -30,9 +32,11 @@ function stubFetch() {
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <SettingsPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
