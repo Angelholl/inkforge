@@ -1,7 +1,7 @@
 // 生产库实迁脚本：running 门 → VACUUM INTO 副本预演 → 实迁（DEC-2026-1113-05，0.2-T02b）
 // 用法：node --import tsx scripts/migrate-prod.mjs （cwd=apps/server，一次性独立进程）
 import Database from 'better-sqlite3';
-import { readFileSync, unlinkSync } from 'node:fs';
+import { unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
