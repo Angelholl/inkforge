@@ -138,3 +138,7 @@
 2. owner 拍板：v0.1.2 tag **仅作里程碑标记**（不承诺从 tag 复现安装包，物证以 S码+副本为准，M2 按此落）。
 3. owner 拍板：入口 A 导入章**加「可选摘要」卡**（手动触发单章 summarize，非自动）。
 4. 原 planner 修订草案为 v2：M1-M15 全落 + CLI 卡/UI token 试点卡占位（DEC-2026-1113-04 M2/M3）+ 测试增量链重算。v2 出来后主审复核必改项覆盖再呈 owner 终审拆卡。
+
+## DEC-2026-1113-06 [OWNER] push 节奏：任务结束后统一 push（2026-11-13）
+
+晨检门② FAIL（1 done+19 needs_human）后 owner 拍板：不发版、tag/Release 均不做；本地 commit 照常累积，**全部任务结束后一次性统一 push**（push 前仍走 code-review+提交三查，push 后 ls-remote 复核）。T-I 发版存证相应降级为「不发版说明+已知债务与晨检引用」随收口批提交。
