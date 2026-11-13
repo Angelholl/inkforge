@@ -106,3 +106,12 @@
 5. **图标显示层降级存证**：exe 内嵌新图标三重程序化证据（ExtractAssociatedIcon 取出新设计/lnk→exe 链/早期 8/8 目验），本机 shell 缓存三连刷新（删缓存+重启 explorer/ie4uinit/lnk touch）均未生效，按交接既定口径走降级存证入发版文档，实机目验挂 owner。
 
 **回滚：** 卡 cmdfix 为 1 行属性+1 回归脚本，revert 成本≈1 次构建；tag/Release 仍未创建，无不可逆操作。
+
+## DEC-2026-1113-03 [OWNER] 0.2 立项：全量六项、与 0.1.2 收口混跑（2026-11-13）
+
+**裁决内容（owner 亲决）：**
+1. 0.2 纳入全部六项：入口 A、风格蒸馏、GUI 页面、DB 迁移、D4 残留模板系收敛、INSTALLERICON/ARP 版本债务（含 replay 语料扩充、recovery flake 修复）。
+2. 节奏=直接混跑：0.2 代码卡即时开工落盘，与 0.1.2 存证 commit 同批 push，不等 T-I。
+3. 约束沿用：同工作树 ≤1 卡串行（晨检卡到来时 0.2 卡须已收口或排队）；挂机 run 期间禁重启 server/worker；0.1.2 发版门与 tag/Release 挂起条款不受影响。
+
+**流程：** code-planner 出计划草案 → decision-critic 评议 → owner 拍板 → 按计划拆卡。
