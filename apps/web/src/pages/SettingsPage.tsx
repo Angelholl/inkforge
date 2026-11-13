@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
 import { API_BASE } from '../api/client';
 import StyleProfilesSection from './StyleProfilesSection';
 
@@ -71,10 +70,7 @@ export default function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
-      <Link to="/" className="text-sm text-gray-500">
-        ← 返回书架
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold">设置</h1>
+      <h1 className="text-2xl font-bold">设置</h1>
       {connError && (
         <p className="mt-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">服务未连接</p>
       )}
