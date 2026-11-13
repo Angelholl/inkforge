@@ -25,4 +25,42 @@ describe('migrate', () => {
     db2.close();
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it('0003 索引：user_version=3 且两索引在场；user_version=2 旧库升级数据 intact', () => {
+    const dir = tmpDir();
+    const db = openDb(path.join(dir, 'inkforge.db'));
+    migrate(db);
+    expect(db.pragma('user_version', { simple: true })).toBe(3);
+    const indexes = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?)").all(
+        'idx_chapter_versions_chapter',
+        'idx_runs_book_created',
+      ) as Array<{ name: string }>
+    )
+      .map((r) => r.name)
+      .sort();
+    expect(indexes).toEqual(['idx_chapter_versions_chapter', 'idx_runs_book_created']);
+
+    // 模拟 user_version=2 的旧库（0001+0002 已跑过、有数据），再跑 migrate 升级 0003
+    const now = new Date().toISOString();
+    db.prepare("INSERT INTO books(id, title, created_at, updated_at) VALUES('b1','书',?,?)").run(now, now);
+    db.prepare("INSERT INTO chapters(id, book_id, chapter_no, created_at) VALUES('c1','b1',1,?)").run(now);
+    db.prepare(
+      "INSERT INTO chapter_versions(id, chapter_id, kind, content, word_count, created_at) VALUES('v1','c1','draft','正文',2,?)",
+    ).run(now);
+    db.prepare(
+      "INSERT INTO runs(id, book_id, mode, chapter_scope_json, created_at) VALUES('r1','b1','generate','{\"from\":1,\"to\":1}',?)",
+    ).run(now);
+    const tables = ['books', 'chapters', 'chapter_versions', 'runs'] as const;
+    const snapshot = () =>
+      Object.fromEntries(tables.map((t) => [t, db.prepare(`SELECT * FROM ${t} ORDER BY id`).all()]));
+    const before = snapshot();
+    db.pragma('user_version = 2');
+    migrate(db);
+    expect(db.pragma('user_version', { simple: true })).toBe(3);
+    expect(snapshot()).toEqual(before);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
