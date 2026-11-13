@@ -22,9 +22,9 @@ import { runSummarizeStep } from '../pipeline/summarize';
 import { pickFewShotSamples } from '../style/sample';
 import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
-import { parseBlueprint } from '../llm/plainproto';
+import { parseBlueprint, parseOutline } from '../llm/plainproto';
 import { repairPrompt } from '../quality/l1';
-import { renderBlueprintTask } from '../prompts/render';
+import { renderBlueprintTask, renderOutlineTask } from '../prompts/render';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
@@ -41,6 +41,7 @@ const settingsPutSchema = z.object({
 });
 
 const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive() });
+const outlineSuggestSchema = z.object({ chapterCount: z.number().int().min(1).max(50) });
 
 const PLANNER_HARD_RULES =
   '【硬规则】你是长篇小说的策划编辑，只输出章节蓝图行协议；不要输出 JSON、markdown 代码块或任何解释。';
@@ -162,6 +163,48 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     }
     if (report.errors.length > 0) return reply.code(502).send({ error: 'blueprint parse failed', errors: report.errors });
     reply.send({ blueprint: report.blueprint, source: 'llm' });
+  });
+
+  app.post('/api/books/:bookId/outline-suggest', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    const book = booksRepo.getBook(db, bookId);
+    if (!book) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, outlineSuggestSchema, req.body);
+    if (!body) return;
+    const { chapterCount } = body;
+
+    const ob = config.budgets.outline;
+    const slots = [
+      { name: 'hardRules', content: PLANNER_HARD_RULES, budgetChars: ob.hardRules, stable: true, keep: 'head' as const },
+      { name: 'worldview', content: book.description, budgetChars: ob.worldview, stable: false, keep: 'head' as const },
+      { name: 'task', content: renderOutlineTask({ bookTitle: book.title, chapterCount }), budgetChars: ob.task, stable: false, keep: 'head' as const },
+    ];
+    const totalBudget = config.providers.local.contextWindow - config.providers.local.maxOutput - 500;
+    const assembled = assembleContext(slots, totalBudget);
+
+    const plannerProvider = state.plannerProvider ?? createRoleProvider(config, 'planner');
+    const baseReq = (user: string) => ({
+      system: assembled.system,
+      user,
+      temperature: 0.3,
+      topP: 0.9,
+      maxOutputTokens: config.providers.local.maxOutput,
+      timeoutMs: 180000,
+      meta: { step: 'summarize' as const, chapterNo: 1 },
+    });
+
+    const first = parseOutline((await plannerProvider.complete(baseReq(assembled.user))).text, chapterCount);
+    let report = first;
+    if (first.errors.length > 0) {
+      report = parseOutline(
+        (await plannerProvider.complete(baseReq(`${assembled.user}
+
+${repairPrompt(first.errors)}`))).text,
+        chapterCount,
+      );
+    }
+    if (report.errors.length > 0) return reply.code(502).send({ error: 'outline parse failed', errors: report.errors });
+    reply.send({ outline: report.outline, source: 'llm' });
   });
 
   const startRun = (reply: FastifyReply, bookId: string, scope: { from: number; to: number }, maxRounds?: number): void => {
