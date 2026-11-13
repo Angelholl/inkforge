@@ -59,6 +59,8 @@ export const api = {
   listStyleProfiles: () => req<StyleProfileDto[]>('/api/style-profiles'),
   distillStyle: (body: DistillStyleBody) =>
     req<{ profileId: string }>('/api/style-profiles/distill', { method: 'POST', body: JSON.stringify(body) }),
+  summarizeChapter: (bookId: string, chapterNo: number) =>
+    req<{ ok: boolean }>(`/api/books/${bookId}/chapters/${chapterNo}/summarize`, { method: 'POST', body: '{}' }),
   bindStyle: (bookId: string, body: StyleBindBody) =>
     req<{ ok: boolean; styleProfileId: string }>(`/api/books/${bookId}/style`, { method: 'PUT', body: JSON.stringify(body) }),
   rewriteSelection: (versionId: string, selection: string, instruction: string) =>

@@ -44,6 +44,16 @@ export default function BookDetailPage() {
     setMsg(`整书已入队 run ${r.runId}`);
   };
 
+  const summarize = async (chapterNo: number) => {
+    try {
+      await api.summarizeChapter(bookId, chapterNo);
+      setMsg(`第${chapterNo}章摘要已生成`);
+      void refetch();
+    } catch (e) {
+      setMsg(`摘要失败：${(e as Error).message}`);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <Link to="/" className="text-sm text-gray-500">
@@ -78,6 +88,11 @@ export default function BookDetailPage() {
               >
                 {c.status}
               </span>
+              {c.isOriginal && (
+                <button className="text-sm text-blue-600" onClick={() => void summarize(c.chapterNo)}>
+                  补摘要
+                </button>
+              )}
               <button className="ml-auto text-sm text-blue-600" onClick={() => void api.generateChapter(bookId, c.chapterNo).then(() => setMsg(`第${c.chapterNo}章已入队`))}>
                 生成
               </button>

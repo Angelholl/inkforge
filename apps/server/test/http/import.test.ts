@@ -19,6 +19,7 @@ beforeAll(async () => {
   app = await buildApp({
     config,
     provider: createDefaultMockProvider(),
+    summarizerProvider: createDefaultMockProvider(),
     plannerProvider: createMockProvider({
       summarize: { text: 'GOAL: 试炼第六层的入口\nBEATS:\n- 发现入口\n- 首次交锋\nHOOK: 入口在身后关闭' },
     }),
@@ -123,5 +124,28 @@ describe('POST /api/books/:bookId/import-original', () => {
     expect(got.statusCode).toBe(200);
     const chapters = (got.json() as { chapters: Array<{ chapterNo: number; blueprint: { goal: string } | null }> }).chapters;
     expect(chapters.find((c) => c.chapterNo === 6)?.blueprint?.goal).toBe('试炼第六层的入口');
+  });
+
+  describe('POST /api/books/:bookId/chapters/:chapterNo/summarize', () => {
+    it('可选摘要：注入 mock → 200 且 chapter_summaries 按书过滤恰 1 行', async () => {
+      const before = db.prepare('SELECT COUNT(*) AS n FROM chapter_summaries WHERE book_id = ?').get(bookId) as { n: number };
+      const r = await app.inject({ method: 'POST', url: `/api/books/${bookId}/chapters/1/summarize` });
+      expect(r.statusCode).toBe(200);
+      expect((r.json() as { ok: boolean }).ok).toBe(true);
+      const after = db.prepare('SELECT COUNT(*) AS n FROM chapter_summaries WHERE book_id = ?').get(bookId) as { n: number };
+      expect(after.n).toBe(before.n + 1);
+    });
+
+    it('无 current 版本章 → 404；有 running run → 409', async () => {
+      const missing = await app.inject({ method: 'POST', url: `/api/books/${bookId}/chapters/999/summarize` });
+      expect(missing.statusCode).toBe(404);
+
+      db.prepare(
+        "INSERT INTO runs(id, book_id, mode, status, chapter_scope_json, skip_failures, salvage_partial, max_rounds, created_at) VALUES('manual-run-guard', ?, 'generate', 'running', '[1,20]', 1, 1, 2, ?)",
+      ).run(bookId, new Date().toISOString());
+      const conflict = await app.inject({ method: 'POST', url: `/api/books/${bookId}/chapters/2/summarize` });
+      expect(conflict.statusCode).toBe(409);
+      db.prepare("DELETE FROM runs WHERE id = 'manual-run-guard'").run();
+    });
   });
 });

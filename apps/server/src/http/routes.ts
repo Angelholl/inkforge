@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Database } from '../db/open';
@@ -17,6 +18,7 @@ import { exportBook } from '../export/export';
 import { handleSse } from './sse';
 import { blueprintSchema, createBookSchema, createRunSchema, distillStyleSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
 import { distillStyleProfile } from '../style/distill';
+import { runSummarizeStep } from '../pipeline/summarize';
 import { pickFewShotSamples } from '../style/sample';
 import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
@@ -343,6 +345,23 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       { name: body.name, sourceText: body.text, samples: pickFewShotSamples(body.text) },
     );
     reply.code(201).send({ profileId });
+  });
+
+  app.post('/api/books/:bookId/chapters/:chapterNo/summarize', async (req, reply) => {
+    const { bookId, chapterNo } = req.params as { bookId: string; chapterNo: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const ch = chaptersRepo.getChapter(db, bookId, Number(chapterNo));
+    if (!ch || !ch.currentVersionId) return reply.code(404).send({ error: 'not found' });
+    const activeRun = db.prepare("SELECT id FROM runs WHERE book_id = ? AND status IN ('queued','running')").get(bookId) as { id: string } | undefined;
+    if (activeRun) return reply.code(409).send({ error: 'book has active run' });
+    const version = db.prepare('SELECT content FROM chapter_versions WHERE id = ?').get(ch.currentVersionId) as { content: string } | undefined;
+    if (!version) return reply.code(404).send({ error: 'not found' });
+    const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
+    await runSummarizeStep(
+      { db, provider, config, emit: () => {} },
+      { runId: `manual-${randomUUID()}`, chapterId: ch.id, chapterNo: Number(chapterNo), bookId, finalContent: version.content },
+    );
+    reply.send({ ok: true });
   });
 
   // ── versions ──
