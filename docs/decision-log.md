@@ -115,3 +115,16 @@
 3. 约束沿用：同工作树 ≤1 卡串行（晨检卡到来时 0.2 卡须已收口或排队）；挂机 run 期间禁重启 server/worker；0.1.2 发版门与 tag/Release 挂起条款不受影响。
 
 **流程：** code-planner 出计划草案 → decision-critic 评议 → owner 拍板 → 按计划拆卡。
+
+## DEC-2026-1113-04 [OWNER] 架构选型裁决：留栈+折中吸收 SubTrans，换栈设触发门（2026-11-13）
+
+**背景：** owner 提议整体切换 Python+WebView2+CLI（借鉴 I:\SubTrans）。两份 code-reader 调研（docs/design/research-0.2-subtrans-reference.md / research-0.2-port-surface.md）+ decision-critic 评议（[HIGH_RISK_OBJECTION]：移植实测 140-240 人时、9,764 行 NSIS 禁C 语义重做、测试 oracle 双变量缺陷、跨语言 DTO 长期税、GUI 收益≈0）后，owner 采纳「留栈+折中」并令 0.2 草案入库执行。
+
+**裁决内容：**
+1. **留栈**：Tauri+Fastify+TS 维持，0.2 十四卡草案（docs/plans/2026-11-13-inkforge-0.2-draft.md）入库执行；critic 0.2 评议必改项消解后拆卡。
+2. **折中吸收（不换语言）**：M2=新增 CLI 卡（apps/server CLI 入口 cli.mjs+.cmd 启动器，复用 staged node.exe，顺手闭合 DEC-2026-1112-02 安装包无 CLI 限制）；M3=UI token/三栏独立卡组（SubTrans style.css token → Tailwind @theme 映射表+单页试点先行，禁止与栈变更捆绑）；M4=若 owner 要 Python 手感，tools/ 薄客户端（httpx 打 REST）另议另立。
+3. **M7 架构红线**：独立 worker 子进程+DB 租约不得降级为进程内 asyncio（DEC-2026-1111-01 第 3 条前提）。
+4. **换栈触发门（M5，此后按门不按感觉重议）**：满足其一才重启评估——①0.2.0 发版后连续 2 周日常使用无 P1；②出现 Python 独有能力需求（具体用例）；③Node 原生依赖维护实测 >2h/月 连续 3 个月；④owner 实测无法独立维护 TS（连续 3 次缺陷修复需外部介入）。评估形式=≤3 天单纵切 spike（DB+迁移+蒸馏 CLI+L0 双跑 diff）出实测工时报告。
+5. 0.1.2 发版门与 DEC-2026-1113-02 三门前置不受影响；20 章挂机照跑。
+
+**驳回回滚：** owner 日后按触发门重启换栈→spike 数据在案，成本≈3 天；本裁决无不可逆操作。
