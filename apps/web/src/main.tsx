@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import App from './App';
 import BooksPage from './pages/BooksPage';
 import NewBookPage from './pages/NewBookPage';
+import StyleProfilesPage from './pages/StyleProfilesPage';
 import BookDetailPage from './pages/BookDetailPage';
 import RunPage from './pages/RunPage';
 import ChapterReaderPage from './pages/ChapterReaderPage';
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/" element={<BooksPage />} />
           <Route path="/new" element={<NewBookPage />} />
+          <Route path="/styles" element={<StyleProfilesPage />} />
           <Route path="/books/:bookId" element={<BookDetailPage />} />
           <Route path="/books/:bookId/chapters/:chapterNo" element={<ChapterReaderPage />} />
           <Route path="/runs/:runId" element={<RunPage />} />

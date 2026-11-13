@@ -2,11 +2,27 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { api } from '../api/client';
-import type { ChapterBlueprint } from '@inkforge/shared';
+import type { ChapterBlueprint, StyleProfileDto } from '@inkforge/shared';
+
+function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string) => void }) {
+  const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
+  const list = Array.isArray(profiles) ? profiles : [];
+  return (
+    <select className="rounded border px-2 py-1" value={currentProfileId ?? ''} onChange={(e) => e.target.value && onBind(e.target.value)}>
+      <option value="">（未绑定）</option>
+      {list.map((p: StyleProfileDto) => (
+        <option key={p.id} value={p.id}>
+          {p.name}（v{p.version}）
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default function BookDetailPage() {
   const { bookId = '' } = useParams();
   const { data: book, refetch } = useQuery({ queryKey: ['book', bookId], queryFn: () => api.getBook(bookId), refetchInterval: 4000 });
+  const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
   const [blueprintText, setBlueprintText] = useState('');
   const [chapterNo, setChapterNo] = useState(1);
   const [msg, setMsg] = useState('');
@@ -44,6 +60,16 @@ export default function BookDetailPage() {
     setMsg(`整书已入队 run ${r.runId}`);
   };
 
+  const bindStyle = async (profileId: string) => {
+    try {
+      await api.bindStyle(bookId, { profileId });
+      setMsg('风格档案已绑定');
+      void refetch();
+    } catch (e) {
+      setMsg(`绑定失败：${(e as Error).message}`);
+    }
+  };
+
   const summarize = async (chapterNo: number) => {
     try {
       await api.summarizeChapter(bookId, chapterNo);
@@ -68,6 +94,19 @@ export default function BookDetailPage() {
           刷新
         </button>
       </div>
+
+      <section className="mt-6">
+        <h2 className="font-semibold">风格档案</h2>
+        <div className="mt-2 flex items-center gap-2 text-sm">
+          <StyleBindSelect currentProfileId={book?.styleProfileId ?? null} onBind={bindStyle} />
+          {book?.styleProfileId && (
+            <span className="text-gray-600">
+              已绑定：{(Array.isArray(profiles) ? profiles : []).find((p) => p.id === book.styleProfileId)?.name ?? book.styleProfileId}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-gray-400">续写（continue）模式不注入风格，仅生成模式生效。</p>
+      </section>
 
       <section className="mt-6">
         <h2 className="font-semibold">章节</h2>
