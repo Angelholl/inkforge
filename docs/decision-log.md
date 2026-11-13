@@ -142,3 +142,11 @@
 ## DEC-2026-1113-06 [OWNER] push 节奏：任务结束后统一 push（2026-11-13）
 
 晨检门② FAIL（1 done+19 needs_human）后 owner 拍板：不发版、tag/Release 均不做；本地 commit 照常累积，**全部任务结束后一次性统一 push**（push 前仍走 code-review+提交三查，push 后 ls-remote 复核）。T-I 发版存证相应降级为「不发版说明+已知债务与晨检引用」随收口批提交。
+
+## DEC-2026-1113-07 [OWNER] 本会话执行模式与目标指令：不外派、立项功能全落地（2026-11-13）
+
+**裁决内容（owner 本会话明示）：**
+1. **执行模式**：本会话任务由主模型独自完成，不外派（同 DEC-2026-1111-04 第 2 条口径，豁免 dispatch-discipline 派卡流程）；验收链/提交纪律/verification-before-completion 仍有效。
+2. **目标指令**：项目继续推进，**直到项目立项时的功能全部落地实现**（docs/intent/novel-pipeline.md 全项）。据此：0.2 计划收尾（T05/T15 + N-CLI 视窗口）照走；web 四 TAB 壳计划（docs/plans/2026-11-13-web-four-tab-shell.md）执行；**入口 B 生成模式（预设世界观/角色卡 → 蓝图 → 全新生成）纳入本期实现**——覆盖四 TAB 计划第二节待确认项 1 的「本期只交付占位」，T-02 占位页照计划落地后由入口 B 计划升级为真实向导。
+3. **事实锚定**：实测基线 shared 2 / web 14 / server 173 = 189 全绿（lint/typecheck 同绿）；生产库 user_version=3（0.2-T02b 实迁已完成）；挂机 run `1dd814ed` 终态 done（M4 worker 落盘守卫解除）；Strata 端点 HTTP:000 离线 → 0.2-T05 replay 语料卡挂起待窗口（浮动卡属性，不阻塞功能交付）。
+4. **T14 装机态动作维持待 owner 表态**：卸芽+回装 0.1.2 物证（incident-0.2-t14-arp-hijack.md 待决项）未经 owner 不执行；本指令不构成对该项的授权。
