@@ -1,39 +1,14 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { api } from '../api/client';
 import type { BookDto } from '@inkforge/shared';
 
 export default function BooksPage() {
-  const { data: books, refetch } = useQuery({ queryKey: ['books'], queryFn: api.listBooks, refetchInterval: 5000 });
-  const [title, setTitle] = useState('');
-
-  const create = async () => {
-    if (!title.trim()) return;
-    await api.createBook({ title: title.trim() });
-    setTitle('');
-    void refetch();
-  };
+  const { data: books } = useQuery({ queryKey: ['books'], queryFn: api.listBooks, refetchInterval: 5000 });
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-bold">墨炉 · 书架</h1>
-        <Link to="/settings" className="text-sm text-blue-700">
-          设置
-        </Link>
-      </div>
-      <div className="mt-4 flex gap-2">
-        <input
-          className="flex-1 rounded border px-3 py-2"
-          placeholder="新书标题"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={create}>
-          建书
-        </button>
-      </div>
+      <h1 className="text-2xl font-bold">墨炉 · 书架</h1>
       <ul className="mt-6 space-y-2">
         {(books ?? []).map((b: BookDto) => (
           <li key={b.id} className="rounded border px-4 py-3 hover:bg-gray-50">
@@ -44,7 +19,11 @@ export default function BooksPage() {
           </li>
         ))}
       </ul>
-      {books && books.length === 0 && <p className="mt-6 text-sm text-gray-500">还没有书——先建一本。</p>}
+      {books && books.length === 0 && (
+        <p className="mt-6 text-sm text-gray-500">
+          还没有书。去 <Link to="/continue" className="text-blue-700">续写向导</Link> 建第一本。
+        </p>
+      )}
     </main>
   );
 }
