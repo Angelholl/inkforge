@@ -1,7 +1,7 @@
 /**
  * QC 召回指标脚本（计划 T-E，DEC-2026-1113-01）：对回归语料跑 L0 与 L1 协议解析，输出五行指标。
  * 用法：pnpm --filter @inkforge/server run qc:recall（tsx 直跑，import 走 ../src 与 ../test）。
- * 退出码：recall=8/8 且 FPR=0/4 且 协议解析=3/3 且 合法 findings≥1 → 0；否则 1（stderr 列未达标项）。
+ * 退出码：recall=9/9 且 FPR=0/5 且 协议解析=3/3 且 合法 findings≥1 → 0；否则 1（stderr 列未达标项）。
  */
 import Database from 'better-sqlite3';
 import { loadCliches, runL0Checks } from '../src/quality/l0';
@@ -82,7 +82,7 @@ console.log(`L1 bad no-throw: ${badOk}`);
 
 const unmet = [];
 if (recall !== `${L0_BAD.length}/${L0_BAD.length}`) unmet.push(`L0 recall ${recall} 不足 ${L0_BAD.length}/${L0_BAD.length}`);
-if (fpr !== '0/4') unmet.push(`L0 FPR ${fpr} 非零`);
+if (fprHits.length !== 0) unmet.push(`L0 FPR ${fpr} 非零`);
 if (proto !== '3/3') unmet.push(`L1 协议解析 ${proto} 不足 3/3：${protoMisses.join('；')}`);
 if (validFindings < 1) unmet.push('L1 合法 findings=0');
 if (badOk !== '3/3') unmet.push(`L1 坏语料 ${badOk} 不足 3/3：${badMisses.join('；')}`);

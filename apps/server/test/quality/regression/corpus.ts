@@ -8,6 +8,10 @@ import {
   BP_EMPTY,
   CLICHE_DRAFT,
   DECEASED_APPEAR_DRAFT,
+  ECHO_BAD_DRAFT,
+  ECHO_BAD_PREV,
+  ECHO_FREE_DRAFT,
+  ECHO_FREE_PREV,
   HAPPY_DRAFT,
   PLAGIARISM_DRAFT,
   PLAGIARISM_REF,
@@ -66,6 +70,11 @@ export const L0_BAD: L0Sample[] = [
     expectFail: 'continuity_facts',
   },
   { name: 'tail_replay', input: { draft: TAIL_REPLAY_DRAFT, targetChars: 500, prevTexts: [TAIL_REPLAY_PREV], blueprint: BP_EMPTY, continuity: { characters: [] } }, expectFail: 'tail_replay' },
+  {
+    name: 'echo_20gram',
+    input: { draft: ECHO_BAD_DRAFT, targetChars: countChars(ECHO_BAD_DRAFT), prevTexts: [ECHO_BAD_PREV], blueprint: BP_EMPTY, continuity: { characters: [] } },
+    expectFail: 'echo_20gram',
+  },
 ];
 
 export const L0_GOOD: L0Sample[] = [
@@ -75,6 +84,8 @@ export const L0_GOOD: L0Sample[] = [
   { name: 'band_edge', input: { draft: fitChars(81), targetChars: 100, prevTexts: [], blueprint: BP_EMPTY, continuity: { characters: [] } } },
   // no_prev_fresh：TAIL_REPLAY_DRAFT 无前文时 tail_replay 恒过；关闭套话表以隔离 tail_replay 单项（其尾段含实证套话句，属 T-D2 夹具本身属性）
   { name: 'no_prev_fresh', input: { draft: TAIL_REPLAY_DRAFT, targetChars: countChars(TAIL_REPLAY_DRAFT), prevTexts: [], blueprint: BP_EMPTY, continuity: { characters: [] } }, cliches: false },
+  // echo_free：prev 非空、仅 4-8 字短语共享、零 20-gram 共享，各硬项全过
+  { name: 'echo_free', input: { draft: ECHO_FREE_DRAFT, targetChars: countChars(ECHO_FREE_DRAFT), prevTexts: [ECHO_FREE_PREV], blueprint: BP_EMPTY, continuity: { characters: [] } } },
 ];
 
 function readReal(name: string): string {

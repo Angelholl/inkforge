@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { countChars } from '@inkforge/shared';
 import { loadCliches, runL0Checks } from '../../src/quality/l0';
 import {
   BEAT_BP,
@@ -7,6 +8,10 @@ import {
   BP_EMPTY,
   CLICHE_DRAFT,
   DECEASED_APPEAR_DRAFT,
+  ECHO_BAD_DRAFT,
+  ECHO_BAD_PREV,
+  ECHO_FREE_DRAFT,
+  ECHO_FREE_PREV,
   HAPPY_DRAFT,
   PLAGIARISM_DRAFT,
   PLAGIARISM_REF,
@@ -120,5 +125,53 @@ describe('L0 tail_replay + 实证套话', () => {
     const c = r.checks.find((c) => c.name === 'cliche')!;
     expect(c.pass).toBe(false);
     expect(r.clicheHits).toContain('步伐沉稳，眼神冷峻');
+  });
+});
+
+describe('L0 echo_20gram + 模板系套话', () => {
+  it('echo_20gram：复文置于 42.6% 位置（004 形状）→ 硬失败且 details 报命中与位置', () => {
+    const r = runL0Checks({
+      draft: ECHO_BAD_DRAFT,
+      targetChars: countChars(ECHO_BAD_DRAFT),
+      prevTexts: [ECHO_BAD_PREV],
+      blueprint: BP_EMPTY,
+      continuity: { characters: [] },
+      cliches,
+    });
+    const c = r.checks.find((c) => c.name === 'echo_20gram')!;
+    expect(c.pass).toBe(false);
+    expect(r.hardFail).toBe(true);
+    expect(c.details).toContain('echoHits=');
+    expect(c.details).toContain('42.');
+    // 双盲区补位证明：章尾无复演，tail_replay 仍通过
+    expect(r.checks.find((c) => c.name === 'tail_replay')!.pass).toBe(true);
+  });
+
+  it('echo_20gram：prev 非空且零 20-gram 共享 → 通过', () => {
+    const r = runL0Checks({
+      draft: ECHO_FREE_DRAFT,
+      targetChars: countChars(ECHO_FREE_DRAFT),
+      prevTexts: [ECHO_FREE_PREV],
+      blueprint: BP_EMPTY,
+      continuity: { characters: [] },
+      cliches,
+    });
+    const c = r.checks.find((c) => c.name === 'echo_20gram')!;
+    expect(c.pass).toBe(true);
+    expect(r.hardFail).toBe(false);
+  });
+
+  it('cliche：第X层的试炼正在展开 模板系命中', () => {
+    const r = runL0Checks({
+      draft: '他沿着石阶向上，第四层的试炼正在展开，火光在墙上摇晃。',
+      targetChars: 100,
+      prevTexts: [],
+      blueprint: BP_EMPTY,
+      continuity: { characters: [] },
+      cliches,
+    });
+    const c = r.checks.find((c) => c.name === 'cliche')!;
+    expect(c.pass).toBe(false);
+    expect(r.clicheHits).toContain('第四层的试炼正在展开');
   });
 });

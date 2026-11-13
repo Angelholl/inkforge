@@ -27,8 +27,8 @@ function draftFor(chapterNo: number): string {
 }
 
 describe('QC 召回回归集', () => {
-  it('L0 召回：8 条坏样本全部 hardFail 且期望检查项为失败项', () => {
-    expect(L0_BAD).toHaveLength(8);
+  it('L0 召回：9 条坏样本全部 hardFail 且期望检查项为失败项', () => {
+    expect(L0_BAD).toHaveLength(9);
     for (const sample of L0_BAD) {
       const r = runSample(sample);
       expect(r.hardFail, `${sample.name} 应 hardFail`).toBe(true);
@@ -38,8 +38,8 @@ describe('QC 召回回归集', () => {
     }
   });
 
-  it('L0 误报：4 条好样本全部 hardFail=false', () => {
-    expect(L0_GOOD).toHaveLength(4);
+  it('L0 误报：5 条好样本全部 hardFail=false', () => {
+    expect(L0_GOOD).toHaveLength(5);
     for (const sample of L0_GOOD) {
       const r = runSample(sample);
       expect(r.hardFail, `${sample.name} 不应 hardFail: ${JSON.stringify(r.checks.filter((c) => !c.pass))}`).toBe(false);

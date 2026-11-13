@@ -267,12 +267,13 @@ export async function runChapterPipeline(
       const rwFlusher = createPartialFlusher(db, inflightRef.current!.id);
       const mode = chooseRewriteMode(l0, l1);
       const clicheFix = l0.clicheHits.length > 0 ? `以下套话句必须整句删除或改写（不得保留原句式）：${l0.clicheHits.map((h) => `「${h}」`).join('、')}。` : '';
+      const echoFix = l0.checks.find((c) => c.name === 'echo_20gram' && !c.pass) ? '正文与前文存在 20 字以上连续复文，必须彻底改写复文段，不得换皮复用。' : '';
       const taskInstruction = renderRewrite({
         findings: l1.findings,
         taskInstruction:
           mode === 'targeted'
-            ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${clicheFix}直接输出修订后的完整章节正文。`
-            : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${clicheFix}直接输出完整章节正文。`,
+            ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}直接输出修订后的完整章节正文。`
+            : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}直接输出完整章节正文。`,
       });
       const rwSlots =
         mode === 'targeted'

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { countChars, type ChapterBlueprint } from '@inkforge/shared';
 
 export interface L0Check {
-  name: 'length' | 'cliche' | 'replay_ngram' | 'plagiarism_ngram' | 'beat_coverage' | 'continuity_facts' | 'style_drift' | 'tail_replay';
+  name: 'length' | 'cliche' | 'replay_ngram' | 'plagiarism_ngram' | 'beat_coverage' | 'continuity_facts' | 'style_drift' | 'tail_replay' | 'echo_20gram';
   pass: boolean;
   details: string;
 }
@@ -40,6 +40,24 @@ function ngramSet(text: string, n: number): Set<string> {
   const set = new Set<string>();
   for (let i = 0; i + n <= clean.length; i++) set.add(clean.slice(i, i + n));
   return set;
+}
+
+function ngrams(text: string, n: number): string[] {
+  const clean = text.replace(/\s/g, '');
+  const out: string[] = [];
+  for (let i = 0; i + n <= clean.length; i++) out.push(clean.slice(i, i + n));
+  return out;
+}
+
+/** 全文 20-gram 交集（⇔ 最长公共子串 ≥20 字）：返回命中与首个命中的去空白 draft 下标。 */
+function echo20gram(draft: string, prevTexts: string[]): { hits: string[]; offset: number; cleanLen: number } {
+  const clean = draft.replace(/\s/g, '');
+  const draftGrams = new Set(ngrams(draft, 20));
+  const prevGrams = new Set<string>();
+  for (const t of prevTexts) for (const g of ngrams(t, 20)) prevGrams.add(g);
+  const hits = [...draftGrams].filter((g) => prevGrams.has(g));
+  const offset = hits.length > 0 ? clean.indexOf(hits[0]) : 0;
+  return { hits, offset, cleanLen: clean.length };
 }
 
 /** 与前文相比的 8-gram 重合率（占当前 draft 的 8-gram 比例）。 */
@@ -126,6 +144,14 @@ export function runL0Checks(input: {
   const tailRatio = tailReplayRatio(input.draft, input.prevTexts);
   checks.push({ name: 'tail_replay', pass: input.prevTexts.length === 0 || tailRatio < 0.20, details: `tailRatio=${tailRatio.toFixed(3)} (n=8, tail=200字, 阈值 0.20)` });
 
+  // 3c. echo_20gram：全文 20-gram 交集（硬失败，补 replay/tail 双盲区）
+  const echo = echo20gram(input.draft, input.prevTexts);
+  checks.push({
+    name: 'echo_20gram',
+    pass: input.prevTexts.length === 0 || echo.hits.length === 0,
+    details: `echoHits=${echo.hits.length} (n=20); 首命中 draft offset=${echo.offset}（≈${((echo.offset / echo.cleanLen) * 100).toFixed(1)}% 处）; 示例「${echo.hits[0] ?? ''}」`,
+  });
+
   // 4. plagiarism ≥15 连续字命中 few-shot/参考
   const copied = input.referenceTexts ? hasLongCopy(input.draft, input.referenceTexts) : false;
   checks.push({ name: 'plagiarism_ngram', pass: !copied, details: copied ? '发现 ≥15 连续字与参考文本重合' : '无 ≥15 连续字重合' });
@@ -148,7 +174,7 @@ export function runL0Checks(input: {
     checks.push({ name: 'style_drift', pass: drift.overBandItems === 0, details: drift.details });
   }
 
-  const hardFail = checks.some((c) => !c.pass && ['length', 'cliche', 'replay_ngram', 'tail_replay', 'plagiarism_ngram', 'beat_coverage', 'continuity_facts'].includes(c.name));
+  const hardFail = checks.some((c) => !c.pass && ['length', 'cliche', 'replay_ngram', 'tail_replay', 'echo_20gram', 'plagiarism_ngram', 'beat_coverage', 'continuity_facts'].includes(c.name));
   return { checks, hardFail, softMajors, metrics: { charCount, replayRatio: ratio }, clicheHits };
 }
 
