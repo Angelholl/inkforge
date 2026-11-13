@@ -93,3 +93,16 @@
 **风险与驳回回滚清单：** owner 驳回 D1→revert T-C1/T-C2 提交（夹具可留），成本 1 次 revert；驳回 D2→剩余卡重排，已提交不回滚；驳回 D4→补两行 define+重打包≈1 次 tauri build；tag/Release 未创建，全程无不可逆。
 
 **owner 驳回/放行方式：** 任何后续表态即覆盖本裁决触发复议。D3 需 owner 逐字回答四问：①早门+T-F+T-G 通过后是否授权创建 tag v0.1.2 并 gh release 上载安装包；②或 Release 页只挂 notes+S码不上载安装包；③20 章复跑不达标时 Release 是否同样不发、只交晨检报告；④是否授权按①答复改写计划 T-I 前置门行。
+
+## DEC-2026-1113-02 [OWNER] 新发版阻塞项：安装版纯 GUI（无 CMD 框）+ D3 部分答复（2026-11-13 10:50 前后）
+
+**背景：** owner 上线后对 D3 四问当面答复，并新增一项发版阻塞需求；同时确认桌面快捷方式即全新安装的实机 0.1.2（图标显示层问题定性不受影响）。
+
+**裁决内容（owner 亲决，覆盖 DEC-2026-1113-01/D3 挂起状态）：**
+1. **新阻塞项**：owner 实测安装版启动带 CMD 控制台框，要求打包版本为纯桌面 GUI。主审已定位根因（`apps/desktop/src-tauri/src/main.rs` 无 `windows_subsystem` 属性，release 为 console 子系统），裁卡 `docs/design/2026-11-13-card-cmdfix.md` 修复+重打包+PE 子系统回归脚本（红→绿）。**修复合入并重装冒烟通过前，tag/Release 一律不做**——本项优先级高于 T-H 20 章段结论。
+2. **四问③答复=同样不发版**：20 章晨检不达标（done<18/20、failed 未恢复、needs_human>2 任一）→ 维持 DEC-2026-1113-01/D2 口径，0.1.1 线上最新，tag/Release 均不做。
+3. **四问④答复=授权改写**：计划 T-I 前置门行按本轮答复改写（新增纯 GUI 阻塞门 + 不达标不发门）。
+4. **四问①②未决**（owner 以阻塞项替代作答）：待 CMD 修复合入+20 章晨检达标后再次呈请 owner 表态 tag/Release 形态。
+5. **图标显示层降级存证**：exe 内嵌新图标三重程序化证据（ExtractAssociatedIcon 取出新设计/lnk→exe 链/早期 8/8 目验），本机 shell 缓存三连刷新（删缓存+重启 explorer/ie4uinit/lnk touch）均未生效，按交接既定口径走降级存证入发版文档，实机目验挂 owner。
+
+**回滚：** 卡 cmdfix 为 1 行属性+1 回归脚本，revert 成本≈1 次构建；tag/Release 仍未创建，无不可逆操作。
