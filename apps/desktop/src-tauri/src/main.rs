@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::os::windows::process::CommandExt;
 use std::process::{Child, Command};
 use std::sync::Mutex;
