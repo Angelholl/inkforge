@@ -74,3 +74,35 @@ export function renderSummarize(input: { chapterNo: number; content: string }): 
     `角色名={"位置":"...","持有":[...]}`,
   ].join('\n');
 }
+
+function headExcerpt(text: string, n: number): string {
+  return text.length > n ? `${text.slice(0, n)}…` : text;
+}
+
+function tailExcerpt(text: string, n: number): string {
+  return text.length > n ? `…${text.slice(-n)}` : text;
+}
+
+/**
+ * planner 蓝图任务段：行协议 + 负约束 + 书籍简介/上一章末尾/连续性摘录。
+ * 协议与负约束前置，保证 task 槽 300 字预算内不被截断；context 全量由 continuity/prevTail 槽承载。
+ */
+export function renderBlueprintTask(args: {
+  chapterNo: number;
+  bookTitle: string;
+  bookDescription: string;
+  prevTail: string;
+  continuityText: string;
+}): string {
+  return [
+    `【任务】为第 ${args.chapterNo} 章拟蓝图。书名《${args.bookTitle}》。`,
+    `【输出格式】`,
+    `GOAL: 一句话本章目标`,
+    `BEATS: 每行一条 2-4 节拍`,
+    `HOOK: 结尾钩子一句`,
+    `不要输出 JSON、markdown 代码块或任何解释；不要复述前文情节；每行前缀必须为 GOAL:/BEATS 条目/HOOK: 之一`,
+    `【书籍简介】${args.bookDescription || '（无）'}`,
+    `【上一章末尾摘录】${tailExcerpt(args.prevTail, 30) || '（无）'}`,
+    `【连续性摘要】${headExcerpt(args.continuityText, 30) || '（无）'}`,
+  ].join('\n');
+}

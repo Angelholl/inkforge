@@ -11,6 +11,8 @@ import type { LlmProvider } from './llm/types';
 export interface BuildAppOptions {
   config?: AppConfig;
   provider?: LlmProvider;
+  /** planner 角色注入缝（测试注 mock；缺省走 createRoleProvider(config,'planner')） */
+  plannerProvider?: LlmProvider;
   db?: Database;
   /** true=服务进程内跑并发=1 队列（测试/单进程模式）；生产由 worker 子进程跑 */
   inlineQueue?: boolean;
@@ -31,6 +33,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     db,
     config: opts.config,
     provider: opts.provider,
+    plannerProvider: opts.plannerProvider,
     bus: new (await import('node:events')).EventEmitter(),
     runAborts: new Map(),
   };

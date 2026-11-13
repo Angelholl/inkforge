@@ -40,13 +40,27 @@ export interface RewriteBudgets {
   task: number;
 }
 
+export interface PlannerBudgets {
+  hardRules: number;
+  continuity: number;
+  prevTail: number;
+  task: number;
+}
+
 export interface AppConfig {
   port: number;
   dataDir: string;
   mock: boolean;
   providers: { local: ProviderConfig; cloud?: ProviderConfig };
   roles: Record<RoleName, { provider: 'local' | 'cloud'; model: string }>;
-  budgets: { draft: DraftBudgets; draft8k: DraftBudgets; qc: QcBudgets; qc8k: QcBudgets; rewrite: RewriteBudgets };
+  budgets: {
+    draft: DraftBudgets;
+    draft8k: DraftBudgets;
+    qc: QcBudgets;
+    qc8k: QcBudgets;
+    rewrite: RewriteBudgets;
+    planner: PlannerBudgets;
+  };
   quality: { targetChars: number; scoreThreshold: number; minGain: number; maxRounds: number };
   timeouts: Record<Exclude<StepName, 'finalize'>, number>;
 }
@@ -101,6 +115,7 @@ const BUDGETS_REWRITE: RewriteBudgets = {
   factBaseline: 1000,
   task: 500,
 };
+const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 300 };
 
 export function pickBudgetProfile(contextWindow: number): 'draft' | 'draft8k' {
   return contextWindow <= 8192 ? 'draft8k' : 'draft';
@@ -143,7 +158,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     mock: e.INKFORGE_MOCK === '1',
     providers: { local, ...(cloud ? { cloud } : {}) },
     roles,
-    budgets: { draft: BUDGETS_DRAFT, draft8k: BUDGETS_DRAFT_8K, qc: BUDGETS_QC, qc8k: BUDGETS_QC_8K, rewrite: BUDGETS_REWRITE },
+    budgets: {
+      draft: BUDGETS_DRAFT,
+      draft8k: BUDGETS_DRAFT_8K,
+      qc: BUDGETS_QC,
+      qc8k: BUDGETS_QC_8K,
+      rewrite: BUDGETS_REWRITE,
+      planner: BUDGETS_PLANNER,
+    },
     quality: { targetChars: 3000, scoreThreshold: 8.0, minGain: 0.05, maxRounds: 2 },
     timeouts: { draft: 3600000, qc: 900000, rewrite: 3600000, summarize: 1200000 },
   };

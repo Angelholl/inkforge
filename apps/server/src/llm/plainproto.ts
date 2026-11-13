@@ -1,4 +1,4 @@
-import type { Finding } from '@inkforge/shared';
+import type { ChapterBlueprint, Finding } from '@inkforge/shared';
 
 const KEYS = ['SEVERITY', 'DIMENSION', 'QUOTE', 'COMMENT'] as const;
 const SEVERITIES = new Set(['blocker', 'major', 'minor']);
@@ -130,4 +130,70 @@ export function parseSummary(raw: string): ParsedSummary {
   }
   if (summary === '') errors.push('缺少 SUMMARY 行');
   return { summary, beats, openThreads, characterDeltas, errors };
+}
+
+export interface ParsedBlueprint {
+  blueprint: ChapterBlueprint;
+  errors: string[];
+}
+
+const MAX_BLUEPRINT_BEATS = 6;
+
+/** 蓝图行协议解析（GOAL:/BEATS - 条目/HOOK:）。容忍 CRLF、代码围栏与多余空行。 */
+export function parseBlueprint(raw: string): ParsedBlueprint {
+  const errors: string[] = [];
+  const lines = raw
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('```'));
+
+  let goal = '';
+  let hook = '';
+  let inBeats = false;
+  const beats: string[] = [];
+
+  for (const line of lines) {
+    const text = line.trim();
+    const goalMatch = /^GOAL\s*[:：]\s*(.*)$/.exec(text);
+    if (goalMatch) {
+      if (goal === '' && goalMatch[1].trim() !== '') goal = goalMatch[1].trim();
+      inBeats = false;
+      continue;
+    }
+    const hookMatch = /^HOOK\s*[:：]\s*(.*)$/.exec(text);
+    if (hookMatch) {
+      if (hook === '' && hookMatch[1].trim() !== '') hook = hookMatch[1].trim();
+      inBeats = false;
+      continue;
+    }
+    const beatsMatch = /^BEATS\s*[:：]\s*(.*)$/.exec(text);
+    if (beatsMatch) {
+      inBeats = true;
+      if (beatsMatch[1].trim() !== '') beats.push(beatsMatch[1].trim());
+      continue;
+    }
+    if (inBeats) {
+      if (text === '') continue;
+      const item = /^-\s+(.*)$/.exec(text);
+      if (item) {
+        if (item[1].trim() !== '') beats.push(item[1].trim());
+        continue;
+      }
+      if (/^[A-Z]+\s*[:：]/.test(text)) inBeats = false;
+    }
+  }
+
+  if (goal === '') errors.push('缺少 GOAL 行');
+  if (beats.length === 0) errors.push('缺少 BEATS 条目');
+  if (beats.length > MAX_BLUEPRINT_BEATS) {
+    beats.length = MAX_BLUEPRINT_BEATS;
+    errors.push(`BEATS 条目超过 ${MAX_BLUEPRINT_BEATS} 条，已截断`);
+  }
+  if (hook === '') errors.push('缺少 HOOK 行');
+  else beats.push(hook);
+
+  return {
+    blueprint: { goal, beats, mustHaveBeats: [], bannedTopics: [] },
+    errors,
+  };
 }

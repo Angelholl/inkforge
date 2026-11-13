@@ -7,7 +7,7 @@ import type { L1Report } from './gate';
 
 const REPAIR_HEADER = '【解析失败重试】上一轮输出无法解析，错误如下：';
 
-function repairPrompt(errors: string[]): string {
+export function repairPrompt(errors: string[]): string {
   return `${REPAIR_HEADER}\n${errors.map((e, i) => `${i + 1}. ${e}`).join('\n')}\n请严格按【输出格式】重新输出整段评审结果。`;
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
 import { renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize } from '../../src/prompts/render';
+import { parseBlueprint } from '../../src/llm/plainproto';
 
 const BP: ChapterBlueprint = {
   goal: '主角进入书房取得密信',
@@ -59,5 +60,21 @@ describe('prompt 渲染契约', () => {
     const out = renderSummarize({ chapterNo: 5, content: DRAFT });
     for (const marker of ['SUMMARY:', 'BEATS:', 'THREADS:', 'STATE:']) expect(out).toContain(marker);
     expect(out).toContain(DRAFT.slice(0, 10));
+  });
+
+  it('parseBlueprint：合格文样往返', () => {
+    const raw = 'GOAL: 主角踏入试炼第六层\nBEATS:\n- 发现入口\n- 首次交锋\nHOOK: 身后石门闭合';
+    const { blueprint, errors } = parseBlueprint(raw);
+    expect(errors).toEqual([]);
+    expect(blueprint.goal).toBe('主角踏入试炼第六层');
+    expect(blueprint.beats).toEqual(['发现入口', '首次交锋', '身后石门闭合']);
+    expect(blueprint.mustHaveBeats).toEqual([]);
+    expect(blueprint.bannedTopics).toEqual([]);
+  });
+
+  it('parseBlueprint：缺 GOAL → errors 含该行且 beats 仍收', () => {
+    const { blueprint, errors } = parseBlueprint('BEATS:\n- 发现入口\nHOOK: 石门闭合');
+    expect(errors.some((e) => e.includes('GOAL'))).toBe(true);
+    expect(blueprint.beats).toEqual(['发现入口', '石门闭合']);
   });
 });

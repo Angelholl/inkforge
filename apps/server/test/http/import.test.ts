@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
-import { createDefaultMockProvider } from '../../src/llm/mock';
+import { createDefaultMockProvider, createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
 
 let dir: string;
@@ -16,7 +16,15 @@ beforeAll(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-import-'));
   const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
   db = openDb(path.join(config.dataDir, 'inkforge.db'));
-  app = await buildApp({ config, provider: createDefaultMockProvider(), db, inlineQueue: true });
+  app = await buildApp({
+    config,
+    provider: createDefaultMockProvider(),
+    plannerProvider: createMockProvider({
+      summarize: { text: 'GOAL: 试炼第六层的入口\nBEATS:\n- 发现入口\n- 首次交锋\nHOOK: 入口在身后关闭' },
+    }),
+    db,
+    inlineQueue: true,
+  });
   const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: '导入测试书' } });
   expect(created.statusCode).toBe(201);
   bookId = (created.json() as { id: string }).id;
@@ -90,5 +98,30 @@ describe('POST /api/books/:bookId/import-original', () => {
       payload: { chapters: [{ title: '第一章', content: '不存在的书也能写入正文内容。' }] },
     });
     expect(nf.statusCode).toBe(404);
+  });
+
+  it('blueprint-suggest：注入 mock → 200 且蓝图落库可读', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: `/api/books/${bookId}/blueprint-suggest`,
+      payload: { chapterNo: 6 },
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { blueprint: { goal: string; beats: string[] }; source: string };
+    expect(body.source).toBe('llm');
+    expect(body.blueprint.goal).toBe('试炼第六层的入口');
+    expect(body.blueprint.beats).toEqual(['发现入口', '首次交锋', '入口在身后关闭']);
+
+    const put = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${bookId}/chapters/6/blueprint`,
+      payload: { title: '第六章 入口', blueprint: body.blueprint },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const got = await app.inject({ method: 'GET', url: `/api/books/${bookId}` });
+    expect(got.statusCode).toBe(200);
+    const chapters = (got.json() as { chapters: Array<{ chapterNo: number; blueprint: { goal: string } | null }> }).chapters;
+    expect(chapters.find((c) => c.chapterNo === 6)?.blueprint?.goal).toBe('试炼第六层的入口');
   });
 });

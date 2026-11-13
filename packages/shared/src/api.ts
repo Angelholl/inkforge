@@ -111,6 +111,10 @@ export interface BlueprintPutBody {
   targetChars?: number;
 }
 
+export interface BlueprintSuggestBody {
+  chapterNo: number;
+}
+
 export interface GenerateChapterBody {
   maxRounds?: number;
 }

@@ -10,12 +10,17 @@ import type { Database } from '../db/open';
 import { assembleContext } from '../context/assembler';
 import * as booksRepo from '../db/repositories/books';
 import * as chaptersRepo from '../db/repositories/chapters';
+import * as continuityRepo from '../db/repositories/continuity';
 import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
 import { blueprintSchema, createBookSchema, createRunSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
 import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
+import { createRoleProvider } from '../llm/factory';
+import { parseBlueprint } from '../llm/plainproto';
+import { repairPrompt } from '../quality/l1';
+import { renderBlueprintTask } from '../prompts/render';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
@@ -31,10 +36,17 @@ const settingsPutSchema = z.object({
   mock: z.boolean().optional(),
 });
 
+const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive() });
+
+const PLANNER_HARD_RULES =
+  '【硬规则】你是长篇小说的策划编辑，只输出章节蓝图行协议；不要输出 JSON、markdown 代码块或任何解释。';
+
 export interface RouteState {
   db: Database;
   config: AppConfig;
   provider: LlmProvider;
+  /** planner 角色注入缝；缺省由 createRoleProvider(config,'planner') 构造 */
+  plannerProvider?: LlmProvider;
   bus: EventEmitter;
   runAborts: Map<string, AbortController>;
 }
@@ -93,6 +105,58 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
         targetChars: body.targetChars,
       }),
     );
+  });
+
+  app.post('/api/books/:bookId/blueprint-suggest', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    const book = booksRepo.getBook(db, bookId);
+    if (!book) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, blueprintSuggestSchema, req.body);
+    if (!body) return;
+    const { chapterNo } = body;
+
+    const prevChapter = chaptersRepo.getChapter(db, bookId, chapterNo - 1);
+    const prevVersion = prevChapter?.currentVersionId ? chaptersRepo.getVersion(db, prevChapter.currentVersionId) : undefined;
+    const prevTail = prevVersion?.content ?? '';
+    const continuityText = continuityRepo.renderSnapshotText(continuityRepo.getContinuitySnapshot(db, bookId, chapterNo));
+
+    const taskText = renderBlueprintTask({
+      chapterNo,
+      bookTitle: book.title,
+      bookDescription: book.description,
+      prevTail,
+      continuityText,
+    });
+    const b = config.budgets.planner;
+    const slots = [
+      { name: 'hardRules', content: PLANNER_HARD_RULES, budgetChars: b.hardRules, stable: true, keep: 'head' as const },
+      { name: 'continuity', content: continuityText, budgetChars: b.continuity, stable: false, keep: 'head' as const },
+      { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'tail' as const },
+      { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },
+    ];
+    const totalBudget = config.providers.local.contextWindow - config.providers.local.maxOutput - 500;
+    const assembled = assembleContext(slots, totalBudget);
+
+    const plannerProvider = state.plannerProvider ?? createRoleProvider(config, 'planner');
+    const baseReq = (user: string) => ({
+      system: assembled.system,
+      user,
+      temperature: 0.3,
+      topP: 0.9,
+      maxOutputTokens: config.providers.local.maxOutput,
+      timeoutMs: 180000,
+      meta: { step: 'summarize' as const, chapterNo },
+    });
+
+    const first = parseBlueprint((await plannerProvider.complete(baseReq(assembled.user))).text);
+    let report = first;
+    if (first.errors.length > 0) {
+      report = parseBlueprint(
+        (await plannerProvider.complete(baseReq(`${assembled.user}\n\n${repairPrompt(first.errors)}`))).text,
+      );
+    }
+    if (report.errors.length > 0) return reply.code(502).send({ error: 'blueprint parse failed', errors: report.errors });
+    reply.send({ blueprint: report.blueprint, source: 'llm' });
   });
 
   const startRun = (reply: FastifyReply, bookId: string, scope: { from: number; to: number }, maxRounds?: number): void => {
