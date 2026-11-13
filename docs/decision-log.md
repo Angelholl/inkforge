@@ -162,3 +162,13 @@
 4. **版本冻结 0.1.2 不变**（入口 B 属 0.2 功能补全轮范围）。
 
 **回滚：** 全部为新增文件/新增 key/页面重写，revert 三 commit 即净回退，无数据迁移无不可逆。
+
+## DEC-2026-1114-02 [OWNER/主模型] Strata 唤醒口径修正与真模型门一开跑（2026-11-14）
+
+**owner 指正：** Strata 可直接加载唤醒，不存在"离线"——此前 HTTP:000 系首请求含模型加载（实测首请求 84.9s），20s 探针超时被误判为离线。挂起清单第 1 项（T05）与真模型冒烟的环境前提就此解除。
+
+**事实登记（真模型冒烟全 PASS，副本实例 8790 / data/smoke-1114 / mock=false）：**
+1. 入口 B outline-suggest（chapterCount=3）→ HTTP 200 / 25.1s，三章蓝图语义连贯贴题，行协议解析零 error（iq3_xxs 对 GOAL/BEATS/HOOK 遵循良好，R2 风险降级）。
+2. 入口 A blueprint-suggest（chapterNo=4，前接 3 章 original 文）→ HTTP 200 / 13.1s，蓝图衔接前文场景。
+3. 冒烟实例已清理；挂机复跑已启动：bookId 7445327d（挂机-试炼之路）→ runId **0423945b**（20 章 generate，8787 生产服务 worker），首章已推进至 qc 步。晨检与 T05 语料采集（chapters 1/16/20）候 run 终态执行。
+4. 纪律生效中：挂机期间禁重启 8787/worker；桌面应用勿开启（抢 8787 端口）。
