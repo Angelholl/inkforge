@@ -17,6 +17,7 @@ function argValue(flag) {
 }
 const outPath = argValue('--out');
 const versionArg = argValue('--version');
+const productNameArg = argValue('--product-name');
 const stampEnabled = process.env.INKFORGE_STAMP_NSI === '1';
 
 if (!stampEnabled && !outPath) {
@@ -50,7 +51,14 @@ function replaceLine(text, prefix, newValue, label) {
 const original = readFileSync(nsiPath, 'utf8');
 let stamped = original;
 stamped = replaceLine(stamped, '!define VERSION', version, 'VERSION');
-stamped = replaceLine(stamped, '!define VERSIONWITHBUILD', /^\d+\.\d+\.\d+$/.test(version) ? `${version}.0` : version, 'VERSIONWITHBUILD');
+// VERSIONWITHBUILD 须满足 VIProductVersion X.X.X.X：取纯数字段补 .0（0.2.0-dev → 0.2.0.0）
+const [numericVersion] = version.split('-');
+const versionWithBuild = `${numericVersion}.0`;
+stamped = replaceLine(stamped, '!define VERSIONWITHBUILD', versionWithBuild, 'VERSIONWITHBUILD');
+// PRODUCTNAME 决定 ARP 键名与默认安装目录：芽构建必须与主安装「墨炉」隔离（T14 实测 tauri 不替换模板字面量）
+if (productNameArg) {
+  stamped = replaceLine(stamped, '!define PRODUCTNAME', productNameArg, 'PRODUCTNAME');
+}
 stamped = replaceLine(stamped, '!define INSTALLERICON', ICON_ABS, 'INSTALLERICON');
 stamped = replaceLine(stamped, '!define UNINSTALLERICON', ICON_ABS, 'UNINSTALLERICON');
 
