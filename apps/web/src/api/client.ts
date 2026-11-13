@@ -3,6 +3,10 @@ import type {
   ReportDto,
   ChapterDto,
   CreateBookBody,
+  BlueprintSuggestBody,
+  CreateRunBody,
+  ImportOriginalBody,
+  ImportOriginalResult,
   HealthDto,
   RunDto,
   RunWithStepsDto,
@@ -41,6 +45,14 @@ export const api = {
       body: JSON.stringify({ maxRounds }),
     }),
   generateAll: (bookId: string) => req<{ runId: string }>(`/api/books/${bookId}/generate-all`, { method: 'POST', body: '{}' }),
+  importOriginal: (bookId: string, body: ImportOriginalBody) =>
+    req<ImportOriginalResult>(`/api/books/${bookId}/import-original`, { method: 'POST', body: JSON.stringify(body) }),
+  suggestBlueprint: (bookId: string, body: BlueprintSuggestBody) =>
+    req<{ blueprint: unknown; source: 'llm' | 'manual' }>(`/api/books/${bookId}/blueprint-suggest`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  createRun: (body: CreateRunBody) => req<{ runId: string }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   getRun: (runId: string) => req<RunWithStepsDto>(`/api/runs/${runId}`),
   cancelRun: (runId: string) => req<{ ok: boolean }>(`/api/runs/${runId}/cancel`, { method: 'POST', body: '{}' }),
   pauseRun: (runId: string) => req<{ ok: boolean }>(`/api/runs/${runId}/pause`, { method: 'POST', body: '{}' }),

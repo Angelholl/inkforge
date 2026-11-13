@@ -20,6 +20,9 @@ export default function App() {
         <Link to="/" className="text-blue-700">
           书架
         </Link>
+        <Link to="/new" className="text-blue-700">
+          新建小说
+        </Link>
         <Link to="/settings" className="text-blue-700">
           设置
         </Link>

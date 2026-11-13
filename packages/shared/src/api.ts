@@ -124,6 +124,17 @@ export interface CreateRunBody {
   fromChapter: number;
   toChapter: number;
   maxRounds?: number;
+  mode?: 'generate' | 'continue';
+}
+
+export interface ImportOriginalBody {
+  chapters: Array<{ title: string; content: string }>;
+}
+
+export interface ImportOriginalResult {
+  imported: number;
+  firstChapterNo: number;
+  lastChapterNo: number;
 }
 
 export interface StyleBindBody {
