@@ -1,4 +1,4 @@
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -45,5 +45,40 @@ describe('BooksPage', () => {
 
     await waitFor(() => expect(screen.getByText(/还没有书/)).toBeTruthy());
     expect(screen.getByRole('link', { name: '续写向导' }).getAttribute('href')).toBe('/continue');
+  });
+
+  it('删书两步确认：删除 → 确认删除 → 发 DELETE 且行消失', async () => {
+    let gets = 0;
+    const stubResp = (body: unknown): { ok: boolean; status: number; json: () => Promise<unknown>; text: () => Promise<string> } => ({
+      ok: true,
+      status: 200,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (init?.method === 'DELETE' && u.includes('/api/books/b1')) return stubResp({ ok: true });
+        gets += 1;
+        return stubResp(gets === 1 ? [{ id: 'b1', title: '测试书', createdAt: '2026-11-15T10:00:00.000Z' }] : []);
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('测试书')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    // 第一步只出确认条，尚未发请求
+    expect(screen.getByText(/不可恢复/)).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/books/b1'), expect.objectContaining({ method: 'DELETE' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.stringContaining('/api/books/b1'),
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
+    await waitFor(() => expect(screen.queryByText('测试书')).toBeNull());
   });
 });

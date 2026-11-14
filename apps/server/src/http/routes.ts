@@ -82,6 +82,18 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
 
   app.get('/api/books', async () => booksRepo.listBooks(db));
 
+  // 删书：活动 run（queued/running/paused）时拒绝，防 worker 写入中途断链
+  app.delete('/api/books/:bookId', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const activeRun = db
+      .prepare("SELECT id FROM runs WHERE book_id = ? AND status IN ('queued','running','paused') LIMIT 1")
+      .get(bookId);
+    if (activeRun) return reply.code(409).send({ error: '该书存在进行中的 run，请先取消或完成后再删除' });
+    booksRepo.deleteBook(db, bookId);
+    reply.send({ ok: true });
+  });
+
   app.put('/api/books/:bookId/meta', async (req, reply) => {
     const { bookId } = req.params as { bookId: string };
     if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });

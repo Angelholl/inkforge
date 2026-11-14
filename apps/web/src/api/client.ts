@@ -43,6 +43,7 @@ export const api = {
   listBooks: () => req<BookDto[]>('/api/books'),
   getBook: (bookId: string) => req<BookDto & { chapters: ChapterDto[]; runs: RunDto[] }>(`/api/books/${bookId}`),
   createBook: (body: CreateBookBody) => req<BookDto>('/api/books', { method: 'POST', body: JSON.stringify(body) }),
+  deleteBook: (bookId: string) => req<{ ok: boolean }>(`/api/books/${bookId}`, { method: 'DELETE', body: '{}' }),
   putBookMeta: (bookId: string, body: BookMetaPutBody) =>
     req<BookDto>(`/api/books/${bookId}/meta`, { method: 'PUT', body: JSON.stringify(body) }),
   listCharacters: (bookId: string) => req<CharacterDto[]>(`/api/books/${bookId}/characters`),

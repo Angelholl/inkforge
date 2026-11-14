@@ -173,6 +173,26 @@ export function updateCharacter(
   return { id: characterId, name, baseSetting };
 }
 
+/** 删书：外键无级联（SQLite 默认 RESTRICT），按依赖序显式清空全部关联表，书不存在返回 false。 */
+export function deleteBook(db: Database, id: string): boolean {
+  if (!getBook(db, id)) return false;
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM partial_outputs WHERE run_step_id IN (SELECT rs.id FROM run_steps rs JOIN runs r ON r.id = rs.run_id WHERE r.book_id = ?)').run(id);
+    db.prepare('DELETE FROM run_steps WHERE run_id IN (SELECT id FROM runs WHERE book_id = ?)').run(id);
+    db.prepare('DELETE FROM runs WHERE book_id = ?').run(id);
+    db.prepare('DELETE FROM chapter_fts WHERE chapter_id IN (SELECT id FROM chapters WHERE book_id = ?)').run(id);
+    db.prepare('DELETE FROM chapter_versions WHERE chapter_id IN (SELECT id FROM chapters WHERE book_id = ?)').run(id);
+    db.prepare('DELETE FROM chapters WHERE book_id = ?').run(id);
+    db.prepare('DELETE FROM chapter_summaries WHERE book_id = ?').run(id);
+    db.prepare('DELETE FROM character_states WHERE character_id IN (SELECT id FROM characters WHERE book_id = ?)').run(id);
+    db.prepare('DELETE FROM characters WHERE book_id = ?').run(id);
+    db.prepare('DELETE FROM foreshadowings WHERE book_id = ?').run(id);
+    db.prepare('DELETE FROM books WHERE id = ?').run(id);
+  });
+  tx();
+  return true;
+}
+
 export function deleteCharacter(db: Database, bookId: string, characterId: string): boolean {
   if (!getCharacter(db, bookId, characterId)) return false;
   const tx = db.transaction(() => {
