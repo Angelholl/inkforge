@@ -51,7 +51,7 @@ export const api = {
   updateCharacter: (bookId: string, characterId: string, body: UpdateCharacterBody) =>
     req<CharacterDto>(`/api/books/${bookId}/characters/${characterId}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteCharacter: (bookId: string, characterId: string) =>
-    req<{ ok: boolean }>(`/api/books/${bookId}/characters/${characterId}`, { method: 'DELETE' }),
+    req<{ ok: boolean }>(`/api/books/${bookId}/characters/${characterId}`, { method: 'DELETE', body: '{}' }),
   putBlueprint: (bookId: string, chapterNo: number, body: BlueprintPutBody) =>
     req<ChapterDto>(`/api/books/${bookId}/chapters/${chapterNo}/blueprint`, { method: 'PUT', body: JSON.stringify(body) }),
   generateChapter: (bookId: string, chapterNo: number, maxRounds?: number) =>
