@@ -194,3 +194,14 @@
 5. **productName 墨炉→inkforge** 随 T13 stamp 链生效（UNINSTKEY=inkforge 独立，根除 ARP 键冲突根因；窗口标题暂不动）。
 
 **回滚：** 卸载/重装为装机态动作，安装包可随时重建；代码侧为新增文件/新增键/页面重写，revert 可净回退，无数据迁移不可逆项（生产库 0004 迁移幂等顺序推进）。
+
+## DEC-2026-1114-05 [主模型] WCO 功能收口 + 0.2.0 装机落地 + NSIS 模板快照根因（2026-11-14/15）
+
+**事实登记（验证链）：**
+1. 功能全绿：shared 2 / web 22 / server 187 = **211**（账本 200→211 精确命中）；lint/typecheck/build 全绿；GUI 黑盒目验全 PASS（docs/baseline/gui-verification-0.2-wco.md），目验抓出真 bug `deleteCharacter` 空 body 400（Fastify FST_ERR_CTP_EMPTY_JSON_BODY）并修复复验。
+2. code-review 两轴（不外派模式，主模型亲审，基准 origin/master=81820f0，41 文件 +1088/-45）：Standards——无硬违规； judgement 项 3 条登记为已知小额债务：①POST/PUT 人物卡重名并发窗口可 500（UNIQUE 兜底，单机低险）；②renderCharacterCards 与 settingPreview 跨端扁平化逻辑重复（可上收 shared）；③settingRawText 命名与其「展平预览」语义略偏。Spec——计划全项交付，无 scope creep（装机三答为 owner 亲决新增）。
+3. **0.2.0 装机落地（owner 四答 DEC-2026-1114-04 执行）**：两旧安装卸载（预检无用户数据）→ 新装 D:\inkforge → ARP 键 inkforge/0.2.0 → 冒烟全 PASS（health 0.2.0、旧库 user_version 2→4 自动迁移、outline 字段在场）。物证 SHA256=8c0231f7…（docs/release/0.2.0-local-build.md）。
+4. **NSIS 模板快照根因（incident-0.2-t14 F6 闭环）**：自定义模板=整份生成的安装脚本快照，资源 File 清单与 defines 均为字面量，tauri 不重生成——新增迁移文件须手工补 File/Delete 两段；本次模板直改 defines（inkforge/0.2.0）+ 补 0003/0004 装卸行。教训入 docs/release/0.2.0-local-build.md 台账候选。
+5. tag/Release 仍不发（0.2 发布门未过）；0.1.2-rc 物证（S码 6e3dfd4b）不受影响。
+
+**回滚：** 模板/ conf 变更 revert 即净回退；装机态可随时以物证安装包重装。

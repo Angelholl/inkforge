@@ -7,7 +7,7 @@
     "devUrl": "http://localhost:5173",
     "frontendDist": "../../web/dist",
     "beforeDevCommand": "pnpm --filter @inkforge/web dev",
-    "beforeBuildCommand": "pnpm --filter @inkforge/web build && node ../scripts/stamp-nsi.mjs"
+    "beforeBuildCommand": "pnpm --filter @inkforge/web build"
   },
   "app": {
     "windows": [
