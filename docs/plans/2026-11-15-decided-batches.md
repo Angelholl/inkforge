@@ -1,5 +1,12 @@
 # 拍板批次实现计划 v2（DEC-2026-1115-04 全范围，协议先行）
 
+> **完成记录（2026-11-15，主模型独做会话，无外派）：**
+> - 四阶段全部落地：A1 三级蓝图（c09002a）→ A2 拆解仿写（afaa726）→ B 蒸馏四批（bfca407）→ C 三小件（5907615）→ D UI 三卡（bef65ec）+ NSIS 0005 补行（ad088eb）。
+> - 账本：215 → **262**（A1 +6 / A2 +6 / B +27 / C +7 / D 目验代测 +0）。全仓 262 测试绿（server 231 / web 29 / shared 2），typecheck×3 + eslint 绿。
+> - GUI 黑盒目验：A1 三级树 8/8、A2 仿写档案 5/5、D 全页面矩阵 10/10（5 页 × 1280/1600；隔离四件套 + puppeteer-core + stub LLM）。
+> - 过程修正（登记）：B 账本实际 +27（计划 +26，自评测试拆分多 1，只增不减）；`listForeshadowings` 顺带修正 snake→camelCase 映射缺陷；CLI mock 文样随 analyzeStyle 契约更新；deleteImitationProfile 空体 400 修复（补 `'{}'` 体）。
+> - 悬置（本轮不做，沿用计划钉死）：imitation CLI（HTTP only）；drafter 注入（Pagekin 红线守恒）；polish 详情页入口按钮（client 方法已备，UI 未排）；0.2 发布门与四问①②依旧悬置（owner 沿用 0.1.2 发版门精神）。
+
 **目标：** 落地 DEC-2026-1115-04 全部裁决：协议双件（三级蓝图+拆解仿写）→ 蒸馏四批 → 三小件 → UI 三卡。
 **架构：** 零表重建——全部 DDL 并入单一 0005 迁移（NSIS 模板只补一次，DEC-2026-1114-05 教训）；polish run 不扩 runs.mode CHECK，用 `runs.kind` 附加列（ADD COLUMN，worker 按 kind 分支）；三级蓝图/仿写档案为新表；蒸馏结构化并入 rules_json；确认门=draft 前端态+显式入库（owner 已拍板确认门方向）。
 **规格：** DEC-2026-1115-04（owner 亲决 13 项）+ discuss-distill-upgrade.md + discuss-full-pipeline-benchmark.md。
