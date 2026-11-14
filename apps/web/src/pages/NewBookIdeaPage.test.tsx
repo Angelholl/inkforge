@@ -60,7 +60,7 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
     renderPage();
 
     fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '入口B向导书' } });
-    const worldview = screen.getByPlaceholderText(/世界观 \/ 角色卡 \/ 规则/) as HTMLTextAreaElement;
+    const worldview = screen.getByPlaceholderText(/世界观 \/ 规则/) as HTMLTextAreaElement;
     setInput(worldview, '修真大陆，少年逆天改命。');
     fireEvent.change(screen.getByLabelText('章节数'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: '建书并生成蓝图' }));
@@ -79,6 +79,33 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
     const suggest = calls.find((c) => c.url.endsWith('/outline-suggest'));
     expect(suggest).toBeTruthy();
     expect(JSON.parse(String((suggest!.init as RequestInit).body))).toEqual({ chapterCount: 2 });
+  });
+
+  it('新书向导：人物卡与大纲随建书提交', async () => {
+    const calls: Call[] = [];
+    vi.stubGlobal('fetch', stubFetch(calls));
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '设定功能测书' } });
+    setInput(screen.getByPlaceholderText(/世界观 \/ 规则/) as HTMLTextAreaElement, '修真大陆，宗门林立。');
+    setInput(
+      screen.getByPlaceholderText(/全书剧情大纲/) as HTMLTextAreaElement,
+      '第一卷：草原崛起；第二卷：夺回王城',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '添加人物' }));
+    setInput(screen.getByLabelText('人物卡姓名1') as HTMLInputElement, '张三');
+    setInput(screen.getByLabelText('人物卡设定1') as HTMLTextAreaElement, '主角，坚韧');
+    fireEvent.click(screen.getByRole('button', { name: '建书并生成蓝图' }));
+
+    await waitFor(() => expect(screen.getByText(/少年踏上旅途/)).toBeTruthy());
+    const create = calls.find((c) => c.url.endsWith('/api/books'));
+    expect(create).toBeTruthy();
+    expect(JSON.parse(String((create!.init as RequestInit).body))).toEqual({
+      title: '设定功能测书',
+      description: '修真大陆，宗门林立。',
+      outline: '第一卷：草原崛起；第二卷：夺回王城',
+      characters: [{ name: '张三', baseSetting: '{"设定":"主角，坚韧"}' }],
+    });
   });
 
   it('新书向导：采用全部蓝图后 PUT 逐章落库并 generate 发起', async () => {

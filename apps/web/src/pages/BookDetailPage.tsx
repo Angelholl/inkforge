@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { api } from '../api/client';
-import type { ChapterBlueprint, StyleProfileDto } from '@inkforge/shared';
+import type { CharacterDto, ChapterBlueprint, StyleProfileDto } from '@inkforge/shared';
 
 function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string) => void }) {
   const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
@@ -19,13 +19,56 @@ function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: strin
   );
 }
 
+/** 人物卡设定展示：baseSetting JSON 逐 entry 拼行，非法 JSON 显示原文，'{}' 显示占位。 */
+function settingPreview(baseSetting: string): string {
+  const raw = (baseSetting ?? '').trim();
+  if (!raw || raw === '{}') return '（无设定）';
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      const flat = Object.entries(obj)
+        .map(([k, v]) => `${k}: ${String(v)}`)
+        .join('；');
+      return flat || '（无设定）';
+    }
+  } catch {
+    /* 原文展示 */
+  }
+  return raw;
+}
+
+/** 编辑态预填：与展示一致的展平文本（无设定 → 空串）；保存按 {"设定": text} 包裹约定回写。 */
+function settingRawText(baseSetting: string): string {
+  const p = settingPreview(baseSetting);
+  return p === '（无设定）' ? '' : p;
+}
+
 export default function BookDetailPage() {
   const { bookId = '' } = useParams();
   const { data: book, refetch } = useQuery({ queryKey: ['book', bookId], queryFn: () => api.getBook(bookId), refetchInterval: 4000 });
   const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
+  const { data: characters, refetch: refetchCharacters } = useQuery({
+    queryKey: ['characters', bookId],
+    queryFn: () => api.listCharacters(bookId),
+  });
   const [blueprintText, setBlueprintText] = useState('');
   const [chapterNo, setChapterNo] = useState(1);
   const [msg, setMsg] = useState('');
+  const [worldText, setWorldText] = useState('');
+  const [outlineText, setOutlineText] = useState('');
+  const [newCardName, setNewCardName] = useState('');
+  const [newCardSetting, setNewCardSetting] = useState('');
+  const [editingCard, setEditingCard] = useState<{ id: string; name: string; setting: string } | null>(null);
+  // book 每 4s 轮询；世界观/大纲编辑态只在首次加载同步一次，避免轮询覆盖未保存的编辑
+  const metaSyncedRef = useRef(false);
+
+  useEffect(() => {
+    if (book && !metaSyncedRef.current) {
+      setWorldText(book.description);
+      setOutlineText(book.outline);
+      metaSyncedRef.current = true;
+    }
+  }, [book]);
 
   useEffect(() => {
     if (book && book.chapters.length > 0 && blueprintText === '') {
@@ -70,6 +113,60 @@ export default function BookDetailPage() {
     }
   };
 
+  const saveMeta = async () => {
+    try {
+      await api.putBookMeta(bookId, { description: worldText, outline: outlineText });
+      setMsg('设定已保存');
+      void refetch();
+    } catch (e) {
+      setMsg(`设定保存失败：${(e as Error).message}`);
+    }
+  };
+
+  const addCard = async () => {
+    if (!newCardName.trim()) {
+      setMsg('人物卡姓名不能为空');
+      return;
+    }
+    try {
+      await api.createCharacter(bookId, {
+        name: newCardName.trim(),
+        baseSetting: newCardSetting.trim() ? JSON.stringify({ 设定: newCardSetting.trim() }) : '{}',
+      });
+      setNewCardName('');
+      setNewCardSetting('');
+      setMsg('人物卡已添加');
+      void refetchCharacters();
+    } catch (e) {
+      setMsg(`添加失败：${(e as Error).message}`);
+    }
+  };
+
+  const saveCard = async () => {
+    if (!editingCard) return;
+    try {
+      await api.updateCharacter(bookId, editingCard.id, {
+        name: editingCard.name.trim(),
+        baseSetting: editingCard.setting.trim() ? JSON.stringify({ 设定: editingCard.setting.trim() }) : '{}',
+      });
+      setEditingCard(null);
+      setMsg('人物卡已保存');
+      void refetchCharacters();
+    } catch (e) {
+      setMsg(`保存失败：${(e as Error).message}`);
+    }
+  };
+
+  const removeCard = async (card: CharacterDto) => {
+    try {
+      await api.deleteCharacter(bookId, card.id);
+      setMsg(`人物卡「${card.name}」已删除`);
+      void refetchCharacters();
+    } catch (e) {
+      setMsg(`删除失败：${(e as Error).message}`);
+    }
+  };
+
   const summarize = async (chapterNo: number) => {
     try {
       await api.summarizeChapter(bookId, chapterNo);
@@ -94,6 +191,100 @@ export default function BookDetailPage() {
           刷新
         </button>
       </div>
+
+      <section className="mt-6">
+        <h2 className="font-semibold">世界观与剧情大纲</h2>
+        <textarea
+          className="mt-2 w-full rounded border px-3 py-2"
+          rows={6}
+          aria-label="世界观"
+          placeholder="世界观 / 规则（越具体越好）"
+          value={worldText}
+          onChange={(e) => setWorldText(e.target.value)}
+        />
+        <textarea
+          className="mt-2 w-full rounded border px-3 py-2"
+          rows={4}
+          aria-label="剧情大纲"
+          placeholder="全书剧情大纲（可选）：分卷 / 关键转折 / 结局走向"
+          value={outlineText}
+          onChange={(e) => setOutlineText(e.target.value)}
+        />
+        <button className="mt-2 rounded bg-blue-600 px-4 py-1.5 text-white" onClick={() => void saveMeta()}>
+          保存设定
+        </button>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="font-semibold">人物卡</h2>
+        <ul className="mt-2 space-y-2">
+          {(characters ?? []).map((c) => (
+            <li key={c.id} className="rounded border px-3 py-2 text-sm">
+              {editingCard?.id === c.id ? (
+                <div className="space-y-1">
+                  <input
+                    className="w-40 rounded border px-2 py-1"
+                    aria-label="编辑姓名"
+                    value={editingCard.name}
+                    onChange={(e) => setEditingCard({ ...editingCard, name: e.target.value })}
+                  />
+                  <textarea
+                    className="w-full rounded border px-2 py-1"
+                    rows={2}
+                    aria-label="编辑设定"
+                    value={editingCard.setting}
+                    onChange={(e) => setEditingCard({ ...editingCard, setting: e.target.value })}
+                  />
+                  <div className="flex gap-2">
+                    <button className="rounded bg-blue-600 px-3 py-1 text-white" onClick={() => void saveCard()}>
+                      保存
+                    </button>
+                    <button className="rounded bg-gray-200 px-3 py-1" onClick={() => setEditingCard(null)}>
+                      取消
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <span className="font-medium">{c.name}</span>
+                  <span className="flex-1 text-gray-600">{settingPreview(c.baseSetting)}</span>
+                  <button
+                    className="text-blue-600"
+                    onClick={() =>
+                      setEditingCard({ id: c.id, name: c.name, setting: settingRawText(c.baseSetting) })
+                    }
+                  >
+                    编辑
+                  </button>
+                  <button className="text-red-600" onClick={() => void removeCard(c)}>
+                    删除
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2 space-y-1">
+          <input
+            className="w-40 rounded border px-2 py-1"
+            placeholder="姓名"
+            aria-label="新卡姓名"
+            value={newCardName}
+            onChange={(e) => setNewCardName(e.target.value)}
+          />
+          <textarea
+            className="w-full rounded border px-2 py-1 text-sm"
+            rows={2}
+            placeholder="人物设定（身份 / 性格 / 目标…）"
+            aria-label="新卡设定"
+            value={newCardSetting}
+            onChange={(e) => setNewCardSetting(e.target.value)}
+          />
+          <button className="rounded bg-gray-200 px-3 py-1 text-sm" onClick={() => void addCard()}>
+            添加人物
+          </button>
+        </div>
+      </section>
 
       <section className="mt-6">
         <h2 className="font-semibold">风格档案</h2>

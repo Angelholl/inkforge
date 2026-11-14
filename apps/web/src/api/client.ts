@@ -17,6 +17,10 @@ import type {
   StyleProfileDto,
   StyleBindBody,
   DistillStyleBody,
+  BookMetaPutBody,
+  CharacterDto,
+  CreateCharacterBody,
+  UpdateCharacterBody,
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
@@ -39,6 +43,15 @@ export const api = {
   listBooks: () => req<BookDto[]>('/api/books'),
   getBook: (bookId: string) => req<BookDto & { chapters: ChapterDto[]; runs: RunDto[] }>(`/api/books/${bookId}`),
   createBook: (body: CreateBookBody) => req<BookDto>('/api/books', { method: 'POST', body: JSON.stringify(body) }),
+  putBookMeta: (bookId: string, body: BookMetaPutBody) =>
+    req<BookDto>(`/api/books/${bookId}/meta`, { method: 'PUT', body: JSON.stringify(body) }),
+  listCharacters: (bookId: string) => req<CharacterDto[]>(`/api/books/${bookId}/characters`),
+  createCharacter: (bookId: string, body: CreateCharacterBody) =>
+    req<CharacterDto>(`/api/books/${bookId}/characters`, { method: 'POST', body: JSON.stringify(body) }),
+  updateCharacter: (bookId: string, characterId: string, body: UpdateCharacterBody) =>
+    req<CharacterDto>(`/api/books/${bookId}/characters/${characterId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteCharacter: (bookId: string, characterId: string) =>
+    req<{ ok: boolean }>(`/api/books/${bookId}/characters/${characterId}`, { method: 'DELETE' }),
   putBlueprint: (bookId: string, chapterNo: number, body: BlueprintPutBody) =>
     req<ChapterDto>(`/api/books/${bookId}/chapters/${chapterNo}/blueprint`, { method: 'PUT', body: JSON.stringify(body) }),
   generateChapter: (bookId: string, chapterNo: number, maxRounds?: number) =>

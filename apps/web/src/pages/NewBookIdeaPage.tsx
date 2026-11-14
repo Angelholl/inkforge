@@ -7,7 +7,7 @@ type Step = 'setup' | 'review' | 'launch';
 
 /**
  * 入口 B 生成模式三步向导（docs/plans/2026-11-14-entry-b-generate-mode.md）：
- * ①书名 + 世界观/角色卡/规则 + 章节数 → 建书并一次生成全书蓝图（行协议分块）；
+ * ①书名 + 世界观 + 剧情大纲 + 人物卡 + 章节数 → 建书并一次生成全书蓝图（行协议分块）；
  * ②蓝图审阅（逐章采用/编辑）→ 批量 PUT 蓝图；③发起 generate run（1..N）。
  */
 export default function NewBookIdeaPage() {
@@ -15,6 +15,8 @@ export default function NewBookIdeaPage() {
   const [step, setStep] = useState<Step>('setup');
   const [title, setTitle] = useState('');
   const [worldview, setWorldview] = useState('');
+  const [outlineText, setOutlineText] = useState('');
+  const [cards, setCards] = useState<Array<{ name: string; setting: string }>>([]);
   const [chapterCount, setChapterCount] = useState(8);
   const [bookId, setBookId] = useState('');
   const [items, setItems] = useState<OutlineItemDto[]>([]);
@@ -31,7 +33,16 @@ export default function NewBookIdeaPage() {
     }
     setBusy(true);
     try {
-      const book = await api.createBook({ title: title.trim(), description: worldview.trim() });
+      // 空可选字段不进 body（保持建书请求最小形）；人物卡设定文本按 {"设定": text} 包裹入库
+      const characters = cards
+        .filter((c) => c.name.trim())
+        .map((c) => ({ name: c.name.trim(), baseSetting: c.setting.trim() ? JSON.stringify({ 设定: c.setting.trim() }) : '{}' }));
+      const book = await api.createBook({
+        title: title.trim(),
+        description: worldview.trim(),
+        ...(outlineText.trim() ? { outline: outlineText.trim() } : {}),
+        ...(characters.length > 0 ? { characters } : {}),
+      });
       setBookId(book.id);
       const r = await api.suggestOutline(book.id, { chapterCount });
       setItems(r.outline);
@@ -116,10 +127,61 @@ export default function NewBookIdeaPage() {
           <textarea
             className="w-full rounded border px-3 py-2"
             rows={8}
-            placeholder="世界观 / 角色卡 / 规则（越具体越好）"
+            placeholder="世界观 / 规则（越具体越好）"
             value={worldview}
             onChange={(e) => setWorldview(e.target.value)}
           />
+          <textarea
+            className="w-full rounded border px-3 py-2"
+            rows={4}
+            placeholder="全书剧情大纲（可选）：分卷 / 关键转折 / 结局走向"
+            value={outlineText}
+            onChange={(e) => setOutlineText(e.target.value)}
+          />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">人物卡</span>
+              <button
+                type="button"
+                className="rounded bg-gray-200 px-2 py-1 text-sm"
+                onClick={() => setCards((prev) => [...prev, { name: '', setting: '' }])}
+              >
+                添加人物
+              </button>
+            </div>
+            {cards.map((c, i) => (
+              <div key={i} className="rounded border px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    className="w-40 rounded border px-2 py-1"
+                    placeholder="姓名"
+                    aria-label={`人物卡姓名${i + 1}`}
+                    value={c.name}
+                    onChange={(e) =>
+                      setCards((prev) => prev.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="ml-auto text-sm text-red-600"
+                    onClick={() => setCards((prev) => prev.filter((_, k) => k !== i))}
+                  >
+                    移除
+                  </button>
+                </div>
+                <textarea
+                  className="mt-1 w-full rounded border px-2 py-1 text-sm"
+                  rows={2}
+                  placeholder="人物设定（身份 / 性格 / 目标…）"
+                  aria-label={`人物卡设定${i + 1}`}
+                  value={c.setting}
+                  onChange={(e) =>
+                    setCards((prev) => prev.map((x, k) => (k === i ? { ...x, setting: e.target.value } : x)))
+                  }
+                />
+              </div>
+            ))}
+          </div>
           <div className="flex items-center gap-2">
             <label htmlFor="new-book-chapter-count" className="text-sm">
               章节数
