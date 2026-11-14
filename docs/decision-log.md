@@ -205,3 +205,18 @@
 5. tag/Release 仍不发（0.2 发布门未过）；0.1.2-rc 物证（S码 6e3dfd4b）不受影响。
 
 **回滚：** 模板/ conf 变更 revert 即净回退；装机态可随时以物证安装包重装。
+
+## DEC-2026-1115-01 [OWNER 指令/主模型] 删书模块交付 + 蒸馏与 UI 两讨论稿入库（2026-11-15）
+
+**背景：** owner 三点指令：①无删书模块；②蒸馏模组太简单，借鉴之前讨论过的项目（= SubTrans，DEC-2026-1113-04 源码级参考先例）；③UI 古旧，参考 SubTrans 设计语言并讨论。执行模式延续不外派（同 DEC-2026-1113-07 口径），除讨论外全部主模型亲做。
+
+**事实登记（删书模块，已交付）：**
+1. server：`DELETE /api/books/:bookId`（books.ts deleteBook 事务按依赖序清空 11 表——外键无级联；活动 run 409 拒删）+ web 书架两步确认删除；回归账本 211→215（server +3 / web +1），lint/typecheck 全绿。
+2. 验证链抓出**遗留失败一例**：app.test.ts health 断言 0.1.2（a9d556e 版本升漏改），已修复（792af17）。
+3. GUI 黑盒目验全 PASS（8789 隔离四件套 + puppeteer 真操作，零 console 错误）：docs/baseline/gui-verification-0.2-booksdel.md。首跑目验脚本定位器缺陷（多行书架全局首个匹配误命中他行）修正后重跑，应用侧零缺陷；已顺带反向佐证删除流程完整可用。
+4. 环境事故：8789 被上会话遗留 0.1.2 实例（11-14 WCO 目验残留）以幻象监听占用，终止后重起；隔离清理须含 index.ts 自动拉起的 worker 子进程（M7 架构红线行为符合预期）。
+5. 登记小额债务：删前存在性检查与 409 检查均非原子（单机单 worker 低险）；backups/ 快照不随删书清除（append-only 保留，可恢复性设计）。
+
+**讨论开启（两稿入库，待 owner 拍板）：**
+1. 蒸馏改进：docs/design/2026-11-15-discuss-distill-upgrade.md（借鉴 SubTrans 设置模式四批次：模板可编辑/自评接线补 F2/术语表/批量校对）。
+2. UI 改造：docs/design/2026-11-15-discuss-ui-subtrans-style.md（平移 SubTrans 设计语言，承接 DEC-2026-1113-04 M3 未执行卡组；T-U1 token+rail 壳+书架试点先行）。
