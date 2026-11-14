@@ -16,7 +16,7 @@ import * as runsRepo from '../db/repositories/runs';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, createBookSchema, createRunSchema, distillStyleSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema, updateCharacterSchema } from './schemas';
 import { distillStyleProfile } from '../style/distill';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { pickFewShotSamples } from '../style/sample';
@@ -81,6 +81,50 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   });
 
   app.get('/api/books', async () => booksRepo.listBooks(db));
+
+  app.put('/api/books/:bookId/meta', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, bookMetaPutSchema, req.body);
+    if (!body) return;
+    const book = booksRepo.updateBookMeta(db, bookId, body);
+    reply.send(book);
+  });
+
+  // ── 人物卡（characters 表，character_states 以 character_id 联动连续性）──
+  app.get('/api/books/:bookId/characters', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    reply.send(booksRepo.listCharacters(db, bookId));
+  });
+
+  app.post('/api/books/:bookId/characters', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, createCharacterSchema, req.body);
+    if (!body) return;
+    if (booksRepo.getCharacterByName(db, bookId, body.name)) {
+      return reply.code(409).send({ error: '人物卡重名' });
+    }
+    reply.code(201).send(booksRepo.createCharacter(db, bookId, body));
+  });
+
+  app.put('/api/books/:bookId/characters/:characterId', async (req, reply) => {
+    const { bookId, characterId } = req.params as { bookId: string; characterId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, updateCharacterSchema, req.body);
+    if (!body) return;
+    const updated = booksRepo.updateCharacter(db, bookId, characterId, body);
+    if (!updated) return reply.code(404).send({ error: 'not found' });
+    reply.send(updated);
+  });
+
+  app.delete('/api/books/:bookId/characters/:characterId', async (req, reply) => {
+    const { bookId, characterId } = req.params as { bookId: string; characterId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    if (!booksRepo.deleteCharacter(db, bookId, characterId)) return reply.code(404).send({ error: 'not found' });
+    reply.send({ ok: true });
+  });
 
   app.post('/api/books/:bookId/import-original', async (req, reply) => {
     const { bookId } = req.params as { bookId: string };

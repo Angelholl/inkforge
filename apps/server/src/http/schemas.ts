@@ -3,7 +3,24 @@ import { z } from 'zod';
 export const createBookSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
+  outline: z.string().optional(),
   characters: z.array(z.object({ name: z.string().min(1), baseSetting: z.string().optional() })).optional(),
+});
+
+export const bookMetaPutSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  outline: z.string().optional(),
+});
+
+export const createCharacterSchema = z.object({
+  name: z.string().min(1),
+  baseSetting: z.string().optional(),
+});
+
+export const updateCharacterSchema = z.object({
+  name: z.string().min(1).optional(),
+  baseSetting: z.string().optional(),
 });
 
 export const blueprintSchema = z.object({
