@@ -141,3 +141,31 @@ describe('fts 仓储', () => {
     expect(ftsRepo.searchChapters(db, bookId, '雨')).toEqual([]);
   });
 });
+
+describe('人物卡仓储 + 书籍 meta', () => {
+  it('createCharacter/updateCharacter/deleteCharacter 往返，重名拒绝，删除级联清理 character_states', () => {
+    const bid = booksRepo.createBook(db, { title: '卡测之书' }).id;
+    const c = booksRepo.createCharacter(db, bid, { name: '李四', baseSetting: '{"身份":"反派"}' });
+    expect(c.name).toBe('李四');
+    expect(booksRepo.getCharacter(db, bid, c.id)?.baseSetting).toBe('{"身份":"反派"}');
+    expect(() => booksRepo.createCharacter(db, bid, { name: '李四' })).toThrow(/UNIQUE/);
+    const u = booksRepo.updateCharacter(db, bid, c.id, { baseSetting: '{"身份":"盟友"}' });
+    expect(u?.baseSetting).toBe('{"身份":"盟友"}');
+    continuityRepo.upsertCharacterState(db, { characterId: c.id, chapterNo: 1, state: { 位置: '城北' } });
+    expect(booksRepo.deleteCharacter(db, bid, c.id)).toBe(true);
+    expect(booksRepo.getCharacter(db, bid, c.id)).toBeUndefined();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM character_states WHERE character_id = ?').get(c.id)).toEqual({ n: 0 });
+    expect(booksRepo.deleteCharacter(db, bid, 'nonexistent')).toBe(false);
+    // 删除后重名约束解除
+    expect(booksRepo.createCharacter(db, bid, { name: '李四' }).name).toBe('李四');
+  });
+
+  it('updateBookMeta 持久化 outline 与 description；createBook 收 outline 往返', () => {
+    const b = booksRepo.createBook(db, { title: '大纲之书', outline: '第一卷：崛起' });
+    expect(booksRepo.getBook(db, b.id)?.outline).toBe('第一卷：崛起');
+    const u = booksRepo.updateBookMeta(db, b.id, { description: '新世界观', outline: '第二卷：夺玺' });
+    expect(u?.description).toBe('新世界观');
+    expect(u?.outline).toBe('第二卷：夺玺');
+    expect(booksRepo.updateBookMeta(db, 'missing', { title: 'x' })).toBeUndefined();
+  });
+});

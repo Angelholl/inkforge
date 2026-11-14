@@ -5,6 +5,7 @@ import { assembleContext, draftSlots } from '../../src/context/assembler';
 const BUDGETS = {
   hardRules: 500,
   worldview: 1000,
+  characters: 800,
   styleRules: 1000,
   blueprint: 1000,
   continuity: 2500,
@@ -74,5 +75,21 @@ describe('槽序与 profile', () => {
     expect(names).toEqual(['hardRules', 'worldview', 'blueprint', 'continuity', 'prevTail', 'task']);
     const full = draftSlots({ ...INPUT, styleRules: '风格规则', fewShot: '范例段落', prevTail: '' }, BUDGETS).map((s) => s.name);
     expect(full).toEqual(['hardRules', 'worldview', 'styleRules', 'blueprint', 'continuity', 'fewShot', 'task']);
+  });
+
+  it('draftSlots：characters 槽紧随 worldview（stable）且空串跳过', () => {
+    const withChars = draftSlots({ ...INPUT, characters: '【人物卡】张三' }, BUDGETS).map((s) => s.name);
+    expect(withChars).toEqual(['hardRules', 'worldview', 'characters', 'blueprint', 'continuity', 'prevTail', 'task']);
+    const charSlot = draftSlots({ ...INPUT, characters: '【人物卡】张三' }, BUDGETS).find((s) => s.name === 'characters')!;
+    expect(charSlot.stable).toBe(true);
+    expect(charSlot.budgetChars).toBe(800);
+    expect(draftSlots({ ...INPUT, characters: '' }, BUDGETS).map((s) => s.name)).toEqual([
+      'hardRules',
+      'worldview',
+      'blueprint',
+      'continuity',
+      'prevTail',
+      'task',
+    ]);
   });
 });

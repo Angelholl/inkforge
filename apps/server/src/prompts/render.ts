@@ -25,6 +25,34 @@ export function renderDraft(input: { chapterNo: number; targetChars: number; wor
   return lines.join('\n');
 }
 
+/**
+ * 人物卡渲染：每卡一块「【人物卡】姓名 + 设定行」。
+ * baseSetting 为 JSON 对象 → 逐 entry「k: v」以「；」连接；'{}' → 仅名字行；非法 JSON → trim 后原文。
+ * 空数组返回空串（调用方据此跳过 characters 槽）。
+ */
+export function renderCharacterCards(cards: Array<{ name: string; baseSetting: string }>): string {
+  const blocks = cards.map((c) => {
+    let setting = '';
+    const raw = (c.baseSetting ?? '').trim();
+    if (raw && raw !== '{}') {
+      try {
+        const obj = JSON.parse(raw) as Record<string, unknown>;
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          setting = Object.entries(obj)
+            .map(([k, v]) => `${k}: ${String(v)}`)
+            .join('；');
+        } else {
+          setting = raw;
+        }
+      } catch {
+        setting = raw;
+      }
+    }
+    return setting ? `【人物卡】${c.name}\n${setting}` : `【人物卡】${c.name}`;
+  });
+  return blocks.join('\n');
+}
+
 /** qc 步输出协议块：评审任务 + 七维度清单 + 输出格式与示例 + 负约束。不嵌入正文（正文由槽承载）。 */
 export function renderQcTask(): string {
   return [

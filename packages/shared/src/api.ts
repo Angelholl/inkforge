@@ -9,6 +9,7 @@ export interface BookDto {
   id: string;
   title: string;
   description: string;
+  outline: string;
   styleProfileId?: string;
   createdAt: string;
   updatedAt: string;
@@ -102,7 +103,30 @@ export interface ReportDto {
 export interface CreateBookBody {
   title: string;
   description?: string;
+  outline?: string;
   characters?: CharacterInput[];
+}
+
+export interface CharacterDto {
+  id: string;
+  name: string;
+  baseSetting: string;
+}
+
+export interface CreateCharacterBody {
+  name: string;
+  baseSetting?: string;
+}
+
+export interface UpdateCharacterBody {
+  name?: string;
+  baseSetting?: string;
+}
+
+export interface BookMetaPutBody {
+  title?: string;
+  description?: string;
+  outline?: string;
 }
 
 export interface BlueprintPutBody {

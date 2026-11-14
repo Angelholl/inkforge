@@ -12,7 +12,7 @@ import { assembleContext, draftSlots } from '../context/assembler';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 import { hashPrompt } from '../llm/hash';
-import { renderDraft, renderHardRules, renderRewrite } from '../prompts/render';
+import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite } from '../prompts/render';
 import { loadCliches, runL0Checks } from '../quality/l0';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
@@ -181,11 +181,13 @@ export async function runChapterPipeline(
       ensureStep('draft', 1);
       throwIfAborted();
       const draftFlusher = createPartialFlusher(db, inflightRef.current!.id);
+      const charactersText = renderCharacterCards(booksRepo.listCharacters(db, args.bookId));
       const draftAssembled = assembleContext(
         draftSlots(
           {
             hardRules,
             worldview: book.description,
+            characters: charactersText || undefined,
             styleRules: styleRulesText || undefined,
             blueprint: blueprintText(blueprint),
             continuity: continuityText,

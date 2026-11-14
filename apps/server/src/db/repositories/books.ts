@@ -5,6 +5,7 @@ export interface Book {
   id: string;
   title: string;
   description: string;
+  outline: string;
   styleProfileId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -19,33 +20,36 @@ interface BookRow {
   id: string;
   title: string;
   description: string;
+  outline: string;
   style_profile_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, styleProfileId: r.style_profile_id, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
   db: Database,
-  input: { title: string; description?: string; characters?: CharacterInput[] },
+  input: { title: string; description?: string; outline?: string; characters?: CharacterInput[] },
 ): Book {
   const now = new Date().toISOString();
   const book: Book = {
     id: randomUUID(),
     title: input.title,
     description: input.description ?? '',
+    outline: input.outline ?? '',
     styleProfileId: null,
     createdAt: now,
     updatedAt: now,
   };
   const tx = db.transaction(() => {
-    db.prepare('INSERT INTO books(id, title, description, created_at, updated_at) VALUES(?,?,?,?,?)').run(
+    db.prepare('INSERT INTO books(id, title, description, outline, created_at, updated_at) VALUES(?,?,?,?,?,?)').run(
       book.id,
       book.title,
       book.description,
+      book.outline,
       book.createdAt,
       book.updatedAt,
     );
@@ -88,4 +92,93 @@ export function setBookStyleProfile(db: Database, bookId: string, profileId: str
     new Date().toISOString(),
     bookId,
   );
+}
+
+export function updateBookMeta(
+  db: Database,
+  bookId: string,
+  patch: { title?: string; description?: string; outline?: string },
+): Book | undefined {
+  const book = getBook(db, bookId);
+  if (!book) return undefined;
+  const next = {
+    title: patch.title ?? book.title,
+    description: patch.description ?? book.description,
+    outline: patch.outline ?? book.outline,
+  };
+  db.prepare('UPDATE books SET title = ?, description = ?, outline = ?, updated_at = ? WHERE id = ?').run(
+    next.title,
+    next.description,
+    next.outline,
+    new Date().toISOString(),
+    bookId,
+  );
+  return getBook(db, bookId);
+}
+
+export function getCharacter(
+  db: Database,
+  bookId: string,
+  characterId: string,
+): { id: string; name: string; baseSetting: string } | undefined {
+  const row = db
+    .prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? AND id = ?')
+    .get(bookId, characterId) as { id: string; name: string; base_setting: string } | undefined;
+  return row ? { id: row.id, name: row.name, baseSetting: row.base_setting } : undefined;
+}
+
+export function getCharacterByName(
+  db: Database,
+  bookId: string,
+  name: string,
+): { id: string; name: string; baseSetting: string } | undefined {
+  const row = db
+    .prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? AND name = ?')
+    .get(bookId, name) as { id: string; name: string; base_setting: string } | undefined;
+  return row ? { id: row.id, name: row.name, baseSetting: row.base_setting } : undefined;
+}
+
+export function createCharacter(
+  db: Database,
+  bookId: string,
+  input: { name: string; baseSetting?: string },
+): { id: string; name: string; baseSetting: string } {
+  const id = randomUUID();
+  db.prepare('INSERT INTO characters(id, book_id, name, base_setting, created_at) VALUES(?,?,?,?,?)').run(
+    id,
+    bookId,
+    input.name,
+    input.baseSetting ?? '{}',
+    new Date().toISOString(),
+  );
+  return { id, name: input.name, baseSetting: input.baseSetting ?? '{}' };
+}
+
+export function updateCharacter(
+  db: Database,
+  bookId: string,
+  characterId: string,
+  patch: { name?: string; baseSetting?: string },
+): { id: string; name: string; baseSetting: string } | undefined {
+  const cur = getCharacter(db, bookId, characterId);
+  if (!cur) return undefined;
+  const name = patch.name ?? cur.name;
+  const baseSetting = patch.baseSetting ?? cur.baseSetting;
+  db.prepare('UPDATE characters SET name = ?, base_setting = ? WHERE book_id = ? AND id = ?').run(
+    name,
+    baseSetting,
+    bookId,
+    characterId,
+  );
+  return { id: characterId, name, baseSetting };
+}
+
+export function deleteCharacter(db: Database, bookId: string, characterId: string): boolean {
+  if (!getCharacter(db, bookId, characterId)) return false;
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM character_states WHERE character_id = ?').run(characterId);
+    db.prepare('DELETE FROM characters WHERE book_id = ? AND id = ?').run(bookId, characterId);
+  });
+  tx();
+  return true;
 }

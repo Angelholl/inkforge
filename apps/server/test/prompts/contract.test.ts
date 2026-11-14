@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
-import { renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize } from '../../src/prompts/render';
+import { renderCharacterCards, renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize } from '../../src/prompts/render';
 import { parseBlueprint, parseOutline } from '../../src/llm/plainproto';
 
 const BP: ChapterBlueprint = {
@@ -112,5 +112,26 @@ describe('parseOutline 契约', () => {
     expect(errors.some((e) => e.includes('缺少第2章块'))).toBe(true);
     expect(outline).toHaveLength(1);
     expect(outline[0].blueprint.goal).toBe('只有一章');
+  });
+});
+
+describe('renderCharacterCards 契约', () => {
+  it('renderCharacterCards：多卡渲染含姓名与设定键值', () => {
+    const out = renderCharacterCards([
+      { name: '张三', baseSetting: '{"身份":"主角","性格":"坚韧"}' },
+      { name: '李四', baseSetting: '{}' },
+    ]);
+    expect(out).toContain('【人物卡】张三');
+    expect(out).toContain('身份: 主角');
+    expect(out).toContain('性格: 坚韧');
+    expect(out).toContain('【人物卡】李四');
+    expect(out.indexOf('张三')).toBeLessThan(out.indexOf('李四'));
+  });
+
+  it('renderCharacterCards：空数组 → 空串；非法 JSON → 原文', () => {
+    expect(renderCharacterCards([])).toBe('');
+    const raw = renderCharacterCards([{ name: '王五', baseSetting: '不是JSON' }]);
+    expect(raw).toContain('【人物卡】王五');
+    expect(raw).toContain('不是JSON');
   });
 });

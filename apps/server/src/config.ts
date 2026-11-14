@@ -17,6 +17,7 @@ export interface ProviderConfig {
 export interface DraftBudgets {
   hardRules: number;
   worldview: number;
+  characters: number;
   styleRules: number;
   blueprint: number;
   continuity: number;
@@ -50,6 +51,8 @@ export interface PlannerBudgets {
 export interface OutlineBudgets {
   hardRules: number;
   worldview: number;
+  characters: number;
+  outline: number;
   task: number;
 }
 
@@ -94,6 +97,7 @@ const envSchema = z.object({
 const BUDGETS_DRAFT: DraftBudgets = {
   hardRules: 500,
   worldview: 1000,
+  characters: 800,
   styleRules: 1000,
   blueprint: 1000,
   continuity: 2500,
@@ -105,6 +109,7 @@ const BUDGETS_DRAFT: DraftBudgets = {
 const BUDGETS_DRAFT_8K: DraftBudgets = {
   hardRules: 300,
   worldview: 200,
+  characters: 0,
   styleRules: 0,
   blueprint: 500,
   continuity: 1000,
@@ -123,7 +128,7 @@ const BUDGETS_REWRITE: RewriteBudgets = {
   task: 500,
 };
 const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 300 };
-const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 5000, task: 600 };
+const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 5000, characters: 1200, outline: 2000, task: 600 };
 
 export function pickBudgetProfile(contextWindow: number): 'draft' | 'draft8k' {
   return contextWindow <= 8192 ? 'draft8k' : 'draft';

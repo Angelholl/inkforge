@@ -61,11 +61,12 @@ export function assembleContext(slots: ContextSlot[], totalBudgetChars: number):
   };
 }
 
-/** draft 槽序（钉死）：stable=hardRules/worldview/styleRules；volatile=blueprint/continuity/prevTail(tail)/fewShot/task。 */
+/** draft 槽序（钉死）：stable=hardRules/worldview/(characters)/styleRules；volatile=blueprint/continuity/prevTail(tail)/fewShot/task。 */
 export function draftSlots(
   input: {
     hardRules: string;
     worldview: string;
+    characters?: string;
     styleRules?: string;
     blueprint: string;
     continuity: string;
@@ -79,6 +80,9 @@ export function draftSlots(
     { name: 'hardRules', content: input.hardRules, budgetChars: budgets.hardRules, stable: true, keep: 'head' },
     { name: 'worldview', content: input.worldview, budgetChars: budgets.worldview, stable: true, keep: 'head' },
   ];
+  if (input.characters && input.characters.length > 0) {
+    slots.push({ name: 'characters', content: input.characters, budgetChars: budgets.characters, stable: true, keep: 'head' });
+  }
   if (input.styleRules && input.styleRules.length > 0) {
     slots.push({ name: 'styleRules', content: input.styleRules, budgetChars: budgets.styleRules, stable: true, keep: 'head' });
   }
