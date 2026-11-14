@@ -107,28 +107,28 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
             onChange={(e) => setChapterCount(Number(e.target.value))}
           />
         </label>
-        <button className="rounded bg-blue-600 px-3 py-1 text-white" disabled={busy} onClick={() => void suggest()}>
+        <button className="rounded bg-primary px-3 py-1 text-white" disabled={busy} onClick={() => void suggest()}>
           AI 生成大纲树
         </button>
-        <button className="rounded bg-gray-200 px-3 py-1" disabled={busy} onClick={addVolume}>
+        <button className="rounded bg-bg px-3 py-1" disabled={busy} onClick={addVolume}>
           手动加卷
         </button>
-        <button className="rounded bg-gray-200 px-3 py-1" disabled={busy || !saved} onClick={() => setDraft(cloneTree(saved!))}>
+        <button className="rounded bg-bg px-3 py-1" disabled={busy || !saved} onClick={() => setDraft(cloneTree(saved!))}>
           编辑已存树
         </button>
-        <button className="rounded bg-gray-200 px-3 py-1" disabled={busy || !saved} onClick={() => void check()}>
+        <button className="rounded bg-bg px-3 py-1" disabled={busy || !saved} onClick={() => void check()}>
           偏离复核
         </button>
       </div>
 
       {tree === null ? (
-        <p className="mt-2 text-sm text-gray-500">尚未保存大纲树：AI 生成或手动加卷开始。</p>
+        <p className="mt-2 text-sm text-muted">尚未保存大纲树：AI 生成或手动加卷开始。</p>
       ) : (
         <div className="mt-2 space-y-1 text-sm">
           {tree.volumes.map((v, vi) => (
             <div key={vi} className="rounded border px-3 py-2">
               <div className="flex items-center gap-2">
-                <span className="rounded bg-blue-100 px-1.5 text-xs text-blue-700">卷{v.seq}</span>
+                <span className="rounded bg-primary-soft px-1.5 text-xs text-primary-strong">卷{v.seq}</span>
                 {draft ? (
                   <input aria-label="卷题" className={`flex-1 ${inputCls}`} value={v.title} onChange={(e) => mutate((t) => (t.volumes[vi].title = e.target.value))} />
                 ) : (
@@ -136,10 +136,10 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                 )}
                 {draft && (
                   <>
-                    <button className="text-blue-600" onClick={() => addStage(vi)}>
+                    <button className="text-primary-strong" onClick={() => addStage(vi)}>
                       加阶段
                     </button>
-                    <button className="text-red-600" onClick={() => removeVolume(vi)}>
+                    <button className="text-danger" onClick={() => removeVolume(vi)}>
                       删卷
                     </button>
                   </>
@@ -156,9 +156,9 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
               )}
               <div className="ml-4 mt-1 space-y-1">
                 {v.stages.map((s, si) => (
-                  <div key={si} className="rounded border-l-2 border-gray-300 px-2 py-1">
+                  <div key={si} className="rounded border-l-2 border-line px-2 py-1">
                     <div className="flex items-center gap-2">
-                      <span className="rounded bg-gray-100 px-1.5 text-xs text-gray-600">阶段{s.seq}</span>
+                      <span className="rounded bg-bg px-1.5 text-xs text-muted">阶段{s.seq}</span>
                       {draft ? (
                         <input aria-label="阶段题" className={`flex-1 ${inputCls}`} value={s.title} onChange={(e) => mutate((t) => (t.volumes[vi].stages[si].title = e.target.value))} />
                       ) : (
@@ -166,10 +166,10 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                       )}
                       {draft && (
                         <>
-                          <button className="text-blue-600" onClick={() => addCard(vi, si)}>
+                          <button className="text-primary-strong" onClick={() => addCard(vi, si)}>
                             加卡
                           </button>
-                          <button className="text-red-600" onClick={() => removeStage(vi, si)}>
+                          <button className="text-danger" onClick={() => removeStage(vi, si)}>
                             删阶段
                           </button>
                         </>
@@ -187,11 +187,11 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                     <div className="ml-4 mt-1 space-y-1">
                       {s.cards.map((c, ci) => (
                         <div key={ci} className="flex flex-wrap items-center gap-2">
-                          <span className="rounded bg-green-100 px-1.5 text-xs text-green-700">卡{c.seq}</span>
+                          <span className="rounded bg-ok-soft px-1.5 text-xs text-ok">卡{c.seq}</span>
                           {draft ? (
                             <>
                               <input aria-label="卡题" className={`w-40 ${inputCls}`} value={c.title} onChange={(e) => mutate((t) => (t.volumes[vi].stages[si].cards[ci].title = e.target.value))} />
-                              <label className="text-xs text-gray-500">
+                              <label className="text-xs text-muted">
                                 起
                                 <input
                                   type="number"
@@ -202,7 +202,7 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                                   onChange={(e) => mutate((t) => (t.volumes[vi].stages[si].cards[ci].chapterFrom = e.target.value === '' ? null : Number(e.target.value)))}
                                 />
                               </label>
-                              <label className="text-xs text-gray-500">
+                              <label className="text-xs text-muted">
                                 止
                                 <input
                                   type="number"
@@ -214,7 +214,7 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                                 />
                               </label>
                               <input aria-label="卡要点" className={`flex-1 ${inputCls}`} value={c.body} onChange={(e) => mutate((t) => (t.volumes[vi].stages[si].cards[ci].body = e.target.value))} />
-                              <button className="text-red-600" onClick={() => removeCard(vi, si, ci)}>
+                              <button className="text-danger" onClick={() => removeCard(vi, si, ci)}>
                                 删卡
                               </button>
                             </>
@@ -238,11 +238,11 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
 
       {draft && (
         <div className="mt-2 flex gap-2">
-          <button className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white" disabled={busy} onClick={() => void save()}>
+          <button className="rounded bg-primary px-4 py-1.5 text-sm text-white" disabled={busy} onClick={() => void save()}>
             保存大纲树
           </button>
           <button
-            className="rounded bg-gray-200 px-4 py-1.5 text-sm"
+            className="rounded bg-bg px-4 py-1.5 text-sm"
             disabled={busy}
             onClick={() => {
               setDraft(null);
@@ -255,11 +255,11 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
       )}
 
       {report && (
-        <pre className="mt-2 max-h-64 overflow-auto rounded bg-slate-900 p-2 text-xs text-slate-200">
+        <pre className="mt-2 max-h-64 overflow-auto rounded bg-console-bg p-2 text-xs text-console-1">
           {report}
         </pre>
       )}
-      {msg && <p className="mt-2 text-sm text-gray-600">{msg}</p>}
+      {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
     </section>
   );
 }

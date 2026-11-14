@@ -113,8 +113,8 @@ export default function NewBookIdeaPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-bold">新书</h1>
-      <p className="mt-1 text-sm text-gray-500">① 设定 → ② 蓝图审阅 → ③ 发起生成（全新成书，生成模式注入风格档案）</p>
-      {error && <p className="mt-4 whitespace-pre-line rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <p className="mt-1 text-sm text-muted">① 设定 → ② 蓝图审阅 → ③ 发起生成（全新成书，生成模式注入风格档案）</p>
+      {error && <p className="mt-4 whitespace-pre-line rounded border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       {step === 'setup' && (
         <div className="mt-6 space-y-3">
@@ -143,7 +143,7 @@ export default function NewBookIdeaPage() {
               <span className="text-sm font-medium">人物卡</span>
               <button
                 type="button"
-                className="rounded bg-gray-200 px-2 py-1 text-sm"
+                className="rounded bg-bg px-2 py-1 text-sm"
                 onClick={() => setCards((prev) => [...prev, { name: '', setting: '' }])}
               >
                 添加人物
@@ -163,7 +163,7 @@ export default function NewBookIdeaPage() {
                   />
                   <button
                     type="button"
-                    className="ml-auto text-sm text-red-600"
+                    className="ml-auto text-sm text-danger"
                     onClick={() => setCards((prev) => prev.filter((_, k) => k !== i))}
                   >
                     移除
@@ -197,13 +197,13 @@ export default function NewBookIdeaPage() {
             />
           </div>
           <button
-            className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50"
             disabled={busy}
             onClick={() => void start()}
           >
             建书并生成蓝图
           </button>
-          {busy && <p className="text-sm text-gray-500">蓝图勾画中…约需数分钟</p>}
+          {busy && <p className="text-sm text-muted">蓝图勾画中…约需数分钟</p>}
         </div>
       )}
 
@@ -222,13 +222,13 @@ export default function NewBookIdeaPage() {
                   <span className="font-medium">第{it.chapterNo}章</span>
                   <span className="text-sm">{it.blueprint.goal}</span>
                   <button
-                    className="ml-auto text-sm text-blue-700"
+                    className="ml-auto text-sm text-primary-strong"
                     onClick={() => setEditing(editing === it.chapterNo ? null : it.chapterNo)}
                   >
                     {editing === it.chapterNo ? '收起' : '编辑'}
                   </button>
                 </div>
-                <ul className="mt-1 list-disc pl-6 text-sm text-gray-600">
+                <ul className="mt-1 list-disc pl-6 text-sm text-muted">
                   {it.blueprint.beats.map((b, i) => (
                     <li key={i}>{b}</li>
                   ))}
@@ -245,7 +245,7 @@ export default function NewBookIdeaPage() {
             ))}
           </div>
           <button
-            className="mt-4 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            className="mt-4 rounded bg-primary px-4 py-2 text-white disabled:opacity-50"
             disabled={busy || adopted.size === 0}
             onClick={() => void saveAndContinue()}
           >
@@ -256,11 +256,11 @@ export default function NewBookIdeaPage() {
 
       {step === 'launch' && (
         <div className="mt-6">
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-ink">
             将从第 1 章生成到第 {items.length > 0 ? items[items.length - 1].chapterNo : chapterCount} 章。生成前可到书详情页绑定风格档案（生成模式注入）。
           </p>
           <button
-            className="mt-3 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            className="mt-3 rounded bg-primary px-4 py-2 text-white disabled:opacity-50"
             disabled={busy}
             onClick={() => void launch()}
           >

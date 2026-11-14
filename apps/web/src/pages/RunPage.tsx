@@ -8,17 +8,17 @@ import type { RunDto } from '@inkforge/shared';
 function statusBadge(status: string): string {
   switch (status) {
     case 'done':
-      return 'bg-green-100 text-green-700';
+      return 'bg-ok-soft text-ok';
     case 'failed':
-      return 'bg-red-100 text-red-700';
+      return 'bg-danger-soft text-danger';
     case 'inflight':
-      return 'bg-blue-100 text-blue-700';
+      return 'bg-primary-soft text-primary-strong';
     case 'needs_human':
-      return 'bg-orange-100 text-orange-700';
+      return 'bg-warn-soft text-warn';
     case 'cancelled':
-      return 'bg-gray-200 text-gray-600';
+      return 'bg-bg text-muted';
     default:
-      return 'bg-gray-100 text-gray-600';
+      return 'bg-bg text-muted';
   }
 }
 
@@ -47,7 +47,7 @@ export default function RunPage() {
     return (
       <main className="mx-auto max-w-4xl px-6 py-10">
         <h1 className="text-2xl font-bold">运行 {runId}</h1>
-        <p className="mt-2 text-sm text-gray-500">加载中…</p>
+        <p className="mt-2 text-sm text-muted">加载中…</p>
       </main>
     );
   }
@@ -60,24 +60,24 @@ export default function RunPage() {
         运行 <span className="font-mono text-sm">{run.id.slice(0, 8)}</span>
         <span className={`ml-3 rounded px-3 py-1 text-sm ${statusBadge(run.status)}`}>{run.status}</span>
       </h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-muted">
         SSE {live.connected ? '已连接' : '未连接（3s 重连）'} · 章节范围 {run.chapterScope.from}-{run.chapterScope.to} ·{' '}
-        <Link className="text-blue-600" to={`/runs/${run.id}/dashboard`}>
+        <Link className="text-primary-strong" to={`/runs/${run.id}/dashboard`}>
           仪表盘 →
         </Link>
       </p>
       <div className="mt-4 flex gap-2">
-        <button className="rounded bg-orange-500 px-4 py-2 text-white" onClick={() => api.pauseRun(run.id).then(() => setMsg('已请求暂停'))}>
+        <button className="rounded bg-warn px-4 py-2 text-white" onClick={() => api.pauseRun(run.id).then(() => setMsg('已请求暂停'))}>
           暂停
         </button>
-        <button className="rounded bg-gray-200 px-4 py-2" onClick={() => api.resumeRun(run.id).then(() => setMsg('已请求继续'))}>
+        <button className="rounded bg-bg px-4 py-2" onClick={() => api.resumeRun(run.id).then(() => setMsg('已请求继续'))}>
           继续
         </button>
-        <button className="rounded bg-red-600 px-4 py-2 text-white" onClick={() => api.cancelRun(run.id).then(() => setMsg('已请求取消'))}>
+        <button className="rounded bg-danger px-4 py-2 text-white" onClick={() => api.cancelRun(run.id).then(() => setMsg('已请求取消'))}>
           取消
         </button>
       </div>
-      {msg && <p className="mt-2 text-sm text-gray-600">{msg}</p>}
+      {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
       <table className="mt-6 w-full text-left text-sm">
         <thead>
           <tr className="border-b">
@@ -96,8 +96,8 @@ export default function RunPage() {
               <td>
                 <span className={`rounded px-2 py-0.5 text-xs ${statusBadge(s.status)}`}>{s.status}</span>
               </td>
-              <td className="text-xs text-red-600">{s.error ?? ''}</td>
-              <td>{!terminal && <span className="text-xs text-gray-400">…</span>}</td>
+              <td className="text-xs text-danger">{s.error ?? ''}</td>
+              <td>{!terminal && <span className="text-xs text-faint">…</span>}</td>
             </tr>
           ))}
         </tbody>

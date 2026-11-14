@@ -34,19 +34,19 @@ export default function ChapterReaderPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <Link to={`/books/${bookId}`} className="text-sm text-gray-500">
+      <Link to={`/books/${bookId}`} className="text-sm text-muted">
         ← 返回书页
       </Link>
       <h1 className="mt-2 text-2xl font-bold">第{no}章 正文</h1>
       <div className="mt-4 flex gap-2">
-        <button className="rounded bg-gray-200 px-4 py-2" onClick={rollback}>
+        <button className="rounded bg-bg px-4 py-2" onClick={rollback}>
           回滚到当前所选
         </button>
-        <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={exportBook}>
+        <button className="rounded bg-primary px-4 py-2 text-white" onClick={exportBook}>
           导出 markdown
         </button>
       </div>
-      {msg && <p className="mt-2 text-sm text-gray-600">{msg}</p>}
+      {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
 
       <section className="mt-4">
         <h2 className="font-semibold">版本链（新 → 旧）</h2>
@@ -55,7 +55,7 @@ export default function ChapterReaderPage() {
             <li key={v.id}>
               <button
                 className={`rounded px-3 py-1.5 text-xs ${
-                  current?.id === v.id ? 'bg-blue-600 text-white' : 'bg-gray-100'
+                  current?.id === v.id ? 'bg-primary text-white' : 'bg-bg'
                 }`}
                 onClick={() => setSelected(v.id)}
               >
@@ -70,7 +70,7 @@ export default function ChapterReaderPage() {
       </section>
 
       {current && <SelectionRewrite versionId={current.id} onCreated={() => void refetch()} />}
-      <Link to={`/books/${bookId}/chapters/${no}/diff`} className="mt-4 inline-block text-sm text-blue-600">
+      <Link to={`/books/${bookId}/chapters/${no}/diff`} className="mt-4 inline-block text-sm text-primary-strong">
         查看相邻版本 diff →
       </Link>
       <article className="mt-2 whitespace-pre-wrap rounded border bg-white p-6 text-sm leading-7">

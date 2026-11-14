@@ -31,11 +31,11 @@ export default function DiffPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <Link to={`/books/${bookId}/chapters/${no}`} className="text-sm text-gray-500">
+      <Link to={`/books/${bookId}/chapters/${no}`} className="text-sm text-muted">
         ← 阅读器
       </Link>
       <h1 className="mt-2 text-2xl font-bold">版本对比 · 第{no}章</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-muted">
         插入段 {addedCount} · 删除段 {removedCount}
         {!older && ' （不足两个版本，无法对比）'}
       </p>
@@ -44,7 +44,7 @@ export default function DiffPage() {
           <span
             key={i}
             className={
-              p.added ? 'bg-green-100 text-green-800' : p.removed ? 'bg-red-100 text-red-700 line-through' : ''
+              p.added ? 'bg-ok-soft text-ok' : p.removed ? 'bg-danger-soft text-danger line-through' : ''
             }
             data-testid={p.added ? 'diff-added' : p.removed ? 'diff-removed' : undefined}
           >

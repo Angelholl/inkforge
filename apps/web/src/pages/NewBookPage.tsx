@@ -139,14 +139,14 @@ export default function NewBookPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-bold">新建小说（续写）</h1>
-      <p className="mt-1 text-sm text-gray-500">① 建书 → ② 导入原文 → ③ 发起续写</p>
-      {error && <pre className="mt-4 whitespace-pre-wrap rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</pre>}
+      <p className="mt-1 text-sm text-muted">① 建书 → ② 导入原文 → ③ 发起续写</p>
+      {error && <pre className="mt-4 whitespace-pre-wrap rounded border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</pre>}
 
       {wiz.step === 1 && (
         <div className="mt-6 space-y-3">
           <input className="w-full rounded border px-3 py-2" placeholder="书名" value={title} onChange={(e) => setTitle(e.target.value)} />
           <textarea className="w-full rounded border px-3 py-2" placeholder="简介（可选）" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-          <button className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={createBook}>
+          <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={createBook}>
             建书并进入导入
           </button>
         </div>
@@ -176,7 +176,7 @@ export default function NewBookPage() {
             <button className="rounded border px-4 py-2" onClick={preview}>
               拆章预览
             </button>
-            <button className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={busy || parsed.length === 0} onClick={importOriginal}>
+            <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy || parsed.length === 0} onClick={importOriginal}>
               导入 {parsed.length} 章
             </button>
           </div>
@@ -190,8 +190,8 @@ export default function NewBookPage() {
                       value={c.title}
                       onChange={(e) => setParsed(parsed.map((p, k) => (k === i ? { ...p, title: e.target.value } : p)))}
                     />
-                    <span className="text-gray-400">{c.content.length} 字</span>
-                    <button className="text-red-600" onClick={() => removeChapter(i)}>
+                    <span className="text-faint">{c.content.length} 字</span>
+                    <button className="text-danger" onClick={() => removeChapter(i)}>
                       删除
                     </button>
                   </div>
@@ -208,7 +208,7 @@ export default function NewBookPage() {
             导入完成，下一章为 <strong>第 {wiz.step === 3 ? wiz.nextChapterNo : 0} 章</strong>。
           </p>
           <div>
-            <p className="text-sm text-gray-600">补摘要（可选，逐章；导入章无摘要会影响续写连续性）：</p>
+            <p className="text-sm text-muted">补摘要（可选，逐章；导入章无摘要会影响续写连续性）：</p>
             <div className="mt-1 flex flex-wrap gap-2">
               {wiz.step === 3 &&
                 Array.from({ length: wiz.nextChapterNo - 1 }, (_, k) => k + 1).map((n) => (
@@ -230,7 +230,7 @@ export default function NewBookPage() {
             value={blueprintJson}
             onChange={(e) => setBlueprintJson(e.target.value)}
           />
-          <button className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={startContinue}>
+          <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={startContinue}>
             发起续写（第 {wiz.step === 3 ? wiz.nextChapterNo : 0} 章）
           </button>
         </div>

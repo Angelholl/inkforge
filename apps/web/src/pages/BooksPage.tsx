@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { api } from '../api/client';
+import { Badge, Card, Chip } from '../components/ui';
 import type { BookDto } from '@inkforge/shared';
 
+/** 书架（D1）：卡片网格 + 流程 chip 条（设定/大纲就绪态）；删除两步确认沿用。 */
 export default function BooksPage() {
   const { data: books, refetch } = useQuery({ queryKey: ['books'], queryFn: api.listBooks, refetchInterval: 5000 });
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -22,40 +24,59 @@ export default function BooksPage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-bold">墨炉 · 书架</h1>
-      <ul className="mt-6 space-y-2">
+    <main className="mx-auto max-w-5xl px-6 py-10">
+      <h1 className="text-2xl font-bold">书架</h1>
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {(books ?? []).map((b: BookDto) => (
-          <li key={b.id} className="flex items-center rounded border px-4 py-3 hover:bg-gray-50">
-            <Link to={`/books/${b.id}`} className="font-medium text-blue-700">
-              {b.title}
-            </Link>
-            <span className="ml-2 text-xs text-gray-400">{b.createdAt.slice(0, 19).replace('T', ' ')}</span>
+          <Card key={b.id} className="flex flex-col gap-2">
+            <div className="flex items-start gap-2">
+              <Link to={`/books/${b.id}`} className="font-semibold text-primary-strong hover:underline">
+                {b.title}
+              </Link>
+              <span className="ml-auto text-xs text-faint">{b.createdAt.slice(0, 19).replace('T', ' ')}</span>
+            </div>
+            {b.description && <p className="line-clamp-2 text-xs text-muted">{b.description}</p>}
+            <div className="flex flex-wrap gap-1">
+              <Chip active={Boolean(b.description)}>世界观</Chip>
+              <Chip active={Boolean(b.outline)}>大纲</Chip>
+              {typeof b.styleProfileId === 'string' && <Chip active>文风</Chip>}
+              {typeof b.imitationProfileId === 'string' && <Chip active>仿写</Chip>}
+            </div>
             {confirmId === b.id ? (
-              <span className="ml-auto flex items-center gap-2 text-xs">
-                <span className="text-red-600">章节/人物/运行记录一并清除，不可恢复</span>
-                <button className="rounded bg-red-600 px-2 py-1 text-white" onClick={() => void remove(b.id)}>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-danger">章节/人物/运行记录一并清除，不可恢复</span>
+                <button className="rounded-ctl bg-danger px-2 py-1 text-white" onClick={() => void remove(b.id)}>
                   确认删除
                 </button>
-                <button className="rounded border px-2 py-1" onClick={() => setConfirmId(null)}>
+                <button className="rounded-ctl border border-line px-2 py-1" onClick={() => setConfirmId(null)}>
                   取消
                 </button>
-              </span>
+              </div>
             ) : (
-              <button
-                className="ml-auto rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                onClick={() => setConfirmId(b.id)}
-              >
-                删除
-              </button>
+              <div className="mt-auto flex items-center gap-2">
+                <Link to={`/books/${b.id}`} className="text-xs text-primary-strong hover:underline">
+                  打开
+                </Link>
+                <button
+                  className="ml-auto rounded-ctl border border-danger px-2 py-1 text-xs text-danger hover:bg-danger-soft"
+                  onClick={() => setConfirmId(b.id)}
+                >
+                  删除
+                </button>
+              </div>
             )}
-          </li>
+          </Card>
         ))}
-      </ul>
-      {msg && <p className="mt-4 text-sm text-red-600">{msg}</p>}
+      </div>
+      {msg && <p className="mt-4 text-sm text-danger">{msg}</p>}
       {books && books.length === 0 && (
-        <p className="mt-6 text-sm text-gray-500">
-          还没有书。去 <Link to="/continue" className="text-blue-700">续写向导</Link> 建第一本。
+        <p className="mt-6 text-sm text-muted">
+          还没有书。去 <Link to="/continue" className="text-primary-strong">续写向导</Link> 建第一本。
+        </p>
+      )}
+      {books && books.length > 0 && (
+        <p className="mt-6 flex items-center gap-2 text-xs text-faint">
+          共 {books.length} 本 · 流程 <Badge tone="muted">世界观 → 人物 → 蓝图 → 生成 → 校对</Badge>
         </p>
       )}
     </main>

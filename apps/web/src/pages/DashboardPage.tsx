@@ -10,12 +10,12 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <Link to={`/runs/${runId}`} className="text-sm text-gray-500">
+      <Link to={`/runs/${runId}`} className="text-sm text-muted">
         ← 运行面板
       </Link>
       <h1 className="mt-2 text-2xl font-bold">运行仪表盘</h1>
       {r && (
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted">
           总耗时 {(r.totals.ms / 1000).toFixed(1)}s · 输入 {r.totals.promptTokens} tok · 输出 {r.totals.completionTokens} tok
         </p>
       )}

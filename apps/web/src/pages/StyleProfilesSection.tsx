@@ -109,17 +109,17 @@ export default function StyleProfilesSection() {
           {(profiles ?? []).map((p: StyleProfileDto) => (
             <li key={p.id} className="rounded border px-4 py-3">
               <div className="font-medium">{p.name}</div>
-              <div className="mt-1 flex items-center gap-3 text-xs text-gray-500">
+              <div className="mt-1 flex items-center gap-3 text-xs text-muted">
                 <span>
                   v{p.version} · {new Date(p.createdAt).toLocaleString()} · 句长中位数 {p.metrics.medianSentenceLen ?? '—'}
                   {typeof p.metrics.selfScore === 'number' ? ` · 自评 ${p.metrics.selfScore}/5` : ''}
                 </span>
-                <button className="ml-auto text-blue-600" onClick={() => void toggleVersions(p.id)}>
+                <button className="ml-auto text-primary-strong" onClick={() => void toggleVersions(p.id)}>
                   {openVersions === p.id ? '收起版本' : '版本'}
                 </button>
               </div>
               {openVersions === p.id && (
-                <ul className="mt-2 ml-4 space-y-1 border-l pl-3 text-xs text-gray-600">
+                <ul className="mt-2 ml-4 space-y-1 border-l pl-3 text-xs text-muted">
                   {(versionMap[p.id] ?? []).map((v) => (
                     <li key={v.id}>
                       v{v.version} · {new Date(v.createdAt).toLocaleString()}
@@ -131,7 +131,7 @@ export default function StyleProfilesSection() {
               )}
             </li>
           ))}
-          {(profiles ?? []).length === 0 && <li className="text-sm text-gray-500">暂无档案，先用下方表单蒸馏一个。</li>}
+          {(profiles ?? []).length === 0 && <li className="text-sm text-muted">暂无档案，先用下方表单蒸馏一个。</li>}
         </ul>
       </section>
 
@@ -147,19 +147,19 @@ export default function StyleProfilesSection() {
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
-            <button className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void distill()}>
+            <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void distill()}>
               蒸馏
             </button>
           </div>
         ) : (
           draft && (
-            <div className="mt-2 space-y-3 rounded border bg-gray-50 p-3">
+            <div className="mt-2 space-y-3 rounded border bg-bg p-3">
               <h3 className="text-sm font-semibold">草稿预览编辑（未入库）</h3>
               <div>
                 <div className="text-sm font-medium">七维</div>
                 {STYLE_DIMENSIONS.map((dim) => (
                   <label key={dim} className="mt-1 flex items-center gap-2 text-xs">
-                    <span className="w-16 shrink-0 text-gray-600">{dim}</span>
+                    <span className="w-16 shrink-0 text-muted">{dim}</span>
                     <input className="flex-1 rounded border px-2 py-1" aria-label={`维度-${dim}`} value={draft.analysis.dims[dim] ?? ''} onChange={(e) => setDim(dim, e.target.value)} />
                   </label>
                 ))}
@@ -169,7 +169,7 @@ export default function StyleProfilesSection() {
                 <div className="mt-1 grid grid-cols-3 gap-2">
                   {STYLE_AXES.map((axis) => (
                     <label key={axis} className="flex items-center gap-1 text-xs">
-                      <span className="w-16 shrink-0 text-gray-600">{axis}</span>
+                      <span className="w-16 shrink-0 text-muted">{axis}</span>
                       <input
                         type="number"
                         min={0}
@@ -204,17 +204,17 @@ export default function StyleProfilesSection() {
                 />
               </div>
               <div className="flex gap-2">
-                <button className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void create()}>
+                <button className="rounded bg-primary px-4 py-1.5 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void create()}>
                   确认入库
                 </button>
-                <button className="rounded bg-gray-200 px-4 py-1.5 text-sm" disabled={busy} onClick={discard}>
+                <button className="rounded bg-bg px-4 py-1.5 text-sm" disabled={busy} onClick={discard}>
                   放弃
                 </button>
               </div>
             </div>
           )
         )}
-        {msg && <p className="mt-2 text-sm text-gray-700">{msg}</p>}
+        {msg && <p className="mt-2 text-sm text-ink">{msg}</p>}
       </section>
 
       <ImitationProfilesSection />

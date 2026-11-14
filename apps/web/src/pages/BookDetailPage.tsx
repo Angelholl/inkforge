@@ -4,6 +4,8 @@ import { Link, useParams } from 'react-router';
 import { api } from '../api/client';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
+import RunAsideCard from '../components/RunAsideCard';
+import { Chip } from '../components/ui';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleProfileDto } from '@inkforge/shared';
 
 function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string) => void }) {
@@ -189,22 +191,30 @@ export default function BookDetailPage() {
     }
   };
 
+  const doneCount = (book?.chapters ?? []).filter((c) => c.status === 'done').length;
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <Link to="/" className="text-sm text-gray-500">
+    <main className="mx-auto max-w-6xl px-6 py-10">
+      <Link to="/" className="text-sm text-muted">
         ← 书架
       </Link>
-      <h1 className="mt-2 text-2xl font-bold">{book?.title ?? '…'}</h1>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <h1 className="text-2xl font-bold">{book?.title ?? '…'}</h1>
+        {/* 详情 chip 条（D2） */}
+        <Chip active>章节 {book?.chapters.length ?? 0}</Chip>
+        <Chip active={doneCount > 0}>完成 {doneCount}</Chip>
+        {book?.styleProfileId && <Chip active>文风已绑</Chip>}
+        {book?.imitationProfileId && <Chip active>仿写已绑</Chip>}
+      </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={generateAll}>
+        <button className="h-ctl rounded-ctl bg-primary px-4 text-white" onClick={generateAll}>
           整书生成
         </button>
-        <button className="rounded bg-gray-200 px-4 py-2" onClick={() => void refetch()}>
+        <button className="h-ctl rounded-ctl border border-line bg-surface px-4" onClick={() => void refetch()}>
           刷新
         </button>
         <select
           aria-label="导出格式"
-          className="rounded border px-2 py-2 text-sm"
+          className="h-ctl rounded-ctl border border-line bg-surface px-2 text-sm"
           value={exportFormat}
           onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
         >
@@ -212,10 +222,12 @@ export default function BookDetailPage() {
           <option value="combined-md">全书合并</option>
           <option value="txt">分章 TXT</option>
         </select>
-        <button className="rounded bg-gray-200 px-4 py-2 text-sm" onClick={() => void exportNow()}>
+        <button className="h-ctl rounded-ctl border border-line bg-surface px-4 text-sm" onClick={() => void exportNow()}>
           导出
         </button>
       </div>
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0">
 
       <section className="mt-6">
         <h2 className="font-semibold">世界观与剧情大纲</h2>
@@ -235,7 +247,7 @@ export default function BookDetailPage() {
           value={outlineText}
           onChange={(e) => setOutlineText(e.target.value)}
         />
-        <button className="mt-2 rounded bg-blue-600 px-4 py-1.5 text-white" onClick={() => void saveMeta()}>
+        <button className="mt-2 rounded bg-primary px-4 py-1.5 text-white" onClick={() => void saveMeta()}>
           保存设定
         </button>
       </section>
@@ -265,10 +277,10 @@ export default function BookDetailPage() {
                     onChange={(e) => setEditingCard({ ...editingCard, setting: e.target.value })}
                   />
                   <div className="flex gap-2">
-                    <button className="rounded bg-blue-600 px-3 py-1 text-white" onClick={() => void saveCard()}>
+                    <button className="rounded bg-primary px-3 py-1 text-white" onClick={() => void saveCard()}>
                       保存
                     </button>
-                    <button className="rounded bg-gray-200 px-3 py-1" onClick={() => setEditingCard(null)}>
+                    <button className="rounded bg-bg px-3 py-1" onClick={() => setEditingCard(null)}>
                       取消
                     </button>
                   </div>
@@ -276,16 +288,16 @@ export default function BookDetailPage() {
               ) : (
                 <div className="flex items-start gap-2">
                   <span className="font-medium">{c.name}</span>
-                  <span className="flex-1 text-gray-600">{settingPreview(c.baseSetting)}</span>
+                  <span className="flex-1 text-muted">{settingPreview(c.baseSetting)}</span>
                   <button
-                    className="text-blue-600"
+                    className="text-primary-strong"
                     onClick={() =>
                       setEditingCard({ id: c.id, name: c.name, setting: settingRawText(c.baseSetting) })
                     }
                   >
                     编辑
                   </button>
-                  <button className="text-red-600" onClick={() => void removeCard(c)}>
+                  <button className="text-danger" onClick={() => void removeCard(c)}>
                     删除
                   </button>
                 </div>
@@ -309,7 +321,7 @@ export default function BookDetailPage() {
             value={newCardSetting}
             onChange={(e) => setNewCardSetting(e.target.value)}
           />
-          <button className="rounded bg-gray-200 px-3 py-1 text-sm" onClick={() => void addCard()}>
+          <button className="rounded bg-bg px-3 py-1 text-sm" onClick={() => void addCard()}>
             添加人物
           </button>
         </div>
@@ -320,12 +332,12 @@ export default function BookDetailPage() {
         <div className="mt-2 flex items-center gap-2 text-sm">
           <StyleBindSelect currentProfileId={book?.styleProfileId ?? null} onBind={bindStyle} />
           {book?.styleProfileId && (
-            <span className="text-gray-600">
+            <span className="text-muted">
               已绑定：{(Array.isArray(profiles) ? profiles : []).find((p) => p.id === book.styleProfileId)?.name ?? book.styleProfileId}
             </span>
           )}
         </div>
-        <p className="mt-1 text-xs text-gray-400">续写（continue）模式不注入风格，仅生成模式生效。</p>
+        <p className="mt-1 text-xs text-faint">续写（continue）模式不注入风格，仅生成模式生效。</p>
       </section>
 
       <section className="mt-6">
@@ -339,23 +351,23 @@ export default function BookDetailPage() {
               <span
                 className={`rounded px-2 py-0.5 text-xs ${
                   c.status === 'done'
-                    ? 'bg-green-100 text-green-700'
+                    ? 'bg-ok-soft text-ok'
                     : c.status === 'needs_human'
-                      ? 'bg-orange-100 text-orange-700'
-                      : 'bg-gray-100 text-gray-600'
+                      ? 'bg-warn-soft text-warn'
+                      : 'bg-bg text-muted'
                 }`}
               >
                 {c.status}
               </span>
               {c.isOriginal && (
-                <button className="text-sm text-blue-600" onClick={() => void summarize(c.chapterNo)}>
+                <button className="text-sm text-primary-strong" onClick={() => void summarize(c.chapterNo)}>
                   补摘要
                 </button>
               )}
-              <button className="ml-auto text-sm text-blue-600" onClick={() => void api.generateChapter(bookId, c.chapterNo).then(() => setMsg(`第${c.chapterNo}章已入队`))}>
+              <button className="ml-auto text-sm text-primary-strong" onClick={() => void api.generateChapter(bookId, c.chapterNo).then(() => setMsg(`第${c.chapterNo}章已入队`))}>
                 生成
               </button>
-              <Link className="text-sm text-blue-600" to={`/books/${bookId}/chapters/${c.chapterNo}`}>
+              <Link className="text-sm text-primary-strong" to={`/books/${bookId}/chapters/${c.chapterNo}`}>
                 阅读
               </Link>
             </li>
@@ -376,10 +388,10 @@ export default function BookDetailPage() {
               onChange={(e) => setChapterNo(Number(e.target.value))}
             />
           </label>
-          <button className="rounded bg-blue-600 px-4 py-1.5 text-white" onClick={saveBlueprint}>
+          <button className="rounded bg-primary px-4 py-1.5 text-white" onClick={saveBlueprint}>
             保存蓝图
           </button>
-          <button className="rounded bg-gray-200 px-4 py-1.5" onClick={generate}>
+          <button className="rounded bg-bg px-4 py-1.5" onClick={generate}>
             生成本章
           </button>
         </div>
@@ -388,8 +400,13 @@ export default function BookDetailPage() {
           value={blueprintText}
           onChange={(e) => setBlueprintText(e.target.value)}
         />
-        {msg && <p className="mt-2 text-sm text-gray-600">{msg}</p>}
+        {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
       </section>
+        </div>
+        <aside className="space-y-4">
+          <RunAsideCard runs={book?.runs ?? []} />
+        </aside>
+      </div>
     </main>
   );
 }

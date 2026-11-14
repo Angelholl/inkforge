@@ -97,7 +97,7 @@ export default function SettingsPage() {
     <main className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-2xl font-bold">设置</h1>
       {connError && (
-        <p className="mt-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">服务未连接</p>
+        <p className="mt-4 rounded border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">服务未连接</p>
       )}
       <form
         className="mt-6 space-y-4"
@@ -147,16 +147,16 @@ export default function SettingsPage() {
           <input id="settings-mock" type="checkbox" checked={mock} onChange={(e) => setMock(e.target.checked)} />
           启用 mock 模式
         </label>
-        <button type="submit" disabled={saving} className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50">
+        <button type="submit" disabled={saving} className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50">
           {saving ? '保存中…' : '保存'}
         </button>
       </form>
-      {message && <p className="mt-4 text-sm text-green-700">{message}</p>}
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      {message && <p className="mt-4 text-sm text-ok">{message}</p>}
+      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
       <section className="mt-10">
         <h2 className="text-xl font-bold">蒸馏模板</h2>
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-faint">
           蒸馏分析指令（DIM/AXIS/RULES 行协议）；留空恢复默认模板。可按题材调整侧重点，如「优先量化句长分布与对话占比」。
         </p>
         <textarea
@@ -167,14 +167,14 @@ export default function SettingsPage() {
           onChange={(e) => setDistillTemplate(e.target.value)}
         />
         <div className="mt-2 flex gap-2">
-          <button className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white" disabled={saving} onClick={() => void saveTemplate(distillTemplate)}>
+          <button className="rounded bg-primary px-4 py-1.5 text-sm text-white" disabled={saving} onClick={() => void saveTemplate(distillTemplate)}>
             保存模板
           </button>
-          <button className="rounded bg-gray-200 px-4 py-1.5 text-sm" disabled={saving} onClick={() => void saveTemplate('')}>
+          <button className="rounded bg-bg px-4 py-1.5 text-sm" disabled={saving} onClick={() => void saveTemplate('')}>
             恢复默认
           </button>
         </div>
-        {tplMsg && <p className="mt-2 text-sm text-gray-700">{tplMsg}</p>}
+        {tplMsg && <p className="mt-2 text-sm text-ink">{tplMsg}</p>}
       </section>
 
       <StyleProfilesSection />

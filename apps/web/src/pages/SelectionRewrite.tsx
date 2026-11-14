@@ -51,7 +51,7 @@ export function SelectionRewrite({ versionId, onCreated }: Props) {
         {SELECTION_PRESETS.map((p) => (
           <button
             key={p.label}
-            className="rounded bg-gray-200 px-3 py-1 text-sm"
+            className="rounded bg-bg px-3 py-1 text-sm"
             aria-label={`预设-${p.label}`}
             onClick={() => setInstruction(p.instruction)}
           >
@@ -66,10 +66,10 @@ export function SelectionRewrite({ versionId, onCreated }: Props) {
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
       />
-      <button className="mt-2 rounded bg-blue-600 px-4 py-1.5 text-white disabled:opacity-50" onClick={submit} disabled={busy}>
+      <button className="mt-2 rounded bg-primary px-4 py-1.5 text-white disabled:opacity-50" onClick={submit} disabled={busy}>
         {busy ? '重写中…' : '提交选段重写'}
       </button>
-      {msg && <p className="mt-2 text-sm text-gray-600">{msg}</p>}
+      {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
     </section>
   );
 }

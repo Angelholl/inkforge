@@ -1,11 +1,53 @@
 @import 'tailwindcss';
 
-/* 固定浅色配色：桌面 WebView 跟随系统深色模式时，未显式设色的页面会黑底黑字（2026-11-12 GUI 目验缺陷） */
+/*
+ * inkforge 设计 token（DEC-2026-1115-04 UI 三卡 D1，SubTrans 对标）
+ * 约定：页面底色 bg、卡面 surface、边线 line、主色 primary 系、语义 ok/warn/danger、
+ * 深色控制台 console-bg + 五分色（1 常规 2 次要 3 错误 4 警告 5 成功）；
+ * 间距用 Tailwind 默认 4-32 档位；圆角 ctl 8px / card 16px；控件高 h-ctl 36px。
+ * 固定浅色配色：桌面 WebView 跟随系统深色模式时未显式设色会黑底黑字（2026-11-12 目验缺陷）。
+ */
+@theme {
+  --color-bg: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-line: #e5e7eb;
+  --color-ink: #111827;
+  --color-muted: #6b7280;
+  --color-faint: #9ca3af;
+
+  --color-primary: #3b82f6;
+  --color-primary-strong: #2563eb;
+  --color-primary-soft: #dbeafe;
+
+  --color-ok: #16a34a;
+  --color-ok-soft: #dcfce7;
+  --color-warn: #d97706;
+  --color-warn-soft: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fee2e2;
+
+  --color-console-bg: #0f172a;
+  --color-console-1: #e2e8f0;
+  --color-console-2: #94a3b8;
+  --color-console-3: #f87171;
+  --color-console-4: #fbbf24;
+  --color-console-5: #4ade80;
+
+  --radius-ctl: 8px;
+  --radius-card: 16px;
+
+  --height-ctl: 36px;
+
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
 }

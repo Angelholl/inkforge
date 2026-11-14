@@ -83,7 +83,7 @@ export default function ImitationProfilesSection() {
   return (
     <section className="mt-10">
       <h2 className="text-xl font-bold">仿写档案（拆解仿写）</h2>
-      <p className="mt-1 text-xs text-gray-400">参考样本只用于结构拆解与蓝图反推；drafter 不注入参考正文（防抄用红线）。</p>
+      <p className="mt-1 text-xs text-faint">参考样本只用于结构拆解与蓝图反推；drafter 不注入参考正文（防抄用红线）。</p>
 
       <section className="mt-4">
         <h2 className="font-semibold">仿写档案列表</h2>
@@ -92,9 +92,9 @@ export default function ImitationProfilesSection() {
             <li key={p.id} className="rounded border px-4 py-3">
               <div className="flex items-center gap-3">
                 <span className="font-medium">{p.name}</span>
-                <span className="text-xs text-gray-500">v{p.version}</span>
-                <span className="text-xs text-gray-400">{p.sourcePath}</span>
-                <button className="ml-auto text-sm text-red-600" disabled={busy} onClick={() => void remove(p.id, p.name)}>
+                <span className="text-xs text-muted">v{p.version}</span>
+                <span className="text-xs text-faint">{p.sourcePath}</span>
+                <button className="ml-auto text-sm text-danger" disabled={busy} onClick={() => void remove(p.id, p.name)}>
                   删除
                 </button>
               </div>
@@ -112,13 +112,13 @@ export default function ImitationProfilesSection() {
                     </option>
                   ))}
                 </select>
-                <button className="rounded bg-gray-200 px-3 py-1 text-sm" disabled={busy} onClick={() => void bind(p.id)}>
+                <button className="rounded bg-bg px-3 py-1 text-sm" disabled={busy} onClick={() => void bind(p.id)}>
                   绑定
                 </button>
               </div>
             </li>
           ))}
-          {profiles.length === 0 && <li className="text-sm text-gray-500">暂无仿写档案，先用下方表单拆解一个。</li>}
+          {profiles.length === 0 && <li className="text-sm text-muted">暂无仿写档案，先用下方表单拆解一个。</li>}
         </ul>
       </section>
 
@@ -146,41 +146,41 @@ export default function ImitationProfilesSection() {
               onChange={(e) => setChapterCount(Number(e.target.value))}
             />
           </label>
-          <button className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void analyze()}>
+          <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void analyze()}>
             拆解分析
           </button>
         </div>
 
         {draft && (
-          <div className="mt-4 rounded border bg-gray-50 p-3">
+          <div className="mt-4 rounded border bg-bg p-3">
             <h3 className="text-sm font-semibold">草稿预览（未入库）</h3>
             <div className="mt-2 text-sm">
               <div className="font-medium">结构拆解（{draft.structure.length} 条）</div>
-              <ul className="ml-4 list-disc text-xs text-gray-700">
+              <ul className="ml-4 list-disc text-xs text-ink">
                 {draft.structure.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}
               </ul>
               <div className="mt-2 font-medium">文风规则</div>
-              <pre className="mt-1 whitespace-pre-wrap rounded p-2 text-xs text-gray-700" style={{ background: '#F3F4F6' }}>
+              <pre className="mt-1 whitespace-pre-wrap rounded p-2 text-xs text-ink" style={{ background: '#F3F4F6' }}>
                 {draft.style.rulesText || '（无规则行）'}
               </pre>
               <div className="mt-2 font-medium">蓝图反推（{draft.blueprint.length} 章）</div>
-              <ol className="ml-4 list-decimal text-xs text-gray-700">
+              <ol className="ml-4 list-decimal text-xs text-ink">
                 {draft.blueprint.slice(0, 5).map((b) => (
                   <li key={b.chapterNo}>
                     第{b.chapterNo}章 {b.blueprint.goal}
                   </li>
                 ))}
               </ol>
-              {draft.blueprint.length > 5 && <div className="text-xs text-gray-400">…其余 {draft.blueprint.length - 5} 章略</div>}
+              {draft.blueprint.length > 5 && <div className="text-xs text-faint">…其余 {draft.blueprint.length - 5} 章略</div>}
             </div>
             <div className="mt-3 flex gap-2">
-              <button className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void save()}>
+              <button className="rounded bg-primary px-4 py-1.5 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void save()}>
                 确认入库
               </button>
               <button
-                className="rounded bg-gray-200 px-4 py-1.5 text-sm"
+                className="rounded bg-bg px-4 py-1.5 text-sm"
                 disabled={busy}
                 onClick={() => {
                   setDraft(null);
@@ -192,7 +192,7 @@ export default function ImitationProfilesSection() {
             </div>
           </div>
         )}
-        {msg && <p className="mt-2 text-sm text-gray-700">{msg}</p>}
+        {msg && <p className="mt-2 text-sm text-ink">{msg}</p>}
       </section>
     </section>
   );

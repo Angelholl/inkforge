@@ -63,7 +63,7 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
   };
 
   const statusChip = (s: ForeshadowingDto['status']): string =>
-    s === 'resolved' ? 'bg-green-100 text-green-700' : s === 'advanced' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600';
+    s === 'resolved' ? 'bg-ok-soft text-ok' : s === 'advanced' ? 'bg-primary-soft text-primary-strong' : 'bg-bg text-muted';
 
   return (
     <section className="mt-6">
@@ -73,7 +73,7 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
           <li key={f.id} className="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm">
             <span className={`rounded px-2 py-0.5 text-xs ${statusChip(f.status)}`}>{f.status}</span>
             <span className="font-medium">{f.description}</span>
-            <span className="text-gray-500">
+            <span className="text-muted">
               埋设于第{f.plantedCh}章{f.resolvedCh ? ` · 回收于第${f.resolvedCh}章` : ''}
             </span>
             {f.status !== 'resolved' && (
@@ -87,17 +87,17 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
                   value={resolveCh[f.id] ?? ''}
                   onChange={(e) => setResolveCh({ ...resolveCh, [f.id]: Number(e.target.value) })}
                 />
-                <button className="text-blue-600" disabled={busy} onClick={() => void resolve(f)}>
+                <button className="text-primary-strong" disabled={busy} onClick={() => void resolve(f)}>
                   标记回收
                 </button>
               </>
             )}
-            <button className="ml-auto text-red-600" disabled={busy} onClick={() => void remove(f)}>
+            <button className="ml-auto text-danger" disabled={busy} onClick={() => void remove(f)}>
               删除
             </button>
           </li>
         ))}
-        {rows.length === 0 && <li className="text-sm text-gray-500">暂无伏笔登记。</li>}
+        {rows.length === 0 && <li className="text-sm text-muted">暂无伏笔登记。</li>}
       </ul>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         <input
@@ -107,7 +107,7 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-muted">
           埋设章
           <input
             type="number"
@@ -118,11 +118,11 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
             onChange={(e) => setPlantedCh(Number(e.target.value))}
           />
         </label>
-        <button className="rounded bg-gray-200 px-3 py-1" disabled={busy} onClick={() => void add()}>
+        <button className="rounded bg-bg px-3 py-1" disabled={busy} onClick={() => void add()}>
           登记伏笔
         </button>
       </div>
-      {msg && <p className="mt-2 text-sm text-gray-600">{msg}</p>}
+      {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
     </section>
   );
 }
