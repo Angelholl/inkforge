@@ -220,3 +220,14 @@
 **讨论开启（两稿入库，待 owner 拍板）：**
 1. 蒸馏改进：docs/design/2026-11-15-discuss-distill-upgrade.md（借鉴 SubTrans 设置模式四批次：模板可编辑/自评接线补 F2/术语表/批量校对）。
 2. UI 改造：docs/design/2026-11-15-discuss-ui-subtrans-style.md（平移 SubTrans 设计语言，承接 DEC-2026-1113-04 M3 未执行卡组；T-U1 token+rail 壳+书架试点先行）。
+
+## DEC-2026-1115-02 [OWNER 指令/主模型] 立项 GitHub 项目公开文档二次实读：蒸馏稿增补 + 全流程对标稿入库（2026-11-15）
+
+**背景：** owner 补充指令：①蒸馏功能还可参考立项时讨论过的 GitHub 项目；②写书/续写全流程也参考之。指即书童 Pagekin 与 MirrorNovel（DEC-2026-1111-01 clean-room 参考对）。
+
+**事实登记：**
+1. **clean-room 维持**：本轮 WebFetch 仅读两仓库公开 README（产品行为层），未触源码/提示词/schema/UI 文案；参考记录已追加 third-party-references.md（2026-11-15 行 ×2）。
+2. **蒸馏稿增补**（2026-11-15-discuss-distill-upgrade.md）：并入 MirrorNovel 蒸馏设计（均匀 ≤20 段采样覆盖首/中/尾、七维档案、风格六轴、persona 快照、产物预览编辑确认门、注入 3×240 字）与 Pagekin 拆解仿写（结构+文风+蓝图反推→仿写约束）；**采样层整体缺席被定性为"太简单"的技术根因**（当前实现粘贴全文一次投喂）；批次重排为：一=采样+结构化档案+确认门、二=模板/参数+自评补 F2+抄用检测、三=persona 快照+版本视图、四=术语表+三阶段批量校对；拆解仿写列 0.3 候选。
+3. **全流程对标稿入库**（2026-11-15-discuss-full-pipeline-benchmark.md）：逐阶段对照结论——inkforge 运行时骨架强于两家参照，差距集中四块：蓝图层级（单层 vs MirrorNovel 三级滚动卡）、人机协作层（全自动 vs Pagekin 审稿勾选/修稿差异确认）、设定维度（无题材标签）、连续性 UI（表在而无界面）；可平移项九件按投入产出排序，分四流程批次；明确不平移清单（MongoDB 形态/知识库向量检索/Skill 包机制）。
+
+**待 owner 拍板：** 蒸馏批次范围与确认门取舍；产品路线（全自动为主 vs 人机协作为主）；三级蓝图是否立项；流程批次一小件先行与否；.epub 依赖；lucide-react 与 UI 范围（承接 1115-01 讨论问项）。
