@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import ImitationProfilesSection from './ImitationProfilesSection';
 import type { StyleProfileDto } from '@inkforge/shared';
 
 export default function StyleProfilesSection() {
@@ -62,6 +63,8 @@ export default function StyleProfilesSection() {
         </div>
         {msg && <p className="mt-2 text-sm text-gray-700">{msg}</p>}
       </section>
+
+      <ImitationProfilesSection />
     </section>
   );
 }

@@ -11,6 +11,9 @@ import type {
   OutlineTreeSuggestResult,
   OutlineTreeGetResult,
   OutlineCheckResult,
+  ImitationAnalyzeBody,
+  ImitationDraftDto,
+  ImitationProfileDto,
   CreateRunBody,
   ImportOriginalBody,
   ImportOriginalResult,
@@ -94,6 +97,18 @@ export const api = {
     req<OutlineCheckResult>(`/api/books/${bookId}/outline-check`, {
       method: 'POST',
       body: JSON.stringify(upToChapter ? { upToChapter } : {}),
+    }),
+  analyzeImitation: (body: ImitationAnalyzeBody) =>
+    req<{ draft: ImitationDraftDto }>('/api/imitation-profiles/analyze', { method: 'POST', body: JSON.stringify(body) }),
+  saveImitationProfile: (draft: ImitationDraftDto) =>
+    req<{ id: string; version: number }>('/api/imitation-profiles', { method: 'POST', body: JSON.stringify({ draft }) }),
+  listImitationProfiles: () => req<ImitationProfileDto[]>('/api/imitation-profiles'),
+  deleteImitationProfile: (id: string) =>
+    req<{ ok: boolean }>(`/api/imitation-profiles/${id}`, { method: 'DELETE', body: '{}' }), // 空体会被 Fastify 拒（沿 deleteBook 先例）
+  bindImitation: (bookId: string, profileId: string | null) =>
+    req<{ ok: boolean; imitationProfileId: string | null }>(`/api/books/${bookId}/imitation`, {
+      method: 'PUT',
+      body: JSON.stringify({ profileId }),
     }),
   createRun: (body: CreateRunBody) => req<{ runId: string }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   getRun: (runId: string) => req<RunWithStepsDto>(`/api/runs/${runId}`),

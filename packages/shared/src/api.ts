@@ -11,6 +11,7 @@ export interface BookDto {
   description: string;
   outline: string;
   styleProfileId?: string;
+  imitationProfileId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -244,4 +245,38 @@ export interface StyleProfileDto {
 export interface DistillStyleBody {
   name: string;
   text: string;
+}
+
+// ── 拆解仿写（Pagekin 式）──
+export interface ImitationAnalyzeBody {
+  name: string;
+  text: string;
+  chapterCount: number;
+}
+
+/** 分析 draft（不入库）；style 为 B1 七维六轴的接口对齐点（当前 rulesText 形态）。 */
+export interface ImitationDraftDto {
+  name: string;
+  sourcePath: string;
+  sourceHash: string;
+  structure: string[];
+  style: { rulesText: string };
+  blueprint: OutlineItemDto[];
+  metrics: Record<string, number | string>;
+}
+
+export interface ImitationSaveBody {
+  draft: ImitationDraftDto;
+}
+
+export interface ImitationProfileDto {
+  id: string;
+  name: string;
+  version: number;
+  sourcePath: string;
+  createdAt: string;
+}
+
+export interface ImitationBindBody {
+  profileId: string | null;
 }

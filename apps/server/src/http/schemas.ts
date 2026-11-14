@@ -103,3 +103,36 @@ export const outlineTreePutSchema = z.object({
 export const outlineCheckSchema = z.object({
   upToChapter: z.number().int().positive().optional(),
 });
+
+export const imitationAnalyzeSchema = z.object({
+  name: z.string().min(1),
+  text: z.string().min(1),
+  chapterCount: z.number().int().min(1).max(50),
+});
+
+const imitationBlueprintBlockSchema = z.object({
+  chapterNo: z.number().int().positive(),
+  blueprint: z.object({
+    goal: z.string(),
+    beats: z.array(z.string()),
+    mustHaveBeats: z.array(z.object({ text: z.string(), keywords: z.array(z.string()) })),
+    bannedTopics: z.array(z.string()),
+  }),
+});
+
+// analyze 产出的 draft 原样回存（版本号由 save 服务端按 hash 计算，不收）
+export const imitationSaveSchema = z.object({
+  draft: z.object({
+    name: z.string().min(1),
+    sourcePath: z.string().min(1),
+    sourceHash: z.string().min(8),
+    structure: z.array(z.string().min(1)).min(1).max(8),
+    style: z.object({ rulesText: z.string() }),
+    blueprint: z.array(imitationBlueprintBlockSchema).min(1),
+    metrics: z.record(z.string(), z.union([z.number(), z.string()])),
+  }),
+});
+
+export const imitationBindSchema = z.object({
+  profileId: z.string().min(1).nullable(),
+});

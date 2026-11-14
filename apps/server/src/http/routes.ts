@@ -14,10 +14,12 @@ import * as chaptersRepo from '../db/repositories/chapters';
 import * as continuityRepo from '../db/repositories/continuity';
 import * as runsRepo from '../db/repositories/runs';
 import * as outlineRepo from '../db/repositories/outline';
+import * as imitationRepo from '../db/repositories/imitation';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, generateSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, updateCharacterSchema } from './schemas';
+import { analyzeImitation } from '../imitation';
 import { distillStyleProfile } from '../style/distill';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { pickFewShotSamples } from '../style/sample';
@@ -188,6 +190,12 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const prevVersion = prevChapter?.currentVersionId ? chaptersRepo.getVersion(db, prevChapter.currentVersionId) : undefined;
     const prevTail = prevVersion?.content ?? '';
     const continuityText = continuityRepo.renderSnapshotText(continuityRepo.getContinuitySnapshot(db, bookId, chapterNo));
+    // 注入面（本轮钉死）：绑定仿写档案时结构摘要入 planner 槽；drafter 不注入（Pagekin 红线：参考不混入正文）
+    const imitationBrief = (() => {
+      if (!book.imitationProfileId) return '';
+      const p = imitationRepo.getImitationProfile(db, book.imitationProfileId);
+      return p ? `【参考作品结构拆解】\n${p.structure.join('\n')}` : '';
+    })();
 
     const taskText = renderBlueprintTask({
       chapterNo,
@@ -200,7 +208,8 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const slots = [
       { name: 'hardRules', content: PLANNER_HARD_RULES, budgetChars: b.hardRules, stable: true, keep: 'head' as const },
       { name: 'continuity', content: continuityText, budgetChars: b.continuity, stable: false, keep: 'head' as const },
-      { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'tail' as const },
+      ...(imitationBrief ? [{ name: 'imitationStructure', content: imitationBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
+      { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'head' as const },
       { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },
     ];
     const totalBudget = config.providers.local.contextWindow - config.providers.local.maxOutput - 500;
@@ -552,6 +561,49 @@ ${repairPrompt(first.errors)}`))).text,
       { name: body.name, sourceText: body.text, samples: pickFewShotSamples(body.text) },
     );
     reply.code(201).send({ profileId });
+  });
+
+  // ── 拆解仿写（Pagekin 式；analyze 产 draft 不入库，save 落档案）──
+  app.post('/api/imitation-profiles/analyze', async (req, reply) => {
+    const body = parseBody(reply, imitationAnalyzeSchema, req.body);
+    if (!body) return;
+    if (body.text.replace(/\s/g, '').length < 200) {
+      return reply.code(400).send({ error: '样本为空或不足 200 字，禁止拆解' });
+    }
+    const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
+    try {
+      const draft = await analyzeImitation({ db, provider }, body);
+      reply.send({ draft });
+    } catch (e) {
+      reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  app.post('/api/imitation-profiles', async (req, reply) => {
+    const body = parseBody(reply, imitationSaveSchema, req.body);
+    if (!body) return;
+    const saved = imitationRepo.saveImitationProfile(db, body.draft);
+    reply.code(201).send(saved);
+  });
+
+  app.get('/api/imitation-profiles', async () => imitationRepo.listImitationProfiles(db));
+
+  app.delete('/api/imitation-profiles/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!imitationRepo.deleteImitationProfile(db, id)) return reply.code(404).send({ error: 'not found' });
+    reply.send({ ok: true });
+  });
+
+  app.put('/api/books/:bookId/imitation', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, imitationBindSchema, req.body);
+    if (!body) return;
+    if (body.profileId !== null && !imitationRepo.getImitationProfile(db, body.profileId)) {
+      return reply.code(404).send({ error: 'profile not found' });
+    }
+    booksRepo.setBookImitation(db, bookId, body.profileId);
+    reply.send({ ok: true, imitationProfileId: body.profileId });
   });
 
   app.post('/api/books/:bookId/chapters/:chapterNo/summarize', async (req, reply) => {

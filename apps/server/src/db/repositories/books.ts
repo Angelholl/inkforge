@@ -7,6 +7,7 @@ export interface Book {
   description: string;
   outline: string;
   styleProfileId: string | null;
+  imitationProfileId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,12 +23,13 @@ interface BookRow {
   description: string;
   outline: string;
   style_profile_id: string | null;
+  imitation_profile_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, imitationProfileId: r.imitation_profile_id, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
@@ -41,6 +43,7 @@ export function createBook(
     description: input.description ?? '',
     outline: input.outline ?? '',
     styleProfileId: null,
+    imitationProfileId: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -88,6 +91,15 @@ export function listCharacters(db: Database, bookId: string): Array<{ id: string
 
 export function setBookStyleProfile(db: Database, bookId: string, profileId: string | null): void {
   db.prepare('UPDATE books SET style_profile_id = ?, updated_at = ? WHERE id = ?').run(
+    profileId,
+    new Date().toISOString(),
+    bookId,
+  );
+}
+
+/** 仿写档案绑定/解绑（profileId=null 解绑；存在性守卫由路由层做 404）。 */
+export function setBookImitation(db: Database, bookId: string, profileId: string | null): void {
+  db.prepare('UPDATE books SET imitation_profile_id = ?, updated_at = ? WHERE id = ?').run(
     profileId,
     new Date().toISOString(),
     bookId,

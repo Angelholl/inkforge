@@ -1,4 +1,4 @@
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import StyleProfilesSection from './StyleProfilesSection';
@@ -43,9 +43,10 @@ describe('StyleProfilesSection', () => {
       </QueryClientProvider>,
     );
 
-    // 初始列表 1 行
+    // 初始列表 1 行（限风格档案列表；仿写分区另有其列表）
     await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
-    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    const styleList = within(screen.getByText('测试档案').closest('ul')!);
+    expect(styleList.getAllByRole('listitem')).toHaveLength(1);
 
     // 蒸馏提交
     fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '新档案' } });
@@ -54,7 +55,7 @@ describe('StyleProfilesSection', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles/distill', expect.anything()));
     await waitFor(() => expect(screen.getByText('新档案')).toBeTruthy());
-    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(within(screen.getByText('测试档案').closest('ul')!).getAllByRole('listitem')).toHaveLength(2);
   });
 
   it('档案列表渲染版本与句长中位数', async () => {

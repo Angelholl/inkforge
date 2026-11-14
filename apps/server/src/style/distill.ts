@@ -26,6 +26,8 @@ RULES: <一条规则>
 每条规则须可执行、可判分，例如：平均句长区间、对话占比区间、段落长度、叙事人称、标点习惯、禁用句式。输出 5-10 条，不要其他内容。
 【样本开始】`;
 
+export { RULES_INSTRUCTION };
+
 /** 蒸馏：LLM 仅产出量化规则；few-shot 客户端确定性选取；同 source_hash version+1 新行（旧行永不改）。
  * sourceText（inline 文本，source_path 记 `inline:<sha256 前8位>`）与 sourcePath（文件路径）二选一。 */
 export async function distillStyleProfile(
