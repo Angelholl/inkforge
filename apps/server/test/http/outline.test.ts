@@ -6,6 +6,7 @@ import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
 import { createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
+import type { LlmProvider } from '../../src/llm/types';
 
 const OUTLINE_TEXT = [
   '# 1',
@@ -77,5 +78,45 @@ describe('POST /api/books/:bookId/outline-suggest', () => {
     expect(missing.statusCode).toBe(404);
     const bad = await app.inject({ method: 'POST', url: `/api/books/${bookId}/outline-suggest`, payload: { chapterCount: 0 } });
     expect(bad.statusCode).toBe(400);
+  });
+
+  it('outline-suggest：人物卡与大纲文本注入 planner 上下文', async () => {
+    const captured: Array<{ system: string; user: string }> = [];
+    const capturingPlanner: LlmProvider = {
+      complete: async (req) => {
+        captured.push({ system: req.system, user: req.user });
+        return { text: OUTLINE_TEXT, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: 'stop' };
+      },
+    };
+    const app2 = await buildApp({
+      config: loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir }),
+      provider: createMockProvider({ draft: { text: 'x' }, qc: { text: '' }, summarize: { text: 'y' } }),
+      plannerProvider: capturingPlanner,
+      db,
+      inlineQueue: true,
+    });
+    try {
+      const created = await app2.inject({
+        method: 'POST',
+        url: '/api/books',
+        payload: {
+          title: '卡槽注入测书',
+          description: '修真大陆，宗门林立。',
+          outline: '第一卷：草原崛起；第二卷：夺回王城',
+          characters: [{ name: '张三', baseSetting: '{"身份":"主角"}' }],
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const book2Id = (created.json() as { id: string }).id;
+      const r = await app2.inject({ method: 'POST', url: `/api/books/${book2Id}/outline-suggest`, payload: { chapterCount: 2 } });
+      expect(r.statusCode).toBe(200);
+      expect(captured.length).toBe(1);
+      expect(captured[0].user).toContain('【人物卡】张三');
+      expect(captured[0].user).toContain('身份: 主角');
+      expect(captured[0].user).toContain('草原崛起');
+      expect(captured[0].user).toContain('修真大陆，宗门林立。');
+    } finally {
+      await app2.close();
+    }
   });
 });

@@ -24,7 +24,7 @@ import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings
 import { createRoleProvider } from '../llm/factory';
 import { parseBlueprint, parseOutline } from '../llm/plainproto';
 import { repairPrompt } from '../quality/l1';
-import { renderBlueprintTask, renderOutlineTask } from '../prompts/render';
+import { renderBlueprintTask, renderCharacterCards, renderOutlineTask } from '../prompts/render';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
@@ -218,9 +218,12 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const { chapterCount } = body;
 
     const ob = config.budgets.outline;
+    const charactersText = renderCharacterCards(booksRepo.listCharacters(db, bookId));
     const slots = [
       { name: 'hardRules', content: PLANNER_HARD_RULES, budgetChars: ob.hardRules, stable: true, keep: 'head' as const },
       { name: 'worldview', content: book.description, budgetChars: ob.worldview, stable: false, keep: 'head' as const },
+      ...(charactersText ? [{ name: 'characters', content: charactersText, budgetChars: ob.characters, stable: false, keep: 'head' as const }] : []),
+      ...(book.outline ? [{ name: 'outline', content: book.outline, budgetChars: ob.outline, stable: false, keep: 'head' as const }] : []),
       { name: 'task', content: renderOutlineTask({ bookTitle: book.title, chapterCount }), budgetChars: ob.task, stable: false, keep: 'head' as const },
     ];
     const totalBudget = config.providers.local.contextWindow - config.providers.local.maxOutput - 500;
