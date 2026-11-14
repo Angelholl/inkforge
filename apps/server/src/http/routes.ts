@@ -18,11 +18,12 @@ import * as imitationRepo from '../db/repositories/imitation';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
-import { distillStyleProfile } from '../style/distill';
+import { analyzeStyle, saveStyleProfile } from '../style/analysis';
+import { pickFewShotAndHeldOut } from '../style/sample';
+import type { StyleAnalysisDto } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
-import { pickFewShotSamples } from '../style/sample';
 import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
 import { parseBlueprint, parseOutline, parseOutlineTree } from '../llm/plainproto';
@@ -385,6 +386,22 @@ ${repairPrompt(first.errors)}`))).text,
     const run = runsRepo.createRun(db, { bookId, mode: 'generate', chapterScope: scope, maxRounds });
     reply.code(202).send({ runId: run.id });
   };
+
+  // 批量校对（B10）：kind='polish' run，队列按 kind 分支走三 pass 校对管线
+  app.post('/api/books/:bookId/polish', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, polishSchema, req.body);
+    if (!body) return;
+    if (body.chapterFrom > body.chapterTo) return reply.code(400).send({ error: 'chapterFrom 不得大于 chapterTo' });
+    const run = runsRepo.createRun(db, {
+      bookId,
+      mode: 'generate',
+      kind: 'polish',
+      chapterScope: { from: body.chapterFrom, to: body.chapterTo },
+    });
+    reply.code(202).send({ runId: run.id });
+  });
   app.post('/api/books/:bookId/chapters/:chapterNo/generate', async (req, reply) => {
     const { bookId, chapterNo } = req.params as { bookId: string; chapterNo: string };
     const chapter = chaptersRepo.getChapter(db, bookId, Number(chapterNo));
@@ -529,9 +546,22 @@ ${repairPrompt(first.errors)}`))).text,
     if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
     const body = parseBody(reply, styleBindSchema, req.body);
     if (!body) return;
-    const profile = db.prepare('SELECT id FROM style_profiles WHERE id = ?').get(body.profileId) as { id: string } | undefined;
+    if (body.profileId === null) {
+      // 解绑：清档案引用与 persona 快照
+      booksRepo.setBookStyleProfile(db, bookId, null);
+      return reply.send({ ok: true, styleProfileId: null });
+    }
+    const profile = db
+      .prepare('SELECT id, version, rules_json, samples_json FROM style_profiles WHERE id = ?')
+      .get(body.profileId) as { id: string; version: number; rules_json: string; samples_json: string } | undefined;
     if (!profile) return reply.code(404).send({ error: 'profile not found' });
-    booksRepo.setBookStyleProfile(db, bookId, body.profileId);
+    // persona 快照：绑定即复制档案 rules/samples（后续改档案不影响已绑定书，批次三）
+    booksRepo.setBookStyleProfile(db, bookId, body.profileId, {
+      profileId: profile.id,
+      version: profile.version,
+      rulesJson: profile.rules_json,
+      samplesJson: profile.samples_json,
+    });
     reply.send({ ok: true, styleProfileId: body.profileId });
   });
 
@@ -549,6 +579,43 @@ ${repairPrompt(first.errors)}`))).text,
     }));
   });
 
+  // 同 source_hash 版本列表（批次三版本视图；未知档案 404）
+  app.get('/api/style-profiles/:id/versions', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const anchor = db.prepare('SELECT source_hash FROM style_profiles WHERE id = ?').get(id) as { source_hash: string } | undefined;
+    if (!anchor) return reply.code(404).send({ error: 'not found' });
+    const rows = db
+      .prepare('SELECT id, name, version, metrics_json, created_at FROM style_profiles WHERE source_hash = ? ORDER BY version')
+      .all(anchor.source_hash) as Array<{ id: string; name: string; version: number; metrics_json: string; created_at: string }>;
+    return rows.map((r) => {
+      let selfScore: number | undefined;
+      try {
+        const m = JSON.parse(r.metrics_json) as Record<string, number | string>;
+        if (typeof m.selfScore === 'number') selfScore = m.selfScore;
+      } catch {
+        /* 损坏 metrics 无分展示 */
+      }
+      return { id: r.id, name: r.name, version: r.version, createdAt: r.created_at, selfScore };
+    });
+  });
+
+  // ── 蒸馏模板（app_meta.distill_template，空串=默认；DEC-2026-1115-04 批次二）──
+  const getDistillTemplate = (): string =>
+    (db.prepare("SELECT value FROM app_meta WHERE key = 'distill_template'").get() as { value: string } | undefined)?.value ?? '';
+
+  app.get('/api/settings/distill-template', async () => ({ template: getDistillTemplate() }));
+
+  app.put('/api/settings/distill-template', async (req, reply) => {
+    const body = parseBody(reply, distillTemplatePutSchema, req.body ?? {});
+    if (!body) return;
+    db.prepare('INSERT INTO app_meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(
+      'distill_template',
+      body.template,
+    );
+    reply.send({ saved: true });
+  });
+
+  // 蒸馏两步（DEC-2026-1115-04 #7 确认门）：distill 产分析 draft 不入库，create 显式入库
   app.post('/api/style-profiles/distill', async (req, reply) => {
     const body = parseBody(reply, distillStyleSchema, req.body);
     if (!body) return;
@@ -556,11 +623,35 @@ ${repairPrompt(first.errors)}`))).text,
       return reply.code(400).send({ error: '样本为空，禁止蒸馏' });
     }
     const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
-    const profileId = await distillStyleProfile(
-      { db, provider },
-      { name: body.name, sourceText: body.text, samples: pickFewShotSamples(body.text) },
-    );
-    reply.code(201).send({ profileId });
+    const { fewShot, heldOut } = pickFewShotAndHeldOut(body.text, { count: body.maxSegments });
+    if (fewShot.length === 0) {
+      return reply.code(400).send({ error: '样本过短，无法采样' });
+    }
+    try {
+      const { analysis, evaluation } = await analyzeStyle(
+        { provider },
+        { sourceText: body.text, samples: fewShot, heldOut, temperature: body.temperature, instruction: getDistillTemplate() || undefined },
+      );
+      reply.send({ draft: { analysis, samples: fewShot, evaluation } });
+    } catch (e) {
+      reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  app.post('/api/style-profiles', async (req, reply) => {
+    const body = parseBody(reply, styleProfileCreateSchema, req.body);
+    if (!body) return;
+    if (body.text.replace(/\s/g, '').length < 200) {
+      return reply.code(400).send({ error: '样本为空，禁止蒸馏' });
+    }
+    const { id, version } = saveStyleProfile(db, {
+      name: body.name,
+      source: body.text,
+      analysis: body.analysis as StyleAnalysisDto,
+      samples: body.samples.map((t, i) => ({ id: `s${i}`, text: t })),
+      evaluation: body.evaluation,
+    });
+    reply.code(201).send({ profileId: id, version });
   });
 
   // ── 拆解仿写（Pagekin 式；analyze 产 draft 不入库，save 落档案）──

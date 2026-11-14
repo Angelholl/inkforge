@@ -25,6 +25,8 @@ import type {
   StyleProfileDto,
   StyleBindBody,
   DistillStyleBody,
+  DistillStyleDraftDto,
+  StyleProfileCreateBody,
   BookMetaPutBody,
   CharacterDto,
   CreateCharacterBody,
@@ -69,6 +71,11 @@ export const api = {
       body: JSON.stringify({ maxRounds }),
     }),
   generateAll: (bookId: string) => req<{ runId: string }>(`/api/books/${bookId}/generate-all`, { method: 'POST', body: '{}' }),
+  polishBook: (bookId: string, chapterFrom: number, chapterTo: number) =>
+    req<{ runId: string }>(`/api/books/${bookId}/polish`, {
+      method: 'POST',
+      body: JSON.stringify({ chapterFrom, chapterTo }),
+    }),
   importOriginal: (bookId: string, body: ImportOriginalBody) =>
     req<ImportOriginalResult>(`/api/books/${bookId}/import-original`, { method: 'POST', body: JSON.stringify(body) }),
   suggestBlueprint: (bookId: string, body: BlueprintSuggestBody) =>
@@ -127,8 +134,12 @@ export const api = {
     req<VersionDto>(`/api/runs/${runId}/chapters/${chapterNo}/partial/adopt`, { method: 'POST', body: '{}' }),
   getReport: (runId: string) => req<ReportDto>(`/api/runs/${runId}/report`),
   listStyleProfiles: () => req<StyleProfileDto[]>('/api/style-profiles'),
+  listStyleProfileVersions: (id: string) =>
+    req<Array<{ id: string; name: string; version: number; createdAt: string; selfScore?: number }>>(`/api/style-profiles/${id}/versions`),
   distillStyle: (body: DistillStyleBody) =>
-    req<{ profileId: string }>('/api/style-profiles/distill', { method: 'POST', body: JSON.stringify(body) }),
+    req<{ draft: DistillStyleDraftDto }>('/api/style-profiles/distill', { method: 'POST', body: JSON.stringify(body) }),
+  createStyleProfile: (body: StyleProfileCreateBody) =>
+    req<{ profileId: string; version: number }>('/api/style-profiles', { method: 'POST', body: JSON.stringify(body) }),
   summarizeChapter: (bookId: string, chapterNo: number) =>
     req<{ ok: boolean }>(`/api/books/${bookId}/chapters/${chapterNo}/summarize`, { method: 'POST', body: '{}' }),
   bindStyle: (bookId: string, body: StyleBindBody) =>

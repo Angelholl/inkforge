@@ -11,6 +11,7 @@ export interface BookDto {
   description: string;
   outline: string;
   styleProfileId?: string;
+  styleSnapshotJson?: string | null;
   imitationProfileId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -48,6 +49,8 @@ export interface RunDto {
   id: string;
   bookId: string;
   mode: 'generate' | 'continue';
+  /** run 种类：pipeline=生成管线；polish=批量校对 */
+  kind?: 'pipeline' | 'polish';
   status: RunStatus;
   chapterScope: { from: number; to: number };
   skipFailures: boolean;
@@ -245,6 +248,48 @@ export interface StyleProfileDto {
 export interface DistillStyleBody {
   name: string;
   text: string;
+  temperature?: number;
+  maxSegments?: number;
+}
+
+export interface SelfEvalItemDto {
+  score: number;
+  reason: string;
+}
+
+/** 蒸馏分析 draft（不入库；确认门后经 StyleProfileCreateBody 入库）。 */
+export interface DistillStyleDraftDto {
+  analysis: StyleAnalysisDto;
+  samples: string[];
+  evaluation: SelfEvalItemDto[];
+}
+
+export interface StyleProfileCreateBody {
+  name: string;
+  text: string;
+  analysis: StyleAnalysisDto;
+  samples: string[];
+  evaluation?: SelfEvalItemDto[];
+}
+
+// ── 蒸馏结构化档案（七维文本 + 六轴量化，MirrorNovel 对标；RULES 行保留为文本补充）──
+export const STYLE_DIMENSIONS = ['节奏', '对话', '描写', '情感基调', '写作特点', '特色词汇', '章节结构'] as const;
+export const STYLE_AXES = ['叙述温度', '语言密度', '叙述者姿态', '节奏', '幽默', '情绪表达'] as const;
+
+export type StyleDimension = (typeof STYLE_DIMENSIONS)[number];
+export type StyleAxis = (typeof STYLE_AXES)[number];
+
+export interface StyleTermDto {
+  term: string;
+  note: string;
+}
+
+export interface StyleAnalysisDto {
+  dims: Record<StyleDimension, string>;
+  axes: Record<StyleAxis, number>;
+  rules: string[];
+  /** 术语表（人名/地名/专有词与用法偏好；TERMS 行缺省为 []） */
+  terms?: StyleTermDto[];
 }
 
 // ── 拆解仿写（Pagekin 式）──

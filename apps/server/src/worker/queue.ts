@@ -5,6 +5,7 @@ import { backupBook } from '../db/backup';
 import { getRun, resumePoint, updateRunStatus, listSteps, takeoverStaleSteps } from '../db/repositories/runs';
 import { getChapter, setChapterStatus } from '../db/repositories/chapters';
 import { runChapterPipeline } from '../pipeline/chapter';
+import { runPolishChapter } from '../pipeline/polish';
 import { keepSystemAwake } from '../power';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -58,6 +59,24 @@ async function processRun(deps: QueueDeps, runId: string): Promise<void> {
       if (ac.signal.aborted) break;
       const chapter = getChapter(db, run.bookId, no);
       if (!chapter || !chapter.blueprint) continue;
+      if (run.kind === 'polish') {
+        // 批量校对（B10）：按 kind 分支，无 resumePoint 概念（本章一遍三 pass）
+        try {
+          await runPolishChapter({ db, provider, config, emit: () => {} }, { runId, bookId: run.bookId, chapterNo: no, signal: ac.signal });
+        } catch (e) {
+          const aborted = ac.signal.aborted || (e as Error).name === 'AbortError';
+          if (aborted) break;
+          setChapterStatus(db, chapter.id, 'needs_human');
+          if (!run.skipFailures) {
+            updateRunStatus(db, runId, 'failed', { endedAt: new Date().toISOString(), error: (e as Error).message });
+            return;
+          }
+          continue;
+        }
+        const curPolish = getRun(db, runId)!;
+        if (curPolish.status === 'paused' || curPolish.status === 'cancelled') break;
+        continue;
+      }
       const resume = resumePoint(db, runId, chapter.id);
       if (!resume) continue; // 本章已完成
       try {

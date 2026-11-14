@@ -34,3 +34,35 @@ export function pickFewShotSamples(text: string, opts?: { count?: number; minCha
   }
   return out;
 }
+
+/**
+ * few-shot 与 held-out 配对采样（自评用，B5）：滑窗同 pickFewShotSamples，
+ * fewShot 取前半窗（k<mid），heldOut 取 k≥mid+1 的后半窗——起点错开，跨组零字符重合；
+ * 文本 <200 字（滑窗不成窗）→ fewShot 与 heldOut 均为空，heldOut 恒不与 fewShot 共窗。
+ */
+export function pickFewShotAndHeldOut(
+  text: string,
+  opts?: { count?: number; minChars?: number; maxChars?: number; heldOutCount?: number },
+): { fewShot: string[]; heldOut: string[] } {
+  const count = opts?.count ?? 12;
+  const heldOutCount = opts?.heldOutCount ?? 2;
+  const minChars = opts?.minChars ?? 200;
+  const maxChars = opts?.maxChars ?? 400;
+  if (text.length < minChars) return { fewShot: [], heldOut: [] };
+  const windows: string[] = [];
+  for (let i = 0; i + minChars <= text.length && windows.length < 1000; i += minChars) {
+    const w = text.slice(i, Math.min(i + maxChars, text.length));
+    if (w.trim() !== '') windows.push(w);
+  }
+  if (windows.length < 2) return { fewShot: windows.slice(0, 1), heldOut: [] };
+  const mid = Math.max(1, Math.floor(windows.length / 2));
+  const pickEven = (arr: string[], n: number): string[] => {
+    if (arr.length === 0) return [];
+    const out: string[] = [];
+    for (let i = 0; i < n; i++) out.push(arr[Math.floor((i * arr.length) / n)]);
+    return out;
+  };
+  const fewShot = pickEven(windows.slice(0, mid), count);
+  const heldOut = mid + 1 < windows.length ? pickEven(windows.slice(mid + 1), heldOutCount) : [];
+  return { fewShot, heldOut };
+}

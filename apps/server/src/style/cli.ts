@@ -3,11 +3,18 @@ import { loadConfig } from '../config';
 import { openDb } from '../db/open';
 import { migrate } from '../db/migrate';
 import { createAnthropicProvider } from '../llm/anthropic';
-import { createDefaultMockProvider } from '../llm/mock';
+import { createMockProvider } from '../llm/mock';
 import { distillStyleProfile } from './distill';
 import { pickFewShotSamples, sampleReferenceText } from './sample';
 import { computeStyleMetrics } from './metrics';
 import fs from 'node:fs';
+
+/** CLI mock 文样：analyzeStyle 需 DIM/AXIS/RULES 行协议（parseAnalysis 缺行容错补默认，最小集即可）。 */
+const MOCK_ANALYSIS = `DIM: 节奏: 短句为主，段落 3-6 行。
+AXIS: 叙述温度: 60
+AXIS: 语言密度: 55
+RULES: 平均句长 10-20 字。
+RULES: 对话占比 20%-40%。`;
 
 /** CLI：pnpm --filter @inkforge/server exec tsx src/style/cli.ts distill --source <path> --name <名称> */
 async function main(): Promise<void> {
@@ -34,7 +41,7 @@ async function main(): Promise<void> {
   const config = loadConfig(process.env);
   const db = openDb(path.join(config.dataDir, 'inkforge.db'));
   migrate(db);
-  const provider = config.mock ? createDefaultMockProvider() : createAnthropicProvider(config.providers.local);
+  const provider = config.mock ? createMockProvider({ summarize: { text: MOCK_ANALYSIS } }) : createAnthropicProvider(config.providers.local);
   const samples = pickFewShotSamples(fs.readFileSync(sourcePath, 'utf8'));
   const segments = sampleReferenceText(fs.readFileSync(sourcePath, 'utf8'));
   const profileId = await distillStyleProfile({ db, provider }, { name, sourcePath, samples });

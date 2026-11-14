@@ -6,6 +6,7 @@ import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
 import { createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
+import type { DistillStyleDraftDto } from '@inkforge/shared';
 
 let dir: string;
 let db: Database;
@@ -14,6 +15,13 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 const SAMPLE_TEXT =
   '山风掠过松林，少年抬头望向远方。他说：“路还长。”夜色深沉，灯火摇曳。'.repeat(6);
 
+const ANALYSIS_TEXT = `DIM: 节奏: 短句为主，段落 3-6 行。
+DIM: 对话: 对话占比约三成，多短对答。
+AXIS: 叙述温度: 72
+AXIS: 语言密度: 55
+RULES: 平均句长 10-20 字。
+RULES: 对话占比 20%-40%。`;
+
 beforeAll(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-style-http-'));
   const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
@@ -21,9 +29,7 @@ beforeAll(async () => {
   app = await buildApp({
     config,
     provider: createMockProvider({ draft: { text: '样章。' }, qc: { text: '' }, summarize: { text: '摘要。' } }),
-    summarizerProvider: createMockProvider({
-      summarize: { text: 'RULES: 平均句长 15-25 字\nRULES: 对话占比 10-20%\nRULES: 叙事人称第三' },
-    }),
+    summarizerProvider: createMockProvider({ summarize: { text: ANALYSIS_TEXT } }),
     db,
     inlineQueue: true,
   });
@@ -43,35 +49,96 @@ afterAll(async () => {
   }
 });
 
-describe('POST /api/style-profiles/distill + GET /api/style-profiles', () => {
-  it('distill：注入 mock → 201 且列表可见 metrics 非空且 source_path=inline: 前缀', async () => {
-    const r = await app.inject({
-      method: 'POST',
-      url: '/api/style-profiles/distill',
-      payload: { name: '山风体', text: SAMPLE_TEXT },
-    });
-    expect(r.statusCode).toBe(201);
-    const { profileId } = r.json() as { profileId: string };
-    expect(profileId).toBeTruthy();
+async function distill(name = '山风体'): Promise<DistillStyleDraftDto> {
+  const r = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name, text: SAMPLE_TEXT } });
+  expect(r.statusCode).toBe(200);
+  return (r.json() as { draft: DistillStyleDraftDto }).draft;
+}
 
-    const list = await app.inject({ method: 'GET', url: '/api/style-profiles' });
-    expect(list.statusCode).toBe(200);
-    const rows = list.json() as Array<{ id: string; name: string; version: number; createdAt: string; metrics: Record<string, unknown>; sourcePath: string }>;
-    const row = rows.find((x) => x.id === profileId);
-    expect(row).toBeTruthy();
-    expect(row!.name).toBe('山风体');
-    expect(row!.sourcePath.startsWith('inline:')).toBe(true);
-    expect(row!.sourcePath.length).toBe(15);
-    expect(Object.keys(row!.metrics).length).toBeGreaterThan(0);
+describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
+  it('distill → 200 分析 draft（七维六轴+样本）且不入库', async () => {
+    const draft = await distill();
+    expect(draft.analysis.dims['节奏']).toBe('短句为主，段落 3-6 行。');
+    expect(draft.analysis.axes['叙述温度']).toBe(72);
+    expect(draft.analysis.rules.length).toBeGreaterThan(0);
+    expect(draft.samples.length).toBeGreaterThan(0);
+    const n = db.prepare('SELECT COUNT(*) AS n FROM style_profiles').get() as { n: number };
+    expect(n.n).toBe(0);
   });
 
-  it('空样本 → 400 固定文案', async () => {
+  it('distill 参数校验：temperature 越界 / maxSegments 越界 / 空样本 → 400', async () => {
+    const t1 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: 'x', text: SAMPLE_TEXT, temperature: 2 } });
+    expect(t1.statusCode).toBe(400);
+    const t2 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: 'x', text: SAMPLE_TEXT, maxSegments: 25 } });
+    expect(t2.statusCode).toBe(400);
+    const t3 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '空白', text: '   \n  ' } });
+    expect(t3.statusCode).toBe(400);
+    expect((t3.json() as { error: string }).error).toBe('样本为空，禁止蒸馏');
+  });
+
+  it('create → 201 入库：list 可见 inline 前缀与 metrics；同文二存 version+1 旧行不变', async () => {
+    const draft = await distill('山风体');
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/style-profiles',
+      payload: { name: '山风体', text: SAMPLE_TEXT, analysis: draft.analysis, samples: draft.samples },
+    });
+    expect(r.statusCode).toBe(201);
+    const { profileId, version } = r.json() as { profileId: string; version: number };
+    expect(version).toBe(1);
+
+    const list = await app.inject({ method: 'GET', url: '/api/style-profiles' });
+    const rows = list.json() as Array<{ id: string; name: string; version: number; metrics: Record<string, unknown>; sourcePath: string }>;
+    const row = rows.find((x) => x.id === profileId)!;
+    expect(row.name).toBe('山风体');
+    expect(row.sourcePath.startsWith('inline:')).toBe(true);
+    expect(row.sourcePath.length).toBe(15);
+    expect(Object.keys(row.metrics).length).toBeGreaterThan(0);
+
+    // 同文二存 → version 2，旧行 rules_json 逐字节不变
+    const draft2 = await distill('山风体');
+    const r2 = await app.inject({
+      method: 'POST',
+      url: '/api/style-profiles',
+      payload: { name: '山风体', text: SAMPLE_TEXT, analysis: draft2.analysis, samples: draft2.samples },
+    });
+    expect((r2.json() as { version: number }).version).toBe(2);
+    const rowsOld = db.prepare('SELECT rules_json FROM style_profiles WHERE id = ?').get(profileId) as { rules_json: string };
+    const rowsAll = db.prepare('SELECT rules_json FROM style_profiles ORDER BY version').all() as Array<{ rules_json: string }>;
+    expect(rowsAll[0].rules_json).toBe(rowsOld.rules_json);
+  });
+
+  it('maxSegments 收敛 few-shot 采样量：count=4 → draft.samples ≤4', async () => {
     const r = await app.inject({
       method: 'POST',
       url: '/api/style-profiles/distill',
-      payload: { name: '空白', text: '   \n  ' },
+      payload: { name: '收敛', text: SAMPLE_TEXT.repeat(20), maxSegments: 4 },
     });
-    expect(r.statusCode).toBe(400);
-    expect((r.json() as { error: string }).error).toBe('样本为空，禁止蒸馏');
+    expect(r.statusCode).toBe(200);
+    const draft = (r.json() as { draft: DistillStyleDraftDto }).draft;
+    expect(draft.samples.length).toBeLessThanOrEqual(4);
+    expect(draft.samples.length).toBeGreaterThan(0);
+  });
+
+  it('create 守卫：坏 analysis 形状 → 400；空 samples → 400；<200 字 → 400', async () => {
+    const draft = await distill('守卫测');
+    const badAnalysis = await app.inject({
+      method: 'POST',
+      url: '/api/style-profiles',
+      payload: { name: 'x', text: SAMPLE_TEXT, analysis: { dims: '不是对象', axes: {}, rules: [] }, samples: ['样本'] },
+    });
+    expect(badAnalysis.statusCode).toBe(400);
+    const noSamples = await app.inject({
+      method: 'POST',
+      url: '/api/style-profiles',
+      payload: { name: 'x', text: SAMPLE_TEXT, analysis: draft.analysis, samples: [] },
+    });
+    expect(noSamples.statusCode).toBe(400);
+    const short = await app.inject({
+      method: 'POST',
+      url: '/api/style-profiles',
+      payload: { name: 'x', text: '太短', analysis: draft.analysis, samples: ['样本'] },
+    });
+    expect(short.statusCode).toBe(400);
   });
 });

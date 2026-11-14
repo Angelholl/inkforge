@@ -6,7 +6,7 @@ import { parseOutline } from './llm/plainproto';
 import { repairPrompt } from './quality/l1';
 import { computeStyleMetrics } from './style/metrics';
 import { pickFewShotSamples, sampleReferenceText } from './style/sample';
-import { RULES_INSTRUCTION } from './style/distill';
+import { RULES_INSTRUCTION } from './style/analysis';
 
 const STRUCTURE_INSTRUCTION = `你是长篇结构分析师。阅读参考文本的抽样片段，输出该书整体叙事结构的拆解，格式为多行 STRUCTURE 行：
 STRUCTURE: <一条结构判断>

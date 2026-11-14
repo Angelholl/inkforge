@@ -1,4 +1,5 @@
-import type { ChapterBlueprint, Finding, OutlineCardDto, OutlineStageDto, OutlineTreeDto, OutlineVolumeDto } from '@inkforge/shared';
+import type { ChapterBlueprint, Finding, OutlineCardDto, OutlineStageDto, StyleTermDto, OutlineTreeDto, OutlineVolumeDto } from '@inkforge/shared';
+import { STYLE_AXES, STYLE_DIMENSIONS } from '@inkforge/shared';
 
 const KEYS = ['SEVERITY', 'DIMENSION', 'QUOTE', 'COMMENT'] as const;
 const SEVERITIES = new Set(['blocker', 'major', 'minor']);
@@ -318,4 +319,116 @@ export function parseOutlineTree(raw: string): ParsedOutlineTree {
   }
   if (tree.volumes.length === 0) errors.push('缺少 VOLUME 行');
   return { tree, errors };
+}
+
+// ── 蒸馏结构化分析（DIM:/AXIS:/RULES: 行协议）──
+
+export interface ParsedAnalysis {
+  dims: Record<string, string>;
+  axes: Record<string, number>;
+  rules: string[];
+  terms: StyleTermDto[];
+  errors: string[];
+}
+
+/** 蒸馏分析解析：DIM: <维度>: <文本> / AXIS: <轴名>: <0-100> / RULES: <规则> / TERMS: <术语>: <用法说明>。
+ *  缺行容错不抛——数值轴缺/非法补 0，文本维缺补 ''，术语缺补 []，越界钳制 0-100；未知维度/轴与非标记行记 errors。 */
+export function parseAnalysis(raw: string): ParsedAnalysis {
+  const errors: string[] = [];
+  const dims: Record<string, string> = {};
+  const axes: Record<string, number> = {};
+  const rules: string[] = [];
+  const terms: StyleTermDto[] = [];
+  for (const line of raw.replace(/\r\n/g, '\n').split('\n')) {
+    const text = line.trim();
+    if (text === '' || text.startsWith('```')) continue;
+    let m = /^DIM\s*[:：]\s*([^:：]+)\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      const name = m[1].trim();
+      if (!(STYLE_DIMENSIONS as readonly string[]).includes(name)) errors.push(`未知维度: ${name}`);
+      else dims[name] = m[2].trim();
+      continue;
+    }
+    m = /^AXIS\s*[:：]\s*([^:：]+)\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      const name = m[1].trim();
+      if (!(STYLE_AXES as readonly string[]).includes(name)) {
+        errors.push(`未知轴: ${name}`);
+        continue;
+      }
+      const n = Number(m[2].trim());
+      if (!Number.isFinite(n)) {
+        errors.push(`轴值非法: ${name}=${m[2].trim()}`);
+        axes[name] = 0;
+      } else {
+        axes[name] = Math.min(100, Math.max(0, Math.round(n)));
+      }
+      continue;
+    }
+    m = /^TERMS\s*[:：]\s*([^:：]+)\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      const term = m[1].trim();
+      if (term === '') errors.push(`术语为空: ${text}`);
+      else terms.push({ term, note: m[2].trim() });
+      continue;
+    }
+    m = /^RULES\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      if (m[1].trim() !== '') rules.push(m[1].trim());
+      continue;
+    }
+    errors.push(`无法识别的行: ${text}`);
+  }
+  for (const d of STYLE_DIMENSIONS) if (dims[d] === undefined) dims[d] = '';
+  for (const a of STYLE_AXES) if (axes[a] === undefined) axes[a] = 0;
+  return { dims, axes, rules, terms, errors };
+}
+
+// ── 蒸馏自评（SCORE:/REASON: 行协议，held-out 检验）──
+
+export interface SelfEvalItem {
+  score: number;
+  reason: string;
+}
+
+export interface ParsedSelfEval {
+  evaluation: SelfEvalItem[];
+  errors: string[];
+}
+
+/** 自评解析：SCORE:/REASON: 成对取（顺序配对，SCORE 缺 REASON 补空串）；SCORE 钳制 1-5；
+ *  孤儿 REASON 记 error；无任何 SCORE 行 → evaluation=[]（缺行容错不抛）。 */
+export function parseSelfEval(raw: string): ParsedSelfEval {
+  const errors: string[] = [];
+  const evaluation: SelfEvalItem[] = [];
+  let pending: { score: number } | null = null;
+  for (const line of raw.replace(/\r\n/g, '\n').split('\n')) {
+    const text = line.trim();
+    if (text === '' || text.startsWith('```')) continue;
+    let m = /^SCORE\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      if (pending) evaluation.push({ score: pending.score, reason: '' });
+      const n = Number(m[1].trim());
+      if (!Number.isFinite(n)) {
+        errors.push(`SCORE 非法: ${m[1].trim()}`);
+        pending = { score: 1 };
+      } else {
+        pending = { score: Math.min(5, Math.max(1, Math.round(n))) };
+      }
+      continue;
+    }
+    m = /^REASON\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      if (pending) {
+        evaluation.push({ score: pending.score, reason: m[1].trim() });
+        pending = null;
+      } else {
+        errors.push(`REASON 无对应 SCORE: ${m[1].trim().slice(0, 30)}`);
+      }
+      continue;
+    }
+    errors.push(`无法识别的行: ${text}`);
+  }
+  if (pending) evaluation.push({ score: pending.score, reason: '' });
+  return { evaluation, errors };
 }

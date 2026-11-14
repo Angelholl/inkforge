@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ChapterBlueprint, RunEvent, StepName } from '@inkforge/shared';
+import type { ChapterBlueprint, RunEvent, StepName, StyleTermDto } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import * as booksRepo from '../db/repositories/books';
 import * as chaptersRepo from '../db/repositories/chapters';
@@ -20,7 +20,7 @@ import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
 import { getLatestProfile } from '../style/distill';
 import { pickStyleSamples, renderStyleBlock } from '../style/inject';
-import { computeStyleMetrics } from '../style/metrics';
+import { computeStyleMetrics, type StyleMetrics } from '../style/metrics';
 import type { StyleSample } from '../style/distill';
 import { runSummarizeStep } from './summarize';
 
@@ -103,7 +103,19 @@ export async function runChapterPipeline(
     if (cur) prevTexts.push(cur.content);
   }
   // continue 续写：以锚点前文为声线基准启用 style_drift（经既有 softMajor 门控，零新增放行）
-  const voiceRefMetrics = runMode === 'continue' && prevTexts.length > 0 ? computeStyleMetrics(prevTexts.join('\n')) : undefined;
+  // generate+绑定档案：voice-match 基准取档案 metrics 快照（损坏 JSON 容错 undefined，DEC-2026-1115-04 批次二 B6）
+  let boundProfileMetrics: StyleMetrics | undefined;
+  if (book.styleProfileId && runMode === 'generate') {
+    const profile = getLatestProfile(db, book.styleProfileId);
+    if (profile) {
+      try {
+        boundProfileMetrics = JSON.parse(profile.metrics_json) as StyleMetrics;
+      } catch {
+        boundProfileMetrics = undefined;
+      }
+    }
+  }
+  const voiceRefMetrics = runMode === 'continue' && prevTexts.length > 0 ? computeStyleMetrics(prevTexts.join('\n')) : boundProfileMetrics;
   const hardRules = renderHardRules(targetChars);
 
   emit({ type: 'run.status', runId: args.runId, status: 'running', ts: now() });
@@ -160,14 +172,28 @@ export async function runChapterPipeline(
   try {
     // ── 风格注入素材（book 绑定档案时；0.1 挂机路径恒无档案 → 跳过）──
     let styleRulesText = '';
+    let styleTerms: StyleTermDto[] = [];
     let styleSamples: StyleSample[] = [];
     let styleSampleIds: string[] = [];
     if (book.styleProfileId && runMode !== 'continue') {
       const profile = getLatestProfile(db, book.styleProfileId);
       if (profile) {
-        const rulesData = JSON.parse(profile.rules_json) as { rulesText?: string };
+        // persona 快照优先（绑定时的档案副本，改档案不影响已绑定书），损坏/缺省回落档案现值
+        let rulesSource = profile.rules_json;
+        let samplesSource = profile.samples_json;
+        if (book.styleSnapshotJson) {
+          try {
+            const snap = JSON.parse(book.styleSnapshotJson) as { rulesJson?: string; samplesJson?: string };
+            if (snap.rulesJson) rulesSource = snap.rulesJson;
+            if (snap.samplesJson) samplesSource = snap.samplesJson;
+          } catch {
+            /* 损坏快照回落档案现值 */
+          }
+        }
+        const rulesData = JSON.parse(rulesSource) as { rulesText?: string; terms?: StyleTermDto[] };
         styleRulesText = rulesData.rulesText ?? '';
-        styleSamples = pickStyleSamples(JSON.parse(profile.samples_json) as StyleSample[], args.chapterNo);
+        styleTerms = rulesData.terms ?? [];
+        styleSamples = pickStyleSamples(JSON.parse(samplesSource) as StyleSample[], args.chapterNo);
         styleSampleIds = styleSamples.map((x) => x.id);
       }
     }
@@ -192,7 +218,7 @@ export async function runChapterPipeline(
             blueprint: blueprintText(blueprint),
             continuity: continuityText,
             prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
-            fewShot: styleSamples.length > 0 ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot) : undefined,
+            fewShot: styleSamples.length > 0 ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot, styleTerms) : undefined,
             task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }),
           },
           config.budgets.draft,
@@ -243,6 +269,8 @@ export async function runChapterPipeline(
         blueprint,
         continuity: { characters: snapshot.characters },
         voiceRefMetrics,
+        // 抄用检测接线（B6）：generate 模式以本次注入的 few-shot 样本为参考文本
+        referenceTexts: runMode === 'generate' && styleSamples.length > 0 ? styleSamples.map((s) => s.text) : undefined,
         cliches,
       });
       const l1: L1Report = await runL1Qc(

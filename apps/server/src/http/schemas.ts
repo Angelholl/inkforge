@@ -51,7 +51,7 @@ export const importOriginalSchema = z.object({
 });
 
 export const styleBindSchema = z.object({
-  profileId: z.string().min(1),
+  profileId: z.string().min(1).nullable(), // null=解绑并清快照
 });
 
 export const rewriteSelectionSchema = z.object({
@@ -64,6 +64,26 @@ export const cancelRunSchema = z.object({}).strict().optional();
 export const distillStyleSchema = z.object({
   name: z.string().min(1),
   text: z.string().min(1),
+  temperature: z.number().min(0).max(1).optional(),
+  maxSegments: z.number().int().min(4).max(20).optional(),
+});
+
+export const styleProfileCreateSchema = z.object({
+  name: z.string().min(1),
+  text: z.string().min(1),
+  analysis: z.object({
+    dims: z.record(z.string(), z.string()),
+    axes: z.record(z.string(), z.number()),
+    rules: z.array(z.string()),
+    terms: z.array(z.object({ term: z.string().min(1), note: z.string() })).optional(),
+  }),
+  samples: z.array(z.string().min(1)).min(1),
+  evaluation: z.array(z.object({ score: z.number().int().min(1).max(5), reason: z.string() })).optional(),
+});
+
+// 空串=恢复默认模板
+export const distillTemplatePutSchema = z.object({
+  template: z.string(),
 });
 
 export const outlineTreeSuggestSchema = z.object({ chapterCount: z.number().int().min(1).max(50) });
@@ -135,4 +155,9 @@ export const imitationSaveSchema = z.object({
 
 export const imitationBindSchema = z.object({
   profileId: z.string().min(1).nullable(),
+});
+
+export const polishSchema = z.object({
+  chapterFrom: z.number().int().positive(),
+  chapterTo: z.number().int().positive(),
 });

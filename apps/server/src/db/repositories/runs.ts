@@ -6,6 +6,8 @@ export interface Run {
   id: string;
   bookId: string;
   mode: 'generate' | 'continue';
+  /** run 种类：pipeline=生成管线；polish=批量校对（B10） */
+  kind: 'pipeline' | 'polish';
   status: RunStatus;
   chapterScope: { from: number; to: number };
   skipFailures: boolean;
@@ -37,6 +39,7 @@ interface RunRow {
   id: string;
   book_id: string;
   mode: string;
+  kind: string;
   status: string;
   chapter_scope_json: string;
   skip_failures: number;
@@ -69,6 +72,7 @@ function toRun(r: RunRow): Run {
     id: r.id,
     bookId: r.book_id,
     mode: r.mode as Run['mode'],
+    kind: (r.kind ?? 'pipeline') as Run['kind'],
     status: r.status as RunStatus,
     chapterScope: JSON.parse(r.chapter_scope_json) as { from: number; to: number },
     skipFailures: r.skip_failures === 1,
@@ -101,13 +105,13 @@ function toStep(r: StepRow): RunStep {
 
 export function createRun(
   db: Database,
-  input: { bookId: string; mode: 'generate' | 'continue'; chapterScope: { from: number; to: number }; maxRounds?: number; skipFailures?: boolean; salvagePartial?: boolean },
+  input: { bookId: string; mode: 'generate' | 'continue'; chapterScope: { from: number; to: number }; maxRounds?: number; skipFailures?: boolean; salvagePartial?: boolean; kind?: 'pipeline' | 'polish' },
 ): Run {
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(
-    'INSERT INTO runs(id, book_id, mode, chapter_scope_json, skip_failures, salvage_partial, max_rounds, created_at) VALUES(?,?,?,?,?,?,?,?)',
-  ).run(id, input.bookId, input.mode, JSON.stringify(input.chapterScope), input.skipFailures === false ? 0 : 1, input.salvagePartial === false ? 0 : 1, input.maxRounds ?? 2, now);
+    'INSERT INTO runs(id, book_id, mode, kind, chapter_scope_json, skip_failures, salvage_partial, max_rounds, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+  ).run(id, input.bookId, input.mode, input.kind ?? 'pipeline', JSON.stringify(input.chapterScope), input.skipFailures === false ? 0 : 1, input.salvagePartial === false ? 0 : 1, input.maxRounds ?? 2, now);
   return getRun(db, id)!;
 }
 

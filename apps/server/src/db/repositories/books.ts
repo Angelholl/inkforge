@@ -7,6 +7,8 @@ export interface Book {
   description: string;
   outline: string;
   styleProfileId: string | null;
+  /** persona 快照（bindStyle 时复制档案 rules/samples，后续改档案不影响已绑定书） */
+  styleSnapshotJson: string | null;
   imitationProfileId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -23,13 +25,14 @@ interface BookRow {
   description: string;
   outline: string;
   style_profile_id: string | null;
+  style_snapshot_json: string | null;
   imitation_profile_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, imitationProfileId: r.imitation_profile_id, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
@@ -43,6 +46,7 @@ export function createBook(
     description: input.description ?? '',
     outline: input.outline ?? '',
     styleProfileId: null,
+    styleSnapshotJson: null,
     imitationProfileId: null,
     createdAt: now,
     updatedAt: now,
@@ -89,9 +93,17 @@ export function listCharacters(db: Database, bookId: string): Array<{ id: string
   ).map((r) => ({ id: r.id, name: r.name, baseSetting: r.base_setting }));
 }
 
-export function setBookStyleProfile(db: Database, bookId: string, profileId: string | null): void {
-  db.prepare('UPDATE books SET style_profile_id = ?, updated_at = ? WHERE id = ?').run(
+/** 风格绑定/解绑：绑定且传 snapshot 时同步写 persona 快照（DEC-2026-1115-04 批次三）；解绑/未传清快照。 */
+export function setBookStyleProfile(
+  db: Database,
+  bookId: string,
+  profileId: string | null,
+  snapshot?: { profileId: string; version: number; rulesJson: string; samplesJson: string } | null,
+): void {
+  const snapshotJson = profileId && snapshot ? JSON.stringify({ ...snapshot, boundAt: new Date().toISOString() }) : null;
+  db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, updated_at = ? WHERE id = ?').run(
     profileId,
+    snapshotJson,
     new Date().toISOString(),
     bookId,
   );
