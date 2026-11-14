@@ -172,3 +172,25 @@
 2. 入口 A blueprint-suggest（chapterNo=4，前接 3 章 original 文）→ HTTP 200 / 13.1s，蓝图衔接前文场景。
 3. 冒烟实例已清理；挂机复跑已启动：bookId 7445327d（挂机-试炼之路）→ runId **0423945b**（20 章 generate，8787 生产服务 worker），首章已推进至 qc 步。晨检与 T05 语料采集（chapters 1/16/20）候 run 终态执行。
 4. 纪律生效中：挂机期间禁重启 8787/worker；桌面应用勿开启（抢 8787 端口）。
+
+## DEC-2026-1114-03 [主模型] 世界观/人物卡/剧情大纲功能扩展方案定案（2026-11-14）
+
+**背景：** owner 指令「添加世界观、人物卡、剧情大纲等功能」；本会话延续不外派模式，方案主模型自定归档（同 DEC-2026-1114-01 先例，无 critic 评议轮）。
+
+**裁决内容：**
+1. **方案按 docs/plans/2026-11-14-worldview-characters-outline.md 执行**：人物卡复用既有 characters 表（UNIQUE(book_id,name)+character_states 联动，createBook 已收 characters 入参）零新表；剧情大纲=books.outline 新列（migration 0004，user_version 3→4）；世界观维持 books.description 直存。注入面=draft 新增可选 stable characters 槽（worldview 之后）+ outline-suggest 新增 characters/outline 两槽；rewrite/blueprint-suggest 本轮不动（范围控制）。伏笔手动 CRUD 为「等功能」候选，明确不在本轮。
+2. **测试账本 200→211**（server +9、web +2），每 commit 点只增不减。
+3. **GUI 黑盒沿用 8789+临时 data 隔离**；8787 生产态零触碰（0423945b 已终态 done，挂机纪律解除）。
+
+## DEC-2026-1114-04 [OWNER] 装机四答：卸两装一/英文名 inkforge/升 0.2.0/暂不登录（2026-11-14）
+
+**背景：** owner 确认桌面安装版过时（两安装位 web 资源均为 11-12 旧构建）并亲答四问（AskUserQuestion 直答）。
+
+**裁决内容（owner 亲决）：**
+1. **桌面版**：两个旧安装（D:\墨炉、D:\墨炉0.2芽）**都卸载，只安装一个新的**；**安装后名称改英文 inkforge**（与项目一致）→ 覆盖 incident-0.2-t14-arp-hijack 原「卸芽+回装 0.1.2 物证」待决项（物证副本 0.1.2-rc-6e3dfd4b.exe 与 S 码存档不动）。
+2. **芽目录**：卸载（清被劫持的共享 ARP 键）。
+3. **版本号**：**升 0.2.0**（tauri.conf version 0.1.2→0.2.0，覆盖 DEC-2026-1114-01 冻结口径；tag/Release 仍不发，DEC-2026-1113-01/02 发版门维持）。
+4. **登录模块**：**暂不需要**（维持本地物理隔离；owner 提出的 GUI 登录诉求以此口径了结，功能开发聚焦世界观/人物卡/剧情大纲）。
+5. **productName 墨炉→inkforge** 随 T13 stamp 链生效（UNINSTKEY=inkforge 独立，根除 ARP 键冲突根因；窗口标题暂不动）。
+
+**回滚：** 卸载/重装为装机态动作，安装包可随时重建；代码侧为新增文件/新增键/页面重写，revert 可净回退，无数据迁移不可逆项（生产库 0004 迁移幂等顺序推进）。
