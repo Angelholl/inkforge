@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { api } from '../api/client';
+import OutlineTreeSection from './OutlineTreeSection';
 import type { CharacterDto, ChapterBlueprint, StyleProfileDto } from '@inkforge/shared';
 
 function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string) => void }) {
@@ -214,6 +215,8 @@ export default function BookDetailPage() {
           保存设定
         </button>
       </section>
+
+      {bookId && <OutlineTreeSection bookId={bookId} />}
 
       <section className="mt-6">
         <h2 className="font-semibold">人物卡</h2>

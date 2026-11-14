@@ -1,4 +1,4 @@
-import type { ChapterBlueprint, Finding } from '@inkforge/shared';
+import type { ChapterBlueprint, Finding, OutlineCardDto, OutlineStageDto, OutlineTreeDto, OutlineVolumeDto } from '@inkforge/shared';
 
 const KEYS = ['SEVERITY', 'DIMENSION', 'QUOTE', 'COMMENT'] as const;
 const SEVERITIES = new Set(['blocker', 'major', 'minor']);
@@ -241,4 +241,81 @@ export function parseOutline(raw: string, expectedCount?: number): ParsedOutline
     }
   }
   return { outline, errors };
+}
+
+// ── 三级大纲树（VOLUME:/STAGE:/CARD:/BODY: 行协议）──
+
+const CARD_RANGE = /第\s*(\d+)\s*[-—~至]\s*(\d+)\s*章/;
+
+export interface ParsedOutlineTree {
+  tree: OutlineTreeDto;
+  errors: string[];
+}
+
+/** 三级大纲树解析：STAGE 挂最近 VOLUME、CARD 挂最近 STAGE（孤儿行记 error 不抛）；
+ *  BODY 挂最近创建的节点（CARD 优先于 STAGE 优先于 VOLUME）；容忍 CRLF、代码围栏与多余空行。
+ *  CARD 章号区间正则 第<a>-<b>章（-—~至 皆可），缺区间 → chapterFrom/To=null；seq 按出现顺序 1..n 归一。 */
+export function parseOutlineTree(raw: string): ParsedOutlineTree {
+  const errors: string[] = [];
+  const tree: OutlineTreeDto = { volumes: [] };
+  let vol: OutlineVolumeDto | null = null;
+  let stage: OutlineStageDto | null = null;
+  let target: { body: string } | null = null;
+  for (const line of raw.replace(/\r\n/g, '\n').split('\n')) {
+    const text = line.trim();
+    if (text === '' || text.startsWith('```')) continue;
+    let m = /^VOLUME\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      vol = { title: m[1].trim(), body: '', seq: tree.volumes.length + 1, stages: [] };
+      stage = null;
+      target = vol;
+      tree.volumes.push(vol);
+      continue;
+    }
+    m = /^STAGE\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      if (!vol) {
+        errors.push(`STAGE 缺少所属卷: ${text}`);
+        continue;
+      }
+      stage = { title: m[1].trim(), body: '', seq: vol.stages.length + 1, cards: [] };
+      target = stage;
+      vol.stages.push(stage);
+      continue;
+    }
+    m = /^CARD\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      if (!stage) {
+        errors.push(`CARD 缺少所属阶段: ${text}`);
+        continue;
+      }
+      const rest = m[1].trim();
+      const r = CARD_RANGE.exec(rest);
+      const card: OutlineCardDto = r
+        ? {
+            title: rest.slice(r[0].length).trim(),
+            body: '',
+            seq: stage.cards.length + 1,
+            chapterFrom: Number(r[1]),
+            chapterTo: Number(r[2]),
+          }
+        : { title: rest, body: '', seq: stage.cards.length + 1, chapterFrom: null, chapterTo: null };
+      target = card;
+      stage.cards.push(card);
+      continue;
+    }
+    m = /^BODY\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      if (!target) {
+        errors.push(`BODY 缺少所属节点: ${text}`);
+        continue;
+      }
+      const content = m[1].trim();
+      target.body = target.body ? `${target.body}\n${content}` : content;
+      continue;
+    }
+    errors.push(`无法识别的行: ${text}`);
+  }
+  if (tree.volumes.length === 0) errors.push('缺少 VOLUME 行');
+  return { tree, errors };
 }

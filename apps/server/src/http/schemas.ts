@@ -65,3 +65,41 @@ export const distillStyleSchema = z.object({
   name: z.string().min(1),
   text: z.string().min(1),
 });
+
+export const outlineTreeSuggestSchema = z.object({ chapterCount: z.number().int().min(1).max(50) });
+
+// 整树替换：seq 不收（repo 归一）；chapterFrom/To 可空；缺省字段兜底空串/空数组
+export const outlineTreePutSchema = z.object({
+  tree: z.object({
+    volumes: z
+      .array(
+        z.object({
+          title: z.string().default(''),
+          body: z.string().default(''),
+          stages: z
+            .array(
+              z.object({
+                title: z.string().default(''),
+                body: z.string().default(''),
+                cards: z
+                  .array(
+                    z.object({
+                      title: z.string().default(''),
+                      body: z.string().default(''),
+                      chapterFrom: z.number().int().positive().nullable().optional(),
+                      chapterTo: z.number().int().positive().nullable().optional(),
+                    }),
+                  )
+                  .default([]),
+              }),
+            )
+            .default([]),
+        }),
+      )
+      .default([]),
+  }),
+});
+
+export const outlineCheckSchema = z.object({
+  upToChapter: z.number().int().positive().optional(),
+});

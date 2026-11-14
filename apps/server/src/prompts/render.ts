@@ -1,4 +1,4 @@
-import { DIMENSIONS, type ChapterBlueprint, type Finding } from '@inkforge/shared';
+import { DIMENSIONS, type ChapterBlueprint, type Finding, type OutlineCardDto, type OutlineTreeDto } from '@inkforge/shared';
 
 const LENGTH_RULE = (target: number) => `字数目标 ${target} 字，允许偏差 ±20%。`;
 
@@ -147,5 +147,59 @@ export function renderOutlineTask(args: { bookTitle: string; chapterCount: numbe
     `BEATS: 每行一条 2-4 节拍`,
     `HOOK: 结尾钩子一句`,
     `不要输出 JSON、markdown 代码块或任何解释；不要复述世界观原文；每块必须含 GOAL/BEATS/HOOK 三行。`,
+  ].join('\n');
+}
+
+/** 三级大纲树任务段：行协议 + 滚动卡区间要求 + 负约束。协议行前置保证 task 槽预算内不被截断。 */
+export function renderOutlineTreeTask(args: { bookTitle: string; chapterCount: number }): string {
+  return [
+    `【任务】为《${args.bookTitle}》拟三级大纲树：卷 → 阶段 → 滚动执行卡，全书共 ${args.chapterCount} 章。`,
+    `【滚动卡要求】每卡覆盖一段连续章号（如 第1-4章），全部卡的区间须连续铺满第 1..${args.chapterCount} 章。`,
+    `【输出格式】行协议，每行前缀必须是 VOLUME:/STAGE:/CARD:/BODY: 之一：`,
+    `VOLUME: <卷题>`,
+    `BODY: <卷级说明>`,
+    `STAGE: <阶段题>`,
+    `BODY: <阶段级说明>`,
+    `CARD: 第<a>-<b>章 <卡题>`,
+    `BODY: <该卡写作要点>`,
+    `STAGE 挂最近一个 VOLUME 之下，CARD 挂最近一个 STAGE 之下；每卷至少一个阶段，每阶段至少一张卡；不要输出 JSON、markdown 代码块或任何解释。`,
+  ].join('\n');
+}
+
+/** 已有三级树缩进单行摘要（suggest 注入防重复生成/保持上层延续）。 */
+export function renderOutlineTreeBrief(tree: OutlineTreeDto): string {
+  const lines: string[] = [];
+  for (const v of tree.volumes) {
+    lines.push(`卷${v.seq}: ${v.title}`);
+    for (const s of v.stages) {
+      lines.push(`  阶段${s.seq}: ${s.title}`);
+      for (const c of s.cards) {
+        const range = c.chapterFrom !== null && c.chapterTo !== null ? `第${c.chapterFrom}-${c.chapterTo}章 ` : '';
+        lines.push(`    卡: ${range}${c.title}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+/** outline-check 用卡安排清单（含章号区间的卡），body 为空时不带冒号。 */
+export function renderOutlineCardSchedule(cards: OutlineCardDto[]): string {
+  return cards
+    .map((c) => {
+      const range = c.chapterTo !== null ? `第${c.chapterFrom}-${c.chapterTo}章` : `第${c.chapterFrom}章起`;
+      return c.body ? `${range} ${c.title}：${c.body}` : `${range} ${c.title}`;
+    })
+    .join('\n');
+}
+
+/** outline-check 任务段：近 3 章摘要 vs 卡安排语义复核，自由文本报告。 */
+export function renderOutlineCheckTask(args: { summariesText: string; cardsText: string }): string {
+  return [
+    `【任务】对照「近 3 章摘要」与「大纲卡安排」，指出正文实际进展相对大纲安排的偏离：未按卡推进、章号跳跃、情节与卡安排冲突、节奏失衡。`,
+    `【输出格式】直接输出复核报告（分条列出；完全贴合则输出「无偏离」），不要 JSON、markdown 代码块或任何解释。`,
+    `【近 3 章摘要】`,
+    args.summariesText,
+    `【大纲卡安排】`,
+    args.cardsText,
   ].join('\n');
 }

@@ -153,6 +153,54 @@ export interface OutlineSuggestResult {
   source: 'llm';
 }
 
+// ── 三级大纲树（卷→阶段→滚动执行卡）──
+export interface OutlineCardDto {
+  title: string;
+  body: string;
+  seq: number;
+  chapterFrom: number | null;
+  chapterTo: number | null;
+}
+
+export interface OutlineStageDto {
+  title: string;
+  body: string;
+  seq: number;
+  cards: OutlineCardDto[];
+}
+
+export interface OutlineVolumeDto {
+  title: string;
+  body: string;
+  seq: number;
+  stages: OutlineStageDto[];
+}
+
+export interface OutlineTreeDto {
+  volumes: OutlineVolumeDto[];
+}
+
+export interface OutlineTreeSuggestBody {
+  chapterCount: number;
+}
+
+export interface OutlineTreeSuggestResult {
+  tree: OutlineTreeDto;
+  source: 'llm';
+}
+
+export interface OutlineTreeGetResult {
+  tree: OutlineTreeDto | null;
+}
+
+export interface OutlineCheckBody {
+  upToChapter?: number;
+}
+
+export interface OutlineCheckResult {
+  report: string;
+}
+
 export interface GenerateChapterBody {
   maxRounds?: number;
 }

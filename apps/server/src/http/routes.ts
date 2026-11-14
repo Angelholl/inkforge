@@ -13,18 +13,19 @@ import * as booksRepo from '../db/repositories/books';
 import * as chaptersRepo from '../db/repositories/chapters';
 import * as continuityRepo from '../db/repositories/continuity';
 import * as runsRepo from '../db/repositories/runs';
+import * as outlineRepo from '../db/repositories/outline';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, generateSchema, importOriginalSchema, rewriteSelectionSchema, styleBindSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, generateSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, updateCharacterSchema } from './schemas';
 import { distillStyleProfile } from '../style/distill';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { pickFewShotSamples } from '../style/sample';
 import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
-import { parseBlueprint, parseOutline } from '../llm/plainproto';
+import { parseBlueprint, parseOutline, parseOutlineTree } from '../llm/plainproto';
 import { repairPrompt } from '../quality/l1';
-import { renderBlueprintTask, renderCharacterCards, renderOutlineTask } from '../prompts/render';
+import { renderBlueprintTask, renderCharacterCards, renderOutlineCardSchedule, renderOutlineCheckTask, renderOutlineTask, renderOutlineTreeBrief, renderOutlineTreeTask } from '../prompts/render';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 
@@ -45,6 +46,12 @@ const outlineSuggestSchema = z.object({ chapterCount: z.number().int().min(1).ma
 
 const PLANNER_HARD_RULES =
   '【硬规则】你是长篇小说的策划编辑，只输出章节蓝图行协议；不要输出 JSON、markdown 代码块或任何解释。';
+
+const OUTLINE_TREE_HARD_RULES =
+  '【硬规则】你是长篇小说的策划编辑，只输出三级大纲树行协议（VOLUME:/STAGE:/CARD:/BODY:）；不要输出 JSON、markdown 代码块或任何解释。';
+
+const OUTLINE_CHECK_HARD_RULES =
+  '【硬规则】你是长篇小说的策划编辑，只输出大纲偏离复核报告（自由文本）；不要输出 JSON、markdown 代码块或任何解释。';
 
 export interface RouteState {
   db: Database;
@@ -264,6 +271,104 @@ ${repairPrompt(first.errors)}`))).text,
     }
     if (report.errors.length > 0) return reply.code(502).send({ error: 'outline parse failed', errors: report.errors });
     reply.send({ outline: report.outline, source: 'llm' });
+  });
+
+  // ── 三级大纲树（卷→阶段→滚动卡；suggest 产 draft 不入库，PUT 整树替换）──
+  app.post('/api/books/:bookId/outline-tree-suggest', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    const book = booksRepo.getBook(db, bookId);
+    if (!book) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, outlineTreeSuggestSchema, req.body);
+    if (!body) return;
+    const { chapterCount } = body;
+
+    const ob = config.budgets.outline;
+    const charactersText = renderCharacterCards(booksRepo.listCharacters(db, bookId));
+    // 注入已有上层节点上下文：防重复生成、保持与已存树的延续
+    const treeBrief = (() => {
+      const existing = outlineRepo.getOutlineTree(db, bookId);
+      return existing ? renderOutlineTreeBrief(existing) : '';
+    })();
+    const slots = [
+      { name: 'hardRules', content: OUTLINE_TREE_HARD_RULES, budgetChars: ob.hardRules, stable: true, keep: 'head' as const },
+      { name: 'worldview', content: book.description, budgetChars: ob.worldview, stable: false, keep: 'head' as const },
+      ...(charactersText ? [{ name: 'characters', content: charactersText, budgetChars: ob.characters, stable: false, keep: 'head' as const }] : []),
+      ...(book.outline ? [{ name: 'outline', content: book.outline, budgetChars: ob.outline, stable: false, keep: 'head' as const }] : []),
+      ...(treeBrief ? [{ name: 'existingTree', content: treeBrief, budgetChars: ob.outline, stable: false, keep: 'head' as const }] : []),
+      { name: 'task', content: renderOutlineTreeTask({ bookTitle: book.title, chapterCount }), budgetChars: ob.task, stable: false, keep: 'head' as const },
+    ];
+    const totalBudget = config.providers.local.contextWindow - config.providers.local.maxOutput - 500;
+    const assembled = assembleContext(slots, totalBudget);
+
+    const plannerProvider = state.plannerProvider ?? createRoleProvider(config, 'planner');
+    const baseReq = (user: string) => ({
+      system: assembled.system,
+      user,
+      temperature: 0.3,
+      topP: 0.9,
+      maxOutputTokens: config.providers.local.maxOutput,
+      timeoutMs: 180000,
+      meta: { step: 'summarize' as const, chapterNo: 1 },
+    });
+
+    const first = parseOutlineTree((await plannerProvider.complete(baseReq(assembled.user))).text);
+    let report = first;
+    if (first.errors.length > 0) {
+      report = parseOutlineTree(
+        (await plannerProvider.complete(baseReq(`${assembled.user}\n\n${repairPrompt(first.errors)}`))).text,
+      );
+    }
+    if (report.errors.length > 0) return reply.code(502).send({ error: 'outline-tree parse failed', errors: report.errors });
+    reply.send({ tree: report.tree, source: 'llm' });
+  });
+
+  app.get('/api/books/:bookId/outline-tree', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    reply.send({ tree: outlineRepo.getOutlineTree(db, bookId) });
+  });
+
+  app.put('/api/books/:bookId/outline-tree', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, outlineTreePutSchema, req.body);
+    if (!body) return;
+    outlineRepo.replaceOutlineTree(db, bookId, body.tree);
+    reply.send({ tree: outlineRepo.getOutlineTree(db, bookId) });
+  });
+
+  // 偏离复核：近 3 章摘要 vs 已存卡安排，LLM 语义复核，报告文本返回不入库
+  app.post('/api/books/:bookId/outline-check', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, outlineCheckSchema, req.body ?? {});
+    if (!body) return;
+
+    const tree = outlineRepo.getOutlineTree(db, bookId);
+    if (!tree) return reply.code(400).send({ error: '尚未保存大纲树，无法复核' });
+
+    // upToChapter 缺省取最大摘要章号；getRecentSummaries 语义为「before 章号之前」取窗，故 +1 含端点
+    const maxRow = db.prepare('SELECT MAX(chapter_no) AS n FROM chapter_summaries WHERE book_id = ?').get(bookId) as { n: number | null };
+    const upTo = body.upToChapter ?? maxRow.n ?? 0;
+    const summaries = continuityRepo.getRecentSummaries(db, bookId, upTo + 1, 3);
+    if (summaries.length === 0) return reply.code(400).send({ error: '该范围无章节摘要，请先生成或导入章节摘要' });
+
+    const summariesText = summaries.map((s) => `第${s.chapterNo}章: ${s.summary}`).join('\n');
+    const cards = tree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards)).filter((c) => c.chapterFrom !== null && c.chapterFrom <= upTo);
+    const cardsText = renderOutlineCardSchedule(cards);
+    if (cardsText === '') return reply.code(400).send({ error: '大纲树中无可比对的卡安排' });
+
+    const plannerProvider = state.plannerProvider ?? createRoleProvider(config, 'planner');
+    const res = await plannerProvider.complete({
+      system: OUTLINE_CHECK_HARD_RULES,
+      user: renderOutlineCheckTask({ summariesText, cardsText }),
+      temperature: 0.2,
+      topP: 0.9,
+      maxOutputTokens: config.providers.local.maxOutput,
+      timeoutMs: config.timeouts.summarize,
+      meta: { step: 'summarize' as const, chapterNo: upTo },
+    });
+    reply.send({ report: res.text });
   });
 
   const startRun = (reply: FastifyReply, bookId: string, scope: { from: number; to: number }, maxRounds?: number): void => {

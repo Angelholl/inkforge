@@ -6,6 +6,11 @@ import type {
   BlueprintSuggestBody,
   OutlineSuggestBody,
   OutlineSuggestResult,
+  OutlineTreeDto,
+  OutlineTreeSuggestBody,
+  OutlineTreeSuggestResult,
+  OutlineTreeGetResult,
+  OutlineCheckResult,
   CreateRunBody,
   ImportOriginalBody,
   ImportOriginalResult,
@@ -72,6 +77,23 @@ export const api = {
     req<OutlineSuggestResult>(`/api/books/${bookId}/outline-suggest`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  suggestOutlineTree: (bookId: string, body: OutlineTreeSuggestBody) =>
+    req<OutlineTreeSuggestResult>(`/api/books/${bookId}/outline-tree-suggest`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getOutlineTree: (bookId: string) =>
+    req<OutlineTreeGetResult>(`/api/books/${bookId}/outline-tree`),
+  putOutlineTree: (bookId: string, tree: OutlineTreeDto) =>
+    req<OutlineTreeGetResult>(`/api/books/${bookId}/outline-tree`, {
+      method: 'PUT',
+      body: JSON.stringify({ tree }),
+    }),
+  checkOutline: (bookId: string, upToChapter?: number) =>
+    req<OutlineCheckResult>(`/api/books/${bookId}/outline-check`, {
+      method: 'POST',
+      body: JSON.stringify(upToChapter ? { upToChapter } : {}),
     }),
   createRun: (body: CreateRunBody) => req<{ runId: string }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   getRun: (runId: string) => req<RunWithStepsDto>(`/api/runs/${runId}`),

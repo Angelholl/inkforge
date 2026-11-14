@@ -187,6 +187,7 @@ export function deleteBook(db: Database, id: string): boolean {
     db.prepare('DELETE FROM character_states WHERE character_id IN (SELECT id FROM characters WHERE book_id = ?)').run(id);
     db.prepare('DELETE FROM characters WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM foreshadowings WHERE book_id = ?').run(id);
+    db.prepare('DELETE FROM outline_nodes WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM books WHERE id = ?').run(id);
   });
   tx();
