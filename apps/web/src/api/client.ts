@@ -14,6 +14,10 @@ import type {
   ImitationAnalyzeBody,
   ImitationDraftDto,
   ImitationProfileDto,
+  ForeshadowingDto,
+  ForeshadowingCreateBody,
+  ForeshadowingUpdateBody,
+  ExportFormat,
   CreateRunBody,
   ImportOriginalBody,
   ImportOriginalResult,
@@ -129,7 +133,15 @@ export const api = {
   getVersion: (versionId: string) => req<VersionDto>(`/api/versions/${versionId}`),
   rollback: (versionId: string) =>
     req<{ ok: boolean; currentVersionId: string }>(`/api/versions/${versionId}/rollback`, { method: 'POST', body: '{}' }),
-  exportBook: (bookId: string) => req<{ files: string[] }>(`/api/books/${bookId}/export`, { method: 'POST', body: '{}' }),
+  exportBook: (bookId: string, format?: ExportFormat) =>
+    req<{ files: string[] }>(`/api/books/${bookId}/export${format ? `?format=${format}` : ''}`, { method: 'POST', body: '{}' }),
+  listForeshadowings: (bookId: string) => req<ForeshadowingDto[]>(`/api/books/${bookId}/foreshadowings`),
+  createForeshadowing: (bookId: string, body: ForeshadowingCreateBody) =>
+    req<ForeshadowingDto>(`/api/books/${bookId}/foreshadowings`, { method: 'POST', body: JSON.stringify(body) }),
+  updateForeshadowing: (bookId: string, foreshadowingId: string, body: ForeshadowingUpdateBody) =>
+    req<ForeshadowingDto>(`/api/books/${bookId}/foreshadowings/${foreshadowingId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteForeshadowing: (bookId: string, foreshadowingId: string) =>
+    req<{ ok: boolean }>(`/api/books/${bookId}/foreshadowings/${foreshadowingId}`, { method: 'DELETE', body: '{}' }),
   adoptPartial: (runId: string, chapterNo: number) =>
     req<VersionDto>(`/api/runs/${runId}/chapters/${chapterNo}/partial/adopt`, { method: 'POST', body: '{}' }),
   getReport: (runId: string) => req<ReportDto>(`/api/runs/${runId}/report`),

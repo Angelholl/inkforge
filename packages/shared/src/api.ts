@@ -257,6 +257,31 @@ export interface SelfEvalItemDto {
   reason: string;
 }
 
+// ── 伏笔 CRUD（三小件 C2）──
+export interface ForeshadowingDto {
+  id: string;
+  bookId: string;
+  description: string;
+  plantedCh: number;
+  advancedJson: string;
+  resolvedCh?: number;
+  status: 'open' | 'advanced' | 'resolved';
+}
+
+export interface ForeshadowingCreateBody {
+  description: string;
+  plantedCh: number;
+}
+
+export interface ForeshadowingUpdateBody {
+  description?: string;
+  plantedCh?: number;
+  status?: 'open' | 'advanced' | 'resolved';
+  resolvedCh?: number;
+}
+
+export type ExportFormat = 'chapters-md' | 'combined-md' | 'txt';
+
 /** 蒸馏分析 draft（不入库；确认门后经 StyleProfileCreateBody 入库）。 */
 export interface DistillStyleDraftDto {
   analysis: StyleAnalysisDto;

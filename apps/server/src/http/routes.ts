@@ -18,7 +18,7 @@ import * as imitationRepo from '../db/repositories/imitation';
 import { searchChapters } from '../db/repositories/fts';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzeStyle, saveStyleProfile } from '../style/analysis';
 import { pickFewShotAndHeldOut } from '../style/sample';
@@ -145,6 +145,43 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const { bookId, characterId } = req.params as { bookId: string; characterId: string };
     if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
     if (!booksRepo.deleteCharacter(db, bookId, characterId)) return reply.code(404).send({ error: 'not found' });
+    reply.send({ ok: true });
+  });
+
+  // ── 伏笔 CRUD（三小件 C2）──
+  app.get('/api/books/:bookId/foreshadowings', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    reply.send(continuityRepo.listForeshadowings(db, bookId));
+  });
+
+  app.post('/api/books/:bookId/foreshadowings', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, foreshadowingCreateSchema, req.body);
+    if (!body) return;
+    const id = continuityRepo.upsertForeshadowing(db, { bookId, description: body.description, plantedCh: body.plantedCh });
+    reply.code(201).send(continuityRepo.getForeshadowing(db, id));
+  });
+
+  app.put('/api/books/:bookId/foreshadowings/:foreshadowingId', async (req, reply) => {
+    const { bookId, foreshadowingId } = req.params as { bookId: string; foreshadowingId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, foreshadowingUpdateSchema, req.body);
+    if (!body) return;
+    try {
+      const updated = continuityRepo.updateForeshadowing(db, foreshadowingId, body);
+      if (!updated) return reply.code(404).send({ error: 'not found' });
+      reply.send(updated);
+    } catch (e) {
+      reply.code(400).send({ error: (e as Error).message });
+    }
+  });
+
+  app.delete('/api/books/:bookId/foreshadowings/:foreshadowingId', async (req, reply) => {
+    const { bookId, foreshadowingId } = req.params as { bookId: string; foreshadowingId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    if (!continuityRepo.deleteForeshadowing(db, foreshadowingId)) return reply.code(404).send({ error: 'not found' });
     reply.send({ ok: true });
   });
 
@@ -813,8 +850,14 @@ ${repairPrompt(first.errors)}`))).text,
     const { bookId } = req.params as { bookId: string };
     const book = booksRepo.getBook(db, bookId);
     if (!book) return reply.code(404).send({ error: 'not found' });
+    // C3 导出格式：query.format 枚举校验，缺省 chapters-md
+    const rawFormat = (req.query as { format?: string }).format ?? 'chapters-md';
+    const formats = ['chapters-md', 'combined-md', 'txt'] as const;
+    if (!formats.includes(rawFormat as (typeof formats)[number])) {
+      return reply.code(400).send({ error: `format 须为 ${formats.join('/')}` });
+    }
     const outDir = path.join(config.dataDir, 'exports', book.title.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 50));
-    reply.send(await exportBook(db, bookId, outDir));
+    reply.send(await exportBook(db, bookId, outDir, rawFormat as (typeof formats)[number]));
   });
 
   app.get('/api/books/:bookId/search', async (req, reply) => {

@@ -6,7 +6,15 @@ interface Props {
   onCreated?: () => void;
 }
 
-/** 选段重写：粘贴选段 + 指令 → 单轮 targeted 重写（新版本 kind=revised，不动 current 指针）。 */
+/** 段落四操作预设（DEC-2026-1115-04 三小件 C1，instruction 文案钉死）。 */
+export const SELECTION_PRESETS = [
+  { label: '续写', instruction: '从选段结尾自然续写 2-3 句，保持人称与时态' },
+  { label: '润色', instruction: '优化选段表达，不改情节与信息量' },
+  { label: '扩写', instruction: '在选段基础上扩写细节与感官描写，篇幅约增加一倍' },
+  { label: '改对话', instruction: '将选段叙述改写为人物对话呈现' },
+] as const;
+
+/** 选段重写：粘贴选段 + 指令（或四预设一键填充）→ 单轮 targeted 重写（新版本 kind=revised，不动 current 指针）。 */
 export function SelectionRewrite({ versionId, onCreated }: Props) {
   const [selection, setSelection] = useState('');
   const [instruction, setInstruction] = useState('');
@@ -39,9 +47,22 @@ export function SelectionRewrite({ versionId, onCreated }: Props) {
         value={selection}
         onChange={(e) => setSelection(e.target.value)}
       />
+      <div className="mt-2 flex flex-wrap gap-2">
+        {SELECTION_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            className="rounded bg-gray-200 px-3 py-1 text-sm"
+            aria-label={`预设-${p.label}`}
+            onClick={() => setInstruction(p.instruction)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       <input
         className="mt-2 w-full rounded border p-2 text-sm"
         placeholder="改写指令，例如：压缩到三分之一并去掉套话"
+        aria-label="改写指令"
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
       />

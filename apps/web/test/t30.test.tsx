@@ -79,4 +79,16 @@ describe('SelectionRewrite', () => {
     fireEvent.click(screen.getByText('提交选段重写'));
     expect(screen.getByText('选段与指令均不能为空')).toBeTruthy();
   });
+
+  it('段落四操作预设按钮填充钉死文案（C1）', () => {
+    render(<SelectionRewrite versionId="v1" />);
+    fireEvent.click(screen.getByLabelText('预设-续写'));
+    expect((screen.getByLabelText('改写指令') as HTMLInputElement).value).toBe('从选段结尾自然续写 2-3 句，保持人称与时态');
+    fireEvent.click(screen.getByLabelText('预设-润色'));
+    expect((screen.getByLabelText('改写指令') as HTMLInputElement).value).toBe('优化选段表达，不改情节与信息量');
+    fireEvent.click(screen.getByLabelText('预设-扩写'));
+    expect((screen.getByLabelText('改写指令') as HTMLInputElement).value).toBe('在选段基础上扩写细节与感官描写，篇幅约增加一倍');
+    fireEvent.click(screen.getByLabelText('预设-改对话'));
+    expect((screen.getByLabelText('改写指令') as HTMLInputElement).value).toBe('将选段叙述改写为人物对话呈现');
+  });
 });

@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { api } from '../api/client';
 import OutlineTreeSection from './OutlineTreeSection';
-import type { CharacterDto, ChapterBlueprint, StyleProfileDto } from '@inkforge/shared';
+import ForeshadowingsSection from './ForeshadowingsSection';
+import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleProfileDto } from '@inkforge/shared';
 
 function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string) => void }) {
   const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
@@ -178,18 +179,41 @@ export default function BookDetailPage() {
     }
   };
 
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('chapters-md');
+  const exportNow = async () => {
+    try {
+      const r = await api.exportBook(bookId, exportFormat);
+      setMsg(`已导出 ${r.files.length} 个文件（${exportFormat}）`);
+    } catch (e) {
+      setMsg(`导出失败：${(e as Error).message}`);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <Link to="/" className="text-sm text-gray-500">
         ← 书架
       </Link>
       <h1 className="mt-2 text-2xl font-bold">{book?.title ?? '…'}</h1>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={generateAll}>
           整书生成
         </button>
         <button className="rounded bg-gray-200 px-4 py-2" onClick={() => void refetch()}>
           刷新
+        </button>
+        <select
+          aria-label="导出格式"
+          className="rounded border px-2 py-2 text-sm"
+          value={exportFormat}
+          onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+        >
+          <option value="chapters-md">分章 Markdown</option>
+          <option value="combined-md">全书合并</option>
+          <option value="txt">分章 TXT</option>
+        </select>
+        <button className="rounded bg-gray-200 px-4 py-2 text-sm" onClick={() => void exportNow()}>
+          导出
         </button>
       </div>
 
@@ -217,6 +241,8 @@ export default function BookDetailPage() {
       </section>
 
       {bookId && <OutlineTreeSection bookId={bookId} />}
+
+      {bookId && <ForeshadowingsSection bookId={bookId} />}
 
       <section className="mt-6">
         <h2 className="font-semibold">人物卡</h2>

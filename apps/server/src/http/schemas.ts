@@ -161,3 +161,20 @@ export const polishSchema = z.object({
   chapterFrom: z.number().int().positive(),
   chapterTo: z.number().int().positive(),
 });
+
+export const foreshadowingCreateSchema = z.object({
+  description: z.string().min(1),
+  plantedCh: z.number().int().positive(),
+});
+
+// resolved 状态必须带 resolvedCh（C2 钉死）
+export const foreshadowingUpdateSchema = z
+  .object({
+    description: z.string().min(1).optional(),
+    plantedCh: z.number().int().positive().optional(),
+    status: z.enum(['open', 'advanced', 'resolved']).optional(),
+    resolvedCh: z.number().int().positive().optional(),
+  })
+  .refine((d) => d.status !== 'resolved' || d.resolvedCh !== undefined, {
+    message: 'resolved 状态必须带 resolvedCh',
+  });

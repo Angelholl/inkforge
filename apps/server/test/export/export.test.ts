@@ -57,3 +57,25 @@ describe('exportBook', () => {
     expect(fs.existsSync(path.join(outDir, '003-无版本章.md'))).toBe(false);
   });
 });
+
+describe('exportBook 三格式（C3）', () => {
+  it('combined-md：单个全书.md，章节以 --- 间隔', async () => {
+    const bookId = (db.prepare('SELECT id FROM books LIMIT 1').get() as { id: string }).id;
+    const { files } = await exportBook(db, bookId, outDir, 'combined-md');
+    expect(files).toEqual(['全书.md']);
+    const all = fs.readFileSync(path.join(outDir, '全书.md'), 'utf8');
+    expect(all).toContain('# 第1章 a/b:c');
+    expect(all).toContain('第二章正文内容。');
+    expect(all).toContain('\n\n---\n\n');
+    expect(all.indexOf('第一章正文内容。')).toBeLessThan(all.indexOf('第二章正文内容。'));
+  });
+
+  it('txt：分章无 # 标题行；未知格式由路由层拒绝（此处校验导出器接受枚举值）', async () => {
+    const bookId = (db.prepare('SELECT id FROM books LIMIT 1').get() as { id: string }).id;
+    const { files } = await exportBook(db, bookId, outDir, 'txt');
+    expect(files.sort()).toEqual(['001-a_b_c.txt', '002-正常章.txt']);
+    const c1 = fs.readFileSync(path.join(outDir, '001-a_b_c.txt'), 'utf8');
+    expect(c1).toContain('第一章正文内容。');
+    expect(c1.startsWith('# ')).toBe(false);
+  });
+});

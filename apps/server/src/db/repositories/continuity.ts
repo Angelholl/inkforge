@@ -68,7 +68,62 @@ export function upsertForeshadowing(
 }
 
 export function listForeshadowings(db: Database, bookId: string): Foreshadowing[] {
-  return db.prepare('SELECT * FROM foreshadowings WHERE book_id = ? ORDER BY planted_ch').all(bookId) as unknown as Foreshadowing[];
+  const rows = db.prepare('SELECT * FROM foreshadowings WHERE book_id = ? ORDER BY planted_ch').all(bookId) as Array<Record<string, unknown>>;
+  return rows.map(
+    (r) =>
+      ({
+        id: r.id,
+        bookId: r.book_id,
+        description: r.description,
+        plantedCh: r.planted_ch,
+        advancedJson: r.advanced_json,
+        resolvedCh: (r.resolved_ch as number | null) ?? undefined,
+        status: r.status,
+      }) as Foreshadowing,
+  );
+}
+
+export function getForeshadowing(db: Database, id: string): Foreshadowing | undefined {
+  const rows = db.prepare('SELECT * FROM foreshadowings WHERE id = ?').all(id) as Array<Record<string, unknown>>;
+  if (rows.length === 0) return undefined;
+  const r = rows[0];
+  return {
+    id: r.id,
+    bookId: r.book_id,
+    description: r.description,
+    plantedCh: r.planted_ch,
+    advancedJson: r.advanced_json,
+    resolvedCh: (r.resolved_ch as number | null) ?? undefined,
+    status: r.status,
+  } as Foreshadowing;
+}
+
+/** 更新伏笔（C2）：patch 合并；status=resolved 必须能落到 resolvedCh（请求带或已有），否则抛错。 */
+export function updateForeshadowing(
+  db: Database,
+  id: string,
+  patch: { description?: string; plantedCh?: number; status?: 'open' | 'advanced' | 'resolved'; resolvedCh?: number },
+): Foreshadowing | undefined {
+  const cur = db.prepare('SELECT * FROM foreshadowings WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  if (!cur) return undefined;
+  const status = patch.status ?? (cur.status as Foreshadowing['status']);
+  const resolvedCh = patch.resolvedCh ?? (cur.resolved_ch as number | null) ?? undefined;
+  if (status === 'resolved' && resolvedCh === undefined) {
+    throw new Error('resolved 状态必须带 resolvedCh');
+  }
+  db.prepare('UPDATE foreshadowings SET description=?, planted_ch=?, status=?, resolved_ch=? WHERE id=?').run(
+    patch.description ?? (cur.description as string),
+    patch.plantedCh ?? (cur.planted_ch as number),
+    status,
+    status === 'resolved' ? resolvedCh : (patch.resolvedCh ?? (cur.resolved_ch as number | null) ?? null),
+    id,
+  );
+  return getForeshadowing(db, id);
+}
+
+export function deleteForeshadowing(db: Database, id: string): boolean {
+  const r = db.prepare('DELETE FROM foreshadowings WHERE id = ?').run(id);
+  return r.changes > 0;
 }
 
 export function resolveForeshadowing(db: Database, id: string, chapterNo: number, status: 'advanced' | 'resolved'): void {
