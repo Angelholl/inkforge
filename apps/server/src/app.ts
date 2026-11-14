@@ -26,7 +26,7 @@ export interface BuildAppOptions {
  */
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  app.get('/api/health', async () => ({ ok: true, version: '0.1.2' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.2.0' }));
   if (!opts.config || !opts.provider) return app;
 
   const db = opts.db ?? openDb(path.join(opts.config.dataDir, 'inkforge.db'));
