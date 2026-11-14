@@ -1,97 +1,67 @@
-# 拍板批次实现计划（蒸馏一+二 / 流程一 / UI T-U1）
+# 拍板批次实现计划 v2（DEC-2026-1115-04 全范围，协议先行）
 
-**目标：** 落地 DEC-2026-1115-03 全部裁决项。
-**架构：** 零 DDL——结构化档案并入 style_profiles.rules_json（向后兼容）；确认门=HTTP distill 改纯分析不入库 + 显式 create 入库（draft 存前端态）；模板落 app_meta（key-value 既有表）；段落四操作纯 web 预设。
-**规格：** docs/design/2026-11-15-discuss-distill-upgrade.md + 2026-11-15-discuss-full-pipeline-benchmark.md + DEC-2026-1115-03。
+**目标：** 落地 DEC-2026-1115-04 全部裁决：协议双件（三级蓝图+拆解仿写）→ 蒸馏四批 → 三小件 → UI 三卡。
+**架构：** 零表重建——全部 DDL 并入单一 0005 迁移（NSIS 模板只补一次，DEC-2026-1114-05 教训）；polish run 不扩 runs.mode CHECK，用 `runs.kind` 附加列（ADD COLUMN，worker 按 kind 分支）；三级蓝图/仿写档案为新表；蒸馏结构化并入 rules_json；确认门=draft 前端态+显式入库（owner 已拍板确认门方向）。
+**规格：** DEC-2026-1115-04（owner 亲决 13 项）+ discuss-distill-upgrade.md + discuss-full-pipeline-benchmark.md。
 
 ## 全局约束
 
-- 行协议分隔符，禁 JSON（DEC-2026-1111-01 第 2 条）；AXIS:/DIM:/RULES:/SCORE:/REASON: 前缀行。
-- 分析输入规格：`sampleReferenceText(text, {segmentChars: 2000, maxSegments: 8})` ≈1.6 万字/次（MirrorNovel 20×2 万为云端规格；本地 tok/s 实测 15-20 分钟/章，40 万字输入不可承受，降规格为决策非遗漏）。
-- few-shot 存储=`pickFewShotSamples(text)` 12 段（现状不变）；held-out=独立均匀 2 段（起点与 few-shot 错开）。
-- rules_json 形状：`{rulesText, axes?, dims?, evaluation?}`——旧档案无新键，读侧一律 `?.` 容错。
-- 每任务收尾：vitest 定向绿 + commit（账本只增不减，基线 215）。
-- 现状修正登记：voice-match QC 续写模式**已接线**（chapter.ts:106 修正 F2 认知）；批次二补 generate 模式基准与抄用 referenceTexts。
+- 行协议分隔符禁 JSON（DEC-2026-1111-01 #2）；新协议前缀：`VOLUME:/STAGE:/CARD:/BODY:`（三级树）、`STRUCTURE:`（结构拆解）、`TERMS:`（术语）、`SCORE:/REASON:`（自评）、`AXIS:/DIM:/RULES:`（蒸馏）。
+- 分析输入规格：`sampleReferenceText(text,{segmentChars:2000,maxSegments:8})`（≈1.6 万字/次；本地 tok/s 实测 15-20 分钟/章，40 万字不可承受——决策非遗漏）。
+- 每任务收尾 vitest 定向绿 + commit；账本只增不减（基线 215）。
+- 现状锚点：voice-match QC 续写已接线（chapter.ts:106）；抄用检测已在 l0.ts（缺 generate referenceTexts 传参）；采样器已在 sample.ts。
+- GUI 目验策略：A/B/C 阶段的 web 改动随各自阶段目验；UI 三卡（D 阶段）收尾统一全页面目验矩阵（浅色 1280/1600）。
 
-## 任务 T-D1：分析管线重构（server）
+## 阶段 A：协议双件
 
-**文件：** Modify `apps/server/src/style/distill.ts`；Test `apps/server/test/style/distill.test.ts`（已有则追加）。
-**接口：** Produces `analyzeStyle(deps, {text, temperature?, maxSegments?}) → Promise<{sourceHash, sourcePath, axes, dims, rulesText, samples, heldOut, metrics}>`（sourcePath=`inline:<hash 前 8 位>`）；`saveStyleProfile(db, {name, analysis}) → string`；`distillStyleProfile` 签名不变（=analyze+save，CLI 兼容）。Produces 类型 `StyleAxes{narrativeTemp,langDensity,humor:number(1-5); narratorStance,rhythm,emotion:string}`、`StyleDims{rhythm,dialogue,description,tone,traits,vocab,chapterStructure:string}`。
-**步骤：**
-- [ ] 新增 `ANALYZE_INSTRUCTION`（AXIS n=六轴/DIM n=七维/RULES 5-10 行协议模板+输出格式说明）；`parseAnalysis(text) → {axes, dims, rulesText}`（解析容错：缺行→axes 数值 0/字符串 ''，测试锁缺行不抛）
-- [ ] `analyzeStyle`：采样 sampleReferenceText(2000×8) 拼分析输入；provider.complete(system:'你是文风分析师。', temperature 默认 0.3, meta.step='summarize')；heldOut/pickHeldOutSamples 内聚实现（windows 起点 floor((i+0.5)*len/count) 错开）
-- [ ] `saveStyleProfile`：version=sourceHash 递增逻辑迁入；rules_json=JSON.stringify({rulesText, axes, dims, evaluation})
-- [ ] 测试红→绿：①parseAnalysis 缺 AXIS 行不抛且 axes 全 0 ②analyzeStyle(mock) 返回 dims 七键 ③saveStyleProfile 同 source_hash 二次 version=2 ④旧形状 rules_json 读侧容错（getLatestProfile 返回原样）
+### A0 迁移 0005_round4_scope.sql（全轮 DDL 一次到位）
+- outline_nodes(id,book_id→books,parent_id TEXT NOT NULL DEFAULT ''（repo 层管层级，不设 FK 使 UNIQUE 生效）,level CHECK('volume','stage','card'),seq,title,body,chapter_from,chapter_to,created_at,UNIQUE(book_id,parent_id,level,seq))
+- imitation_profiles(id,name,source_path,source_hash,version,structure_json,style_json,blueprint_json,metrics_json,created_at)
+- ALTER books ADD imitation_profile_id TEXT / ADD style_snapshot_json TEXT；ALTER runs ADD kind TEXT NOT NULL DEFAULT 'pipeline'
+- **测试：** test/db 追加迁移断言（新表在、新列在、旧库 user_version 4→5 幂等）账本 +1
 
-## 任务 T-D2：HTTP 两步 API（server）
+### A1 三级蓝图（卷→阶段→滚动卡）
+- **解析：** plainproto.ts 加 `parseOutlineTree(raw) → {volumes:[{title,body,seq,stages:[{title,body,seq,cards:[{title,body,seq,chapterFrom,chapterTo}]}]}], errors}`；协议：`VOLUME: <题>` / `STAGE: <题>` / `CARD: 第<a>-<b>章 <题>` / `BODY: <文>`；STAGE 挂最近 VOLUME、CARD 挂最近 STAGE（孤儿行记 error 不抛）；章号区间正则 `第\s*(\d+)\s*[-—~至]\s*(\d+)\s*章`
+- **repo：** outline.ts（新）`replaceOutlineTree(db,bookId,tree)`（事务 delete+insert，seq 归一）、`getOutlineTree(db,bookId) → 树|null`
+- **路由：** `POST /api/books/:bookId/outline-tree-suggest {chapterCount 1-50}` → LLM 产树 draft 不入库（502 显性暴露沿 outline-suggest 先例）；`GET /api/books/:bookId/outline-tree`；`PUT …/outline-tree`（整树替换保存）；`POST …/outline-check {upToChapter?}` → 近 3 章摘要 vs 卡安排 LLM 语义复核 → 报告文本返回不入库
+- **注入面（本轮钉死）：** outline-tree-suggest prompt 附已有上层节点上下文；drafter/assembler 本轮不动（登记后续候选）
+- **测试：** parser 正例/孤儿/区间变体 +3；路由 draft 不入库→PUT 入库→GET 往返 +2；outline-check mock 报告 +1（账本 +6）
+- **GUI：** BookDetailPage 大纲分区升三级树（缩进展示/AI 生成/编辑/保存/偏离复核按钮），mock 态 502 显性暴露 + 手填兜底可用
 
-**文件：** Modify `apps/server/src/http/schemas.ts`(:64 distillStyleSchema)、`apps/server/src/http/routes.ts`(distill 路由)；Test `apps/server/test/http/style.test.ts` 追加。
-**接口：** Consumes T-D1 analyzeStyle/saveStyleProfile。distillStyleSchema+`{temperature?: number 0-1, maxSegments?: int 4-20}`；新增 `styleProfileCreateSchema = {name, axes?, dims?, rulesText, samples:[{id,text}] min1 max16, heldOut?, metrics?, evaluation?, sourcePath?}`。路由：`POST /api/style-profiles/distill` → 200 `{sourceHash, axes, dims, rulesText, samples, heldOut, metrics}`（不入库）；`POST /api/style-profiles` → 201 `{profileId}`（确认门入库）。旧 `GET /api/style-profiles` 不变。
-**步骤：**
-- [ ] schema 扩展 + 新 schema（zod）
-- [ ] distill 路由改 analyze 返回；create 路由新增（booksRepo 风格校验：samples 全空文本 → 400 '样本为空，禁止蒸馏'）
-- [ ] 既有 style.test.ts 中"distill 入库"断言改两步断言；新增：distill 200 不产生 style_profiles 行；create 201 产生；create samples 空 400
-- [ ] 账本 +3
+### A2 拆解仿写（Pagekin 式）
+- **管线：** imitation.ts（新）`analyzeImitation(deps,{name,text,chapterCount}) → ImitationDraft`：①structure——sampleReferenceText 8×2000 → `STRUCTURE:` 5-8 行；②style——复用 analyzeStyle（批次一产出七维六轴 RULES，B 阶段先落 A2 依赖其类型，接口对齐）；③blueprint——反推 chapterCount 章 `# 章号` 块协议（复用 parseOutline 校验）；draft 不入库
+- **repo：** imitation.ts repo `saveImitationProfile`（source_hash version+1 不可变）/`listImitationProfiles`/`getImitationProfile`/`deleteImitationProfile`；books 绑定 `setBookImitation(db,bookId,profileId|null)`（404 守卫沿 style 绑定先例）
+- **路由：** `POST /api/imitation-profiles/analyze`、`POST /api/imitation-profiles`、`GET /api/imitation-profiles`、`DELETE /api/imitation-profiles/:id`、`PUT /api/books/:bookId/imitation`
+- **注入面（本轮钉死）：** blueprint-suggest prompt 附结构摘要槽（planner 层）；drafter 不注入（Pagekin 红线：参考不混入正文）
+- **测试：** 路由 analyze draft 不入库/save/list/delete/绑定 404 +4；管线 mock 三调用形态 +2（账本 +6）
+- **GUI：** StyleProfilesSection 同页扩「仿写档案」分区（analyze→预览→确认→列表→绑定书）
 
-## 任务 T-D3：确认门 UI（web）
+## 阶段 B：蒸馏四批（依赖 A0/A2 类型骨架）
 
-**文件：** Rewrite `apps/web/src/pages/StyleProfilesSection.tsx`；Test `apps/web/src/pages/StyleProfilesSection.test.tsx` 追加；Modify `apps/web/src/api/client.ts`（distillStyle 返回类型改 StyleAnalysisDto、新增 createStyleProfile）。
-**接口：** Consumes T-D2 两端点。shared 新增 `StyleAnalysisDto`（packages/shared）。
-**步骤：**
-- [ ] shared 类型 + client 两方法
-- [ ] 组件三态：表单态→预览编辑态（六轴数值 input 1-5、七维 textarea、RULES textarea 可编辑、heldOut 自评分展示）→列表态；确认调 createStyleProfile、放弃清态
-- [ ] RTL：蒸馏(mock fetch 返回分析)→预览态出现→确认→列表 +1 行；账本 +2
+- **B1=T-D1 分析重构：** analyzeStyle/saveStyleProfile/parseAnalysis(AXIS/DIM/RULES 缺行容错：数值轴 0、文本轴 ''、不抛)；pickFewShotAndHeldOut（起点错开防重叠；文本<200 字 heldOut=[]）；distillStyleProfile 签名不变=analyze+save（CLI 兼容，显式 samples 优先）——账本 +4
+- **B2=T-D2 HTTP 两步：** distillStyleSchema+{temperature 0-1,maxSegments 4-20}；新 styleProfileCreateSchema；`POST /api/style-profiles/distill`→200 分析 draft 不入库；`POST /api/style-profiles`→201 入库——账本 +3
+- **B3=T-D3 确认门 UI：** StyleProfilesSection 三态（表单→预览编辑→列表）；shared StyleAnalysisDto；client distillStyle/createStyleProfile——账本 +2
+- **B4=T-D4 模板+参数：** app_meta key `distill_template`；GET/PUT `/api/settings/distill-template`（空串恢复默认）；distill 路由接模板+temperature/maxSegments；设置页模板编辑——账本 +4
+- **B5=T-D5 自评：** analyzeStyle 第二次调用 held-out 2 段，SCORE(1-5 钳制)/REASON 解析，缺行 evaluation=[]——账本 +2
+- **B6=T-D6 generate drift+抄用：** generate+绑定快照 → voiceRefMetrics=快照 metrics（损坏 JSON 容错 undefined）；referenceTexts=本次注入 3 段样本（仅 generate）——账本 +2
+- **B7 批次三：** persona 快照——bindStyle 时 rules_json+samples_json 复制存 books.style_snapshot_json（含 profileId/version/boundAt）；generate 读快照优先 fallback 档案现值；解绑清快照；`GET /api/style-profiles/:id/versions`（同 hash 版本列表）+ web 版本展开——账本 +3
+- **B8 批次三版本视图 web** 并入 B7——账本 +1
+- **B9 批次四术语表：** TERMS: 行协议入 rules_json.terms[{term,note}]；analyze 同批产出；预览编辑可改；renderStyleBlock 注入术语段（预算内截断）——账本 +2
+- **B10 批次四批量校对：** POST `/api/books/:id/polish {chapterFrom,chapterTo}` → run(mode='generate',kind='polish',scope)；worker processRun 按 kind 分支：逐章三 pass（结构重构→风格一致→去 AI 化，复用 rewrite 管线三次 provider 调用，step='rewrite' attempt=pass 序号）→ 单个 revised 版本；L0 基准=快照 metrics+few-shot referenceTexts；GET /api/runs 兼容不动——账本 +3
+- **CLI：** imitation CLI 本轮不做（HTTP only，登记）
 
-## 任务 T-D4：模板落库 + 高级参数（server+web）
+## 阶段 C：三小件
 
-**文件：** Modify `routes.ts`（settings 区）、`apps/web/src/pages/SettingsPage.tsx`；Test `apps/server/test/http/settings.test.ts` + SettingsPage.test.tsx 追加。
-**接口：** app_meta key=`distill_template`；`GET /api/settings/distill-template → {template, isDefault}`；`PUT …{template}`（空串=恢复默认）。distill 路由读 app_meta 覆盖默认模板；请求体 temperature/maxSegments 透传 analyzeStyle。
-**步骤：**
-- [ ] 常量 DEFAULT_DISTILL_TEMPLATE（=T-D1 模板）导出；GET/PUT 路由（PUT 写 app_meta）
-- [ ] distill 路由接模板与参数
-- [ ] 测试：PUT 后 GET 回读一致；PUT 空串→isDefault true；distill 用自定义模板（mock 断言 user 含标记词）——账本 +3
-- [ ] web 设置页模板 textarea+保存/恢复默认；RTL +1
+- **C1 段落四操作（web only）：** SelectionRewrite 四预设按钮，instruction 精确文案钉死（续写=『从选段结尾自然续写 2-3 句，保持人称与时态』/润色=『优化选段表达，不改情节与信息量』/扩写=『在选段基础上扩写细节与感官描写，篇幅约增加一倍』/改对话=『将选段叙述改写为人物对话呈现』）——账本 +1
+- **C2 伏笔 CRUD：** continuity.ts 加 create/update/delete（update resolved 须带 resolvedCh）；四路由 GET/POST/PUT/DELETE `/api/books/:bookId/foreshadowings`；BookDetailPage 伏笔分区——账本 +4
+- **C3 导出格式：** exportBook(db,bookId,outDir,format?:'chapters-md'|'combined-md'|'txt')；combined=`全书.md` 章节 `\n\n---\n\n` 间隔；txt=分章无 # 行；路由 query 枚举校验；web 导出下拉——账本 +2
 
-## 任务 T-D5：自评 held-out（server）
+## 阶段 D：UI 三卡（收尾统一目验）
 
-**文件：** Modify `distill.ts`（analyzeStyle 内第二次 provider.complete）；Test distill.test.ts 追加。
-**接口：** Consumes T-D1 heldOut。协议：`SCORE: <1-5>` + `REASON: <一句>`；解析容错缺行→不产 evaluation 项。mock 注入 `createMockProvider({summarize:{text:'SCORE: 4\nREASON: 节奏贴合'}})`。
-**步骤：**
-- [ ] analyzeStyle 加自评调用（temperature 0.2，meta.step='summarize'）；evaluation:[{sampleId, score(1-5 取整越界钳制), reason}] 附返回值
-- [ ] mock 模式自评测试：score=4 落 evaluation；解析缺 SCORE 行→evaluation=[] 不抛——账本 +2
-
-## 任务 T-D6：generate drift 基准 + 抄用 referenceTexts（server）
-
-**文件：** Modify `apps/server/src/pipeline/chapter.ts`(:106 附近)；Test `apps/server/test/pipeline/`（既有 chapter 管线测试文件追加）。
-**接口：** 语义钉死：generate+绑定档案 → voiceRefMetrics=JSON.parse(profile.metrics_json)（损坏 JSON→undefined 容错）且 referenceTexts=本次注入 3 段样本文本；continue 维持现状（prevTexts metrics）；referenceTexts 仅 generate 传。
-**步骤：**
-- [ ] chapter.ts 读绑定档案（setBookStyleProfile 已有绑定；getBook.styleProfileId）→ voiceRefMetrics/referenceTexts 双值接入 runL0Checks
-- [ ] 测试：mock 档案绑书+generate 单章 → l0 check details 含 style_drift；无绑定书 → 无 style_drift check——账本 +2
-
-## 任务 T-F1：段落四操作预设（web only）
-
-**文件：** Modify `apps/web/src/pages/SelectionRewrite.tsx`；Test 追加。
-**接口：** 四预设 instruction 精确文案（续写='从选段结尾自然续写 2-3 句，保持人称与时态'；润色='优化选段表达，不改情节与信息量'；扩写='在选段基础上扩写细节与感官描写，篇幅约增加一倍'；改对话='将选段叙述改写为人物对话呈现'）。
-**步骤：** [ ] 四按钮点击→instruction 填充→提交走既有 rewrite-selection；RTL：点「润色」→请求体 instruction=润色文案——账本 +1
-
-## 任务 T-F2：伏笔 CRUD（server+web）
-
-**文件：** Modify `apps/server/src/db/repositories/continuity.ts`、`routes.ts`、`schemas.ts`、`apps/web/src/pages/BookDetailPage.tsx`；Test `test/http/` 新文件 foreshadowings.test.ts + BookDetailPage.test.tsx 追加。
-**接口：** `createForeshadowing(db,{bookId,description,plantedCh}) → row`；`updateForeshadowing(db,bookId,id,{status?}) → boolean`（status IN open/advanced/resolved，resolved 须带 resolvedCh=当前章）；`deleteForeshadowing(db,bookId,id) → boolean`；list 已有。路由 GET(新)/POST/PUT/DELETE `/api/books/:bookId/foreshadowings`；schema `{description min1, plantedCh int≥1}`。
-**步骤：** [ ] repo 三函数（deleteBook 级联已覆盖 foreshadowings 清理，无需改）[ ] 四路由+schema [ ] server 测试：POST→GET 往返、PUT resolved、DELETE 404——账本 +3 [ ] BookDetailPage 伏笔分区（列表/添加/推进/删除）；RTL +1
-
-## 任务 T-F3：导出格式（server+web）
-
-**文件：** Modify `apps/server/src/export/export.ts`、export 路由；Test `test/export/` 追加。
-**接口：** `exportBook(db, bookId, outDir, format?: 'chapters-md'(默认|现状)|'combined-md'|'txt')`；combined=`全书标题.md`（章节间 `\n\n---\n\n`）；txt=分章 `{NNN}-{title}.txt`（无 # 标题行，首行章节名）。
-**步骤：** [ ] format 分支 [ ] 路由 query `?format=` 校验枚举 [ ] 测试三格式文件名断言——账本 +1 [ ] web 导出按钮下拉三选；RTL +1
-
-## 任务 T-U1：UI 壳（web，最后执行）
-
-**文件：** Rewrite `apps/web/src/index.css`(@theme token 表)、`App.tsx`(rail)；Modify `BooksPage.tsx`(卡片网格+chip 条)；`package.json` 加 lucide-react。
-**接口：** token 名对齐 SubTrans：--color-bg/--color-surface/--color-primary/--color-ok/--color-warn/--color-danger/--color-console-bg + spacing/radius/h-ctl；组件类硬编码色值清零。
-**步骤：** [ ] pnpm add lucide-react（web） [ ] @theme 表 [ ] AppShell rail（品牌块双行/分组导航/底部版本） [ ] BooksPage 卡片网格+流程 chip 条 [ ] lint/tsc/全量 [ ] web-gui-tester 黑盒（lessons 先调；8789 四件套；全页面浅色双分辨率截图）[ ] GUI 已验证注记
+- **D1：** index.css @theme token 表（SubTrans 对齐：bg #F3F4F6/surface/primary #3B82F6 系/ok/warn/danger/console-bg #0F172A+五分色/space 4-32/radius 8-16/h-ctl 36/字体族）；lucide-react；AppShell rail（品牌块仅「inkforge」+分组导航+底部版本；主题切换按钮不做）；BooksPage 卡片网格+流程 chip 条——组件硬编码色值清零
+- **D2：** 公共组件 Card/Badge/Chip/Console；BookDetailPage aside 运行控制卡+深色控制台（useRunEvents 五分色日志）+详情 chip 条
+- **D3：** 全页扫尾 NewBook/NewBookIdea/Reader/Diff/Settings token 化；web-gui-tester 全页面矩阵目验（lessons 先调；8789 四件套；1280/1600 双分辨率；GUI 已验证注记）
 
 ## 账本
 
-215 → T-D1 +4 / T-D2 +3 / T-D3 +2 / T-D4 +4 / T-D5 +2 / T-D6 +2 / T-F1 +1 / T-F2 +4 / T-F3 +2 / T-U1 +0（纯视觉，目验代测）= **239**。
+215 → A: +13 / B: +26 / C: +7 / D: +0（目验代测）≈ **261**。每 commit 点只增不减。
