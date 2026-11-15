@@ -293,3 +293,15 @@
 **风险登记（主模型注）：** 三级蓝图与拆解仿写均为 schema+协议级改造（migration 0005/0006、runs.mode 扩展需表重建、planner 行协议扩展）；本会话不外派无 critic 轮，设计风险由主模型亲担并在计划文档钉死关键决策；owner 可随时按决策日志驳回。
 
 **计划：** docs/plans/2026-11-15-decided-batches.md 按 04 修订为 v2（全范围+四阶段序）。
+
+## DEC-2026-1115-05 [OWNER] push 放行 + 发版形态①②拍板 + lessons 补登记令（2026-11-15）
+
+**背景：** 计划 v2 四阶段收口后进度盘点，owner 对三项待决以 AskUserQuestion 直答。
+
+**裁决内容（owner 亲决）：**
+
+1. **push 放行**：本地领先 origin/master 的 11 个提交（901dd2c..af7576e）当场推送（91cdd8d..af7576e，ls-remote 复核一致；DEC-2026-1113-06「任务结束后统一 push」口径执行，push 前远程核对无分叉）。
+2. **发版形态四问①②就此了结：tag+Release 上载安装包**（★非「仅 notes+S 码」）——GitHub Release 正文附安装包上载、tag 指向发布提交。0.2 发布门（20 章晨检等）未达标前不实际发出，本轮只定形态；达标后按此形态呈请执行，发版门精神延续。
+3. **lessons 补登记令**：上轮完成通知披露但未走 config-write 协议的四条教训当场补登记——L-20261115-01..04（GUI 目验前时机，轻量入清单：无状态 stub/幽灵实例甄别/stub 兜底 Array.isArray 防御/stable 槽进 system）；顺带修复上轮悬挂双射三笔（L-20261110-01/L-20261114-01/L-20261114-02 补 ✓ 状态行，UN 8→5）。
+
+**执行留痕：** 打点 C-20261115-1518 在先；一体命令 HARD=0 BACKUP-BASELINE-REFRESHED（锚点 20261115-1523 lines=134）+只读检查复跑 HARD=0；memory release012-owner-gates 同步刷新。登记口径勘正（code-reader 勘探实证）：「stable 槽」=hardRules/worldview/characters/styleRules 四固定槽进 system（fewShot/renderStyleBlock 属 volatile 走 user）；「Array.isArray」=web 侧 React Query fetch stub 兜底防御（非 server 解析层）。
