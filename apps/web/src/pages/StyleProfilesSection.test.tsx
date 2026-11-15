@@ -183,6 +183,20 @@ describe('StyleProfilesSection 三态确认门', () => {
     ]);
   });
 
+  it('文件导入 txt 灌入样本框', async () => {
+    distilled = false;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init)));
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('导入样本文件'), {
+      target: { files: [new File(['文件样本正文'], 's.txt', { type: 'text/plain' })] },
+    });
+    await waitFor(() =>
+      expect((screen.getByPlaceholderText(/粘贴风格样本/) as HTMLTextAreaElement).value).toBe('文件样本正文'),
+    );
+  });
+
   it('蒸馏失败（502/解析失败）显性暴露到消息行', async () => {
     distilled = false;
     vi.stubGlobal(

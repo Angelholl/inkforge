@@ -147,6 +147,18 @@ export default function StyleProfilesSection() {
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
+            <input
+              type="file"
+              accept=".txt,.md"
+              aria-label="导入样本文件"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => setText(String(reader.result ?? ''));
+                reader.readAsText(f);
+              }}
+            />
             <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void distill()}>
               蒸馏
             </button>
