@@ -12,6 +12,8 @@ export default function StyleProfilesSection() {
   const { data: profiles, refetch } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
   const [name, setName] = useState('');
   const [text, setText] = useState('');
+  const [maxSegments, setMaxSegments] = useState('');
+  const [temperature, setTemperature] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>('form');
@@ -23,7 +25,12 @@ export default function StyleProfilesSection() {
     setMsg('');
     setBusy(true);
     try {
-      const r = await api.distillStyle({ name: name.trim(), text });
+      const r = await api.distillStyle({
+        name: name.trim(),
+        text,
+        ...(maxSegments.trim() !== '' ? { maxSegments: Number(maxSegments) } : {}),
+        ...(temperature.trim() !== '' ? { temperature: Number(temperature) } : {}),
+      });
       setDraft({ analysis: r.draft.analysis, samples: r.draft.samples });
       setPhase('preview');
       setMsg('蒸馏完成（草稿未入库），可编辑后点「确认入库」');
@@ -161,6 +168,12 @@ export default function StyleProfilesSection() {
               }}
             />
             <BookSamplePicker onImport={setText} />
+            <div className="flex gap-2">
+              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样段数（4-20，留空默认）"
+                min={4} max={20} placeholder="采样段数（4-20）" value={maxSegments} onChange={(e) => setMaxSegments(e.target.value)} />
+              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样温度（0-1，留空默认）"
+                min={0} max={1} step="0.1" placeholder="采样温度（0-1）" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
+            </div>
             <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void distill()}>
               蒸馏
             </button>

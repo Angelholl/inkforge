@@ -272,6 +272,38 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(area.value).not.toContain('第21章');
   });
 
+  it('高级项随蒸馏提交、留空不传键', async () => {
+    distilled = false;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '高级测' } });
+    fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
+    fireEvent.change(screen.getByLabelText('采样段数（4-20，留空默认）'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('采样温度（0-1，留空默认）'), { target: { value: '0.5' } });
+    fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles/distill', expect.anything()));
+    const distillCall = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/style-profiles/distill'))!;
+    const body = JSON.parse(String((distillCall[1] as RequestInit).body));
+    expect(body.maxSegments).toBe(7);
+    expect(body.temperature).toBe(0.5);
+
+    // 清空后重蒸：不传键
+    distilled = false;
+    fireEvent.click(screen.getByRole('button', { name: '放弃' }));
+    fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '高级测2' } });
+    fireEvent.change(screen.getByLabelText('采样段数（4-20，留空默认）'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('采样温度（0-1，留空默认）'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
+    await waitFor(() => expect(screen.getByText('蒸馏完成（草稿未入库），可编辑后点「确认入库」')).toBeTruthy());
+    const calls = fetchMock.mock.calls.filter((c) => String(c[0]).endsWith('/api/style-profiles/distill'));
+    const body2 = JSON.parse(String((calls[calls.length - 1][1] as RequestInit).body));
+    expect(body2).not.toHaveProperty('maxSegments');
+    expect(body2).not.toHaveProperty('temperature');
+  });
+
   it('蒸馏失败（502/解析失败）显性暴露到消息行', async () => {
     distilled = false;
     vi.stubGlobal(
