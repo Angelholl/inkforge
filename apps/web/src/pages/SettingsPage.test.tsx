@@ -23,7 +23,6 @@ function jsonResponse(data: unknown, status = 200) {
 function stubFetch() {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') return jsonResponse({ saved: true, restartRequired: true });
-    if (url.endsWith('/api/style-profiles') && init?.method !== 'PUT') return jsonResponse([]);
     return jsonResponse(settingsResponse);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -84,5 +83,17 @@ describe('SettingsPage', () => {
       mock: true,
       strataApiKey: 'sk-test',
     });
+  });
+
+  it('设置页不再含蒸馏分区与风格档案表单', async () => {
+    stubFetch();
+    renderPage();
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('本地端点地址') as HTMLInputElement).value).toBe('https://api.example.com/v1'),
+    );
+    expect(screen.queryByLabelText('蒸馏模板')).toBeNull();
+    expect(screen.queryByText('风格档案')).toBeNull();
+    expect(screen.queryByPlaceholderText('档案名称')).toBeNull();
   });
 });
