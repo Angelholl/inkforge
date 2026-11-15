@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAnalysisDto, type StyleProfileDto } from '@inkforge/shared';
 import ImitationProfilesSection from './ImitationProfilesSection';
+import BookSamplePicker from './BookSamplePicker';
 
 type Phase = 'form' | 'preview';
 
@@ -159,6 +160,7 @@ export default function StyleProfilesSection() {
                 reader.readAsText(f);
               }}
             />
+            <BookSamplePicker onImport={setText} />
             <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void distill()}>
               蒸馏
             </button>

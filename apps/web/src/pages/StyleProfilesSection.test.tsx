@@ -14,6 +14,14 @@ const PROFILE = {
 
 const PROFILE2 = { ...PROFILE, id: 'sp2', name: '新档案' };
 
+const BOOK_B1 = { id: 'b1', title: '样本之书', description: '', outline: '', createdAt: '', updatedAt: '' };
+const BOOK_B2 = { id: 'b2', title: '长篇之书', description: '', outline: '', createdAt: '', updatedAt: '' };
+const B1_CHAPTERS = [
+  { chapterNo: 1, title: '章标题1', currentVersionId: 'ver-old' },
+  { chapterNo: 2, title: '章标题2' },
+];
+const B2_CHAPTERS = Array.from({ length: 21 }, (_, i) => ({ chapterNo: i + 1, title: `章标题${i + 1}` }));
+
 const DRAFT = {
   analysis: {
     dims: { 节奏: '短句为主', 对话: '三成', 描写: '', 情感基调: '', 写作特点: '', 特色词汇: '', 章节结构: '' },
@@ -46,6 +54,31 @@ function fetchFor(url: string, init?: RequestInit): Response {
       ]),
       { status: 200 },
     );
+  }
+  if (url.endsWith('/api/books') && (!init?.method || init.method === 'GET')) {
+    return new Response(JSON.stringify([BOOK_B1, BOOK_B2]), { status: 200 });
+  }
+  if (url.endsWith('/api/books/b1')) {
+    return new Response(JSON.stringify({ ...BOOK_B1, chapters: B1_CHAPTERS, runs: [] }), { status: 200 });
+  }
+  if (url.endsWith('/api/books/b2')) {
+    return new Response(JSON.stringify({ ...BOOK_B2, chapters: B2_CHAPTERS, runs: [] }), { status: 200 });
+  }
+  if (url.includes('/api/books/b1/chapters/1/versions')) {
+    return new Response(
+      JSON.stringify([
+        { id: 'ver-new', content: '新版正文一' },
+        { id: 'ver-old', content: '旧版正文一' },
+      ]),
+      { status: 200 },
+    );
+  }
+  if (url.includes('/api/books/b1/chapters/2/versions')) {
+    return new Response(JSON.stringify([{ id: 'v2a', content: '唯一正文二' }]), { status: 200 });
+  }
+  if (url.includes('/api/books/b2/chapters/') && url.includes('/versions')) {
+    const no = Number(url.match(/chapters\/(\d+)\/versions/)![1]);
+    return new Response(JSON.stringify([{ id: `v-${no}`, content: `正文${no}` }]), { status: 200 });
   }
   return new Response('[]', { status: 200 });
 }
@@ -195,6 +228,48 @@ describe('StyleProfilesSection 三态确认门', () => {
     await waitFor(() =>
       expect((screen.getByPlaceholderText(/粘贴风格样本/) as HTMLTextAreaElement).value).toBe('文件样本正文'),
     );
+  });
+
+  it('选书带章：current 版本判定、空章跳过与分隔行拼接', async () => {
+    distilled = false;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '从书架选书' }));
+    fireEvent.change(await waitFor(() => screen.getByLabelText('选择书籍')), { target: { value: 'b1' } });
+    const ch1 = await waitFor(() => screen.getByLabelText('选择第1章 章标题1') as HTMLInputElement);
+    fireEvent.click(ch1);
+    fireEvent.click(screen.getByLabelText('选择第2章 章标题2'));
+    fireEvent.click(screen.getByRole('button', { name: '导入所选 2 章' }));
+
+    const area = screen.getByPlaceholderText(/粘贴风格样本/) as HTMLTextAreaElement;
+    await waitFor(() =>
+      expect(area.value).toBe('【第1章 章标题1】\n旧版正文一\n\n【第2章 章标题2】\n唯一正文二'),
+    );
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/books/b1/chapters/1/versions'))).toBe(true);
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/books/b1/chapters/2/versions'))).toBe(true);
+  });
+
+  it('20 章上限：达 20 后禁选并提示', async () => {
+    distilled = false;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init)));
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '从书架选书' }));
+    fireEvent.change(await waitFor(() => screen.getByLabelText('选择书籍')), { target: { value: 'b2' } });
+    for (let n = 1; n <= 20; n++) {
+      fireEvent.click(await waitFor(() => screen.getByLabelText(`选择第${n}章 章标题${n}`)));
+    }
+    expect((screen.getByLabelText('选择第21章 章标题21') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText('最多可选 20 章（对齐采样基准）')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '导入所选 20 章' }));
+
+    const area = screen.getByPlaceholderText(/粘贴风格样本/) as HTMLTextAreaElement;
+    await waitFor(() => expect((area.value.match(/【第\d+章 /g) ?? []).length).toBe(20));
+    expect(area.value).not.toContain('第21章');
   });
 
   it('蒸馏失败（502/解析失败）显性暴露到消息行', async () => {
