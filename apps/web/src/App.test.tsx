@@ -21,7 +21,8 @@ function renderShell(initialPath: string) {
         <Routes>
           <Route element={<App />}>
             <Route path="/" element={<div>书架占位</div>} />
-            <Route path="/styles" element={<Navigate to="/settings" replace />} />
+            <Route path="/styles" element={<Navigate to="/distill" replace />} />
+            <Route path="/distill" element={<div>蒸馏页标记</div>} />
             <Route path="/settings" element={<div>设置页标记</div>} />
           </Route>
         </Routes>
@@ -32,11 +33,12 @@ function renderShell(initialPath: string) {
 }
 
 describe('App 壳（D1 rail）', () => {
-  it('rail 渲染四导航且激活态跟随当前路由', () => {
+  it('rail 渲染五导航且激活态跟随当前路由', () => {
     renderShell('/');
     expect(screen.getByRole('link', { name: '书架' }).getAttribute('href')).toBe('/');
     expect(screen.getByRole('link', { name: '新书' }).getAttribute('href')).toBe('/new');
     expect(screen.getByRole('link', { name: '续写' }).getAttribute('href')).toBe('/continue');
+    expect(screen.getByRole('link', { name: '蒸馏' }).getAttribute('href')).toBe('/distill');
     expect(screen.getByRole('link', { name: '设置' }).getAttribute('href')).toBe('/settings');
 
     const bookshelf = screen.getByRole('link', { name: '书架' });
@@ -45,8 +47,14 @@ describe('App 壳（D1 rail）', () => {
     expect(screen.getByText('inkforge')).toBeTruthy(); // 品牌块仅「inkforge」
   });
 
-  it('/styles 重定向至 /settings', () => {
+  it('/styles 重定向至 /distill', () => {
     renderShell('/styles');
-    expect(screen.getByText('设置页标记')).toBeTruthy();
+    expect(screen.getByText('蒸馏页标记')).toBeTruthy();
+  });
+
+  it('蒸馏 TAB 激活态跟随路由', () => {
+    renderShell('/distill');
+    expect(screen.getByRole('link', { name: '蒸馏' }).className).toContain('bg-primary-soft');
+    expect(screen.getByRole('link', { name: '书架' }).className).not.toContain('bg-primary-soft');
   });
 });

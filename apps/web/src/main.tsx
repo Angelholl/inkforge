@@ -7,6 +7,7 @@ import BooksPage from './pages/BooksPage';
 import NewBookIdeaPage from './pages/NewBookIdeaPage';
 import NewBookPage from './pages/NewBookPage';
 import SettingsPage from './pages/SettingsPage';
+import DistillPage from './pages/DistillPage';
 import BookDetailPage from './pages/BookDetailPage';
 import RunPage from './pages/RunPage';
 import ChapterReaderPage from './pages/ChapterReaderPage';
@@ -27,12 +28,13 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/new" element={<NewBookIdeaPage />} />
             <Route path="/continue" element={<NewBookPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/distill" element={<DistillPage />} />
             <Route path="/books/:bookId" element={<BookDetailPage />} />
             <Route path="/books/:bookId/chapters/:chapterNo" element={<ChapterReaderPage />} />
             <Route path="/books/:bookId/chapters/:chapterNo/diff" element={<DiffPage />} />
             <Route path="/runs/:runId" element={<RunPage />} />
             <Route path="/runs/:runId/dashboard" element={<DashboardPage />} />
-            <Route path="/styles" element={<Navigate to="/settings" replace />} />
+            <Route path="/styles" element={<Navigate to="/distill" replace />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

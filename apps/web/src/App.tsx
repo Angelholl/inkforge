@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router';
-import { BookMarked, FilePlus2, PenLine, Settings } from 'lucide-react';
+import { BookMarked, FilePlus2, FlaskConical, PenLine, Settings } from 'lucide-react';
 import { api } from './api/client';
 
 /** rail 导航项（D1）：主色高亮当前项，图标+文字，h-ctl 控件高。 */
@@ -33,6 +33,7 @@ export default function AppShell() {
           <RailLink to="/" end label="书架" icon={<BookMarked size={16} />} />
           <RailLink to="/new" label="新书" icon={<FilePlus2 size={16} />} />
           <RailLink to="/continue" label="续写" icon={<PenLine size={16} />} />
+          <RailLink to="/distill" label="蒸馏" icon={<FlaskConical size={16} />} />
           <div className="px-3 pb-1 pt-4 text-xs text-faint">系统</div>
           <RailLink to="/settings" label="设置" icon={<Settings size={16} />} />
         </nav>
