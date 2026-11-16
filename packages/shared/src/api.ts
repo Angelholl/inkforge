@@ -258,7 +258,8 @@ export interface ImportOriginalResult {
 }
 
 export interface StyleBindBody {
-  profileId: string;
+  /** null = 解绑（服务端 styleBindSchema 早已接受，web 类型此前滞后） */
+  profileId: string | null;
 }
 
 export interface RewriteSelectionBody {

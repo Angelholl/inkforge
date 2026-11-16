@@ -1,18 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
-import { api } from '../api/client';
+import { api, apiErrorText } from '../api/client';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
 import { Button, Chip } from '../components/ui';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleProfileDto } from '@inkforge/shared';
 
-function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string) => void }) {
+function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string | null) => void }) {
   const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
   const list = Array.isArray(profiles) ? profiles : [];
   return (
-    <select className="rounded border px-2 py-1" value={currentProfileId ?? ''} onChange={(e) => e.target.value && onBind(e.target.value)}>
+    <select
+      aria-label="风格档案绑定"
+      className="rounded border px-2 py-1"
+      value={currentProfileId ?? ''}
+      onChange={(e) => onBind(e.target.value === '' ? null : e.target.value)}
+    >
       <option value="">（未绑定）</option>
       {list.map((p: StyleProfileDto) => (
         <option key={p.id} value={p.id}>
@@ -111,10 +116,11 @@ export default function BookDetailPage() {
     setMsg(`整书已入队 run ${r.runId}`);
   };
 
-  const bindStyle = async (profileId: string) => {
+  const bindStyle = async (profileId: string | null): Promise<void> => {
     try {
       await api.bindStyle(bookId, { profileId });
-      setMsg('风格档案已绑定');
+      // 解绑必须真发出去（缺陷⑦）：文案也分两条，别让人以为还是「绑定」
+      setMsg(profileId === null ? '风格档案已解绑（persona 快照一并清除）' : '风格档案已绑定');
       void refetch();
     } catch (e) {
       setMsg(`绑定失败：${(e as Error).message}`);
@@ -372,6 +378,31 @@ export default function BookDetailPage() {
           )}
         </div>
         <p className="mt-1 text-xs text-faint">续写（continue）模式不注入风格，仅生成模式生效。</p>
+        {book?.styleProfileId && (
+          <div className="mt-2">
+            <label htmlFor="book-style-fewshot" className="flex items-center gap-2 text-sm font-medium">
+              <input
+                id="book-style-fewshot"
+                type="checkbox"
+                checked={book.styleFewshotOn}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  void api
+                    .setBookFewshot(bookId, next)
+                    .then((r) => {
+                      setMsg(r.styleFewshotOn ? '文风示例注入已开启' : '文风示例注入已关闭');
+                      void refetch();
+                    })
+                    .catch((err: unknown) => setMsg(apiErrorText(err)));
+                }}
+              />
+              文风示例注入
+            </label>
+            <p className="mt-1 text-xs text-faint">
+              关闭后不向写手注入范文片段；抄用检测仍以绑定样本为参考，不随开关关闭。新绑定默认关。
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="mt-6">

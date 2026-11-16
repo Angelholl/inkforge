@@ -69,6 +69,13 @@ export function apiErrorText(e: unknown): string {
   return msg;
 }
 
+/** 取 req 抛错里的响应体原文（"METHOD url → STATUS: 这里" 的「这里」）；需要读结构化错误字段（如 409 的 books 列表）时用。 */
+export function apiErrorBody(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  const i = msg.lastIndexOf(': ');
+  return i >= 0 ? msg.slice(i + 2) : msg;
+}
+
 export const api = {
   health: () => req<HealthDto>('/api/health'),
   listBooks: () => req<BookDto[]>('/api/books'),
@@ -180,6 +187,11 @@ export const api = {
     req<{ draft: DistillStyleDraftDto }>('/api/style-profiles/distill', { method: 'POST', body: JSON.stringify(body) }),
   createStyleProfile: (body: StyleProfileCreateBody) =>
     req<{ profileId: string; version: number }>('/api/style-profiles', { method: 'POST', body: JSON.stringify(body) }),
+  deleteStyleProfile: (id: string) =>
+    // body '{}' 必需：Fastify 对「已设 content-type 且空体」直接 400（沿 deleteBook/deleteVersion 先例）
+    req<{ ok: boolean }>(`/api/style-profiles/${id}`, { method: 'DELETE', body: '{}' }),
+  setBookFewshot: (bookId: string, on: boolean) =>
+    req<{ ok: boolean; styleFewshotOn: boolean }>(`/api/books/${bookId}/style-fewshot`, { method: 'PUT', body: JSON.stringify({ on }) }),
   summarizeChapter: (bookId: string, chapterNo: number) =>
     req<{ ok: boolean }>(`/api/books/${bookId}/chapters/${chapterNo}/summarize`, { method: 'POST', body: '{}' }),
   bindStyle: (bookId: string, body: StyleBindBody) =>

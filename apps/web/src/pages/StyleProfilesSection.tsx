@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, apiErrorBody, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
 import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAnalysisDto, type StyleProfileDto } from '@inkforge/shared';
 import ImitationProfilesSection from './ImitationProfilesSection';
@@ -21,6 +21,9 @@ export default function StyleProfilesSection() {
   const [draft, setDraft] = useState<DistillDraftState | null>(null);
   const [openVersions, setOpenVersions] = useState<string | null>(null);
   const [versionMap, setVersionMap] = useState<Record<string, Array<{ id: string; version: number; createdAt: string; selfScore?: number }>>>({});
+  // L2 两步确认：待确认删除的档案 id（B4 裁决②）
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const distill = async () => {
     setMsg('');
@@ -80,6 +83,31 @@ export default function StyleProfilesSection() {
     }
   };
 
+  const removeProfile = async (profileId: string): Promise<void> => {
+    setDeleting(true);
+    try {
+      await api.deleteStyleProfile(profileId);
+      setMsg('档案已删除');
+      setConfirmingDeleteId(null);
+      void refetch();
+    } catch (e) {
+      // 409 附带绑定书列表：优先用它拼人话，其余走 error 字段
+      let text = apiErrorText(e);
+      try {
+        const body = JSON.parse(apiErrorBody(e)) as { books?: Array<{ id: string; title?: string }> };
+        if (Array.isArray(body.books) && body.books.length > 0) {
+          text = `无法删除，已被绑定：${body.books.map((b) => b.title ?? b.id).join('、')}`;
+        }
+      } catch {
+        /* 非 JSON 响应体：沿用 apiErrorText 的兜底 */
+      }
+      setMsg(text);
+      setConfirmingDeleteId(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // 不可变编辑
   const setDim = (dim: string, v: string): void =>
     setDraft((d) => (d ? { ...d, analysis: { ...d.analysis, dims: { ...d.analysis.dims, [dim]: v } } } : d));
@@ -126,6 +154,21 @@ export default function StyleProfilesSection() {
                 <Button variant="quiet" tone="primary" size="sm" className="ml-auto" onClick={() => void toggleVersions(p.id)}>
                   {openVersions === p.id ? '收起版本' : '版本'}
                 </Button>
+                {confirmingDeleteId === p.id ? (
+                  <>
+                    <span className="text-danger text-xs">删除该档案行不影响已绑定书的 persona 快照；仍被书绑定的档案不可删。</span>
+                    <Button variant="danger" size="sm" solid loading={deleting} onClick={() => void removeProfile(p.id)}>
+                      确认删除
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
+                      取消
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="quiet" tone="danger" size="sm" onClick={() => setConfirmingDeleteId(p.id)}>
+                    删除
+                  </Button>
+                )}
               </div>
               {openVersions === p.id && (
                 <ul className="mt-2 ml-4 space-y-1 border-l pl-3 text-xs text-muted">

@@ -36,8 +36,16 @@ const DRAFT = {
 };
 
 function fetchFor(url: string, init?: RequestInit): Response {
+  // DELETE 分支必须在其它 style-profiles 分支之前：只匹配「/api/style-profiles/<id>」这一形状
+  const del = /^\/api\/style-profiles\/([^/]+)$/.exec(url);
+  if (del && init?.method === 'DELETE') {
+    if (deleteOverride) return new Response(JSON.stringify(deleteOverride.body), { status: deleteOverride.status });
+    if (!deletedIds.includes(del[1])) deletedIds = [...deletedIds, del[1]];
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }
   if (url.endsWith('/api/style-profiles') && (!init?.method || init.method === 'GET')) {
-    return new Response(JSON.stringify(distilled ? [PROFILE, PROFILE2] : [PROFILE]), { status: 200 });
+    const all = distilled ? [PROFILE, PROFILE2] : [PROFILE];
+    return new Response(JSON.stringify(all.filter((p) => !deletedIds.includes(p.id))), { status: 200 });
   }
   if (url.endsWith('/api/style-profiles/distill')) {
     distilled = true;
@@ -100,6 +108,9 @@ function fetchFor(url: string, init?: RequestInit): Response {
 }
 
 let distilled = false;
+// 档案删除桩状态（各用例首行自行重置，沿 distilled 的既有习惯）
+let deletedIds: string[] = [];
+let deleteOverride: { status: number; body: unknown } | null = null;
 
 afterEach(() => {
   cleanup();
@@ -339,5 +350,54 @@ describe('StyleProfilesSection 三态确认门', () => {
     await waitFor(() => expect(screen.getByText(/蒸馏失败：.*502/)).toBeTruthy());
     // 仍停留表单态可重试
     expect(screen.getByRole('button', { name: '蒸馏' })).toBeTruthy();
+  });
+
+  it('档案行删除：L2 确认簇 → 发 DELETE → 该行消失', async () => {
+    distilled = false;
+    deletedIds = [];
+    deleteOverride = null;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    // 同页嵌了 ImitationProfilesSection，它也自带「删除/确认删除」→ 必须限定在本档案行作用域
+    const row = screen.getByText('测试档案').closest('li')!;
+    fireEvent.click(within(row).getByRole('button', { name: '删除' }));
+    expect(within(row).getByText(/仍被书绑定的档案不可删/)).toBeTruthy();
+    fireEvent.click(within(row).getByRole('button', { name: '确认删除' }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          (c) => (c[1] as RequestInit | undefined)?.method === 'DELETE' && String(c[0]).endsWith('/api/style-profiles/sp1'),
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByText('测试档案')).toBeNull());
+    expect(await screen.findByText('档案已删除')).toBeTruthy();
+  });
+
+  it('档案删除被 409 拒时展示绑定书列表文案，且行不消失（绝不静默解绑）', async () => {
+    distilled = false;
+    deletedIds = [];
+    deleteOverride = {
+      status: 409,
+      body: { error: '该风格档案已被书绑定，请先解绑再删除', books: [{ id: 'b1', title: '样本之书' }] },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init)),
+    );
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    const row = screen.getByText('测试档案').closest('li')!;
+    fireEvent.click(within(row).getByRole('button', { name: '删除' }));
+    fireEvent.click(within(row).getByRole('button', { name: '确认删除' }));
+
+    expect(await screen.findByText('无法删除，已被绑定：样本之书')).toBeTruthy();
+    expect(screen.getByText('测试档案')).toBeTruthy(); // 拒删：档案行仍在
+    deleteOverride = null;
   });
 });

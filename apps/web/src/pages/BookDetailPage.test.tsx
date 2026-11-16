@@ -79,6 +79,34 @@ function installFetchStub() {
   );
 }
 
+/** 风格绑定/解绑/开关专用桩：bound 与 fewshot 可变，PUT 后 GET 回读新值（模拟服务端归零语义 + refetch）。 */
+function installStyleStub() {
+  let bound: string | null = null;
+  let fewshot = false;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      calls.push({ url: u, init });
+      if (u.endsWith('/api/books/b1/style-fewshot') && init?.method === 'PUT') {
+        fewshot = Boolean((JSON.parse(String(init.body)) as { on: boolean }).on);
+        return jsonResponse({ ok: true, styleFewshotOn: fewshot });
+      }
+      if (u.endsWith('/api/books/b1/style') && init?.method === 'PUT') {
+        bound = (JSON.parse(String(init.body)) as { profileId: string | null }).profileId;
+        return jsonResponse({ ok: true, styleProfileId: bound });
+      }
+      if (u.endsWith('/api/style-profiles')) {
+        return jsonResponse([{ id: 'sp1', name: '测试档案', version: 1, createdAt: '2026-11-13T08:00:00Z', metrics: {}, sourcePath: 'inline:x' }]);
+      }
+      // 分支顺序敏感：人物卡列表也在 /api/books/b1 前缀下，必须先回数组，否则 (characters ?? []).map 炸
+      if (u.endsWith('/api/books/b1/characters')) return jsonResponse([]);
+      if (u.includes('/api/books/b1')) return jsonResponse({ ...book, styleProfileId: bound, styleFewshotOn: fewshot });
+      return jsonResponse({});
+    }),
+  );
+}
+
 installFetchStub();
 
 afterEach(() => {
@@ -225,5 +253,83 @@ describe('BookDetailPage', () => {
     );
     const oneCall = calls.find((c) => c.url.endsWith('/api/books/b1/chapters/1/generate'));
     expect(JSON.parse(String((oneCall!.init as RequestInit).body))).toEqual({ maxRounds: 3 });
+  });
+
+  const stylePage = (): void => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  };
+
+  it('解绑不再被短路（回归缺陷⑦）：先绑 sp1 再选「（未绑定）」→ PUT /style body {profileId:null}', async () => {
+    installStyleStub();
+    stylePage();
+    const sel = (await screen.findByLabelText('风格档案绑定')) as HTMLSelectElement;
+    expect(sel.value).toBe('');
+    // option 来自异步查询：过早 change 到不存在的 option 会被浏览器吞掉（value 回 ''，不发 onChange）
+    await waitFor(() => expect(screen.getByRole('option', { name: /测试档案/ })).toBeTruthy());
+
+    fireEvent.change(sel, { target: { value: 'sp1' } });
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.url.endsWith('/api/books/b1/style') &&
+            c.init?.method === 'PUT' &&
+            JSON.parse(String(c.init?.body)).profileId === 'sp1',
+        ),
+      ).toBe(true),
+    );
+    // refetch 回读绑定态：不先绑就直接从 '' 选 '' 的话，React 的 value tracking 不会触发 onChange，用例会假绿
+    await waitFor(() => expect((screen.getByLabelText('风格档案绑定') as HTMLSelectElement).value).toBe('sp1'));
+
+    fireEvent.change(sel, { target: { value: '' } });
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.url.endsWith('/api/books/b1/style') &&
+            c.init?.method === 'PUT' &&
+            JSON.parse(String(c.init?.body)).profileId === null,
+        ),
+      ).toBe(true),
+    );
+    expect(await screen.findByText(/风格档案已解绑/)).toBeTruthy();
+  });
+
+  it('逐书文风示例开关：绑定后出现 checkbox，勾选发 PUT style-fewshot {on:true} 并回读 checked', async () => {
+    installStyleStub();
+    stylePage();
+    const sel = (await screen.findByLabelText('风格档案绑定')) as HTMLSelectElement;
+    await waitFor(() => expect(screen.getByRole('option', { name: /测试档案/ })).toBeTruthy());
+    fireEvent.change(sel, { target: { value: 'sp1' } });
+
+    const cb = await waitFor(() => {
+      const el = screen.queryByLabelText('文风示例注入');
+      expect(el).toBeTruthy();
+      return el as HTMLInputElement;
+    });
+    expect(cb.checked).toBe(false); // 绑定即归零（服务端语义），所以此刻未勾
+    expect(await screen.findByText(/关闭后不向写手注入范文片段/)).toBeTruthy();
+
+    fireEvent.click(cb);
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.url.endsWith('/api/books/b1/style-fewshot') &&
+            c.init?.method === 'PUT' &&
+            JSON.parse(String(c.init?.body)).on === true,
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect((screen.getByLabelText('文风示例注入') as HTMLInputElement).checked).toBe(true));
+    expect(await screen.findByText('文风示例注入已开启')).toBeTruthy();
   });
 });
