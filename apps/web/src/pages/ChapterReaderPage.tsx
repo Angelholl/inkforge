@@ -1,24 +1,33 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
 import { SelectionRewrite } from './SelectionRewrite';
-import type { VersionDto } from '@inkforge/shared';
+import type { VersionListItemDto } from '@inkforge/shared';
 
 export default function ChapterReaderPage() {
   const { bookId = '', chapterNo = '1' } = useParams();
   const no = Number(chapterNo);
-  const { data: versions, refetch } = useQuery({
+  const { data: versionData, refetch } = useQuery({
     queryKey: ['versions', bookId, no],
     queryFn: () => api.listVersions(bookId, no),
     refetchInterval: 5000,
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const list: VersionDto[] = versions ?? [];
-  const current = list.find((v) => v.id === selected) ?? list.find((v) => v.id === list[0]?.id);
+  const list: VersionListItemDto[] = versionData?.versions ?? [];
+  const currentVersionId = versionData?.currentVersionId ?? null;
+  // 回退锚 = 服务端 currentVersionId（B2 硬删后列表首项不再等价于 current）
+  const current = list.find((v) => v.id === (selected ?? currentVersionId)) ?? null;
+  const { data: currentFull } = useQuery({
+    queryKey: ['version', current?.id],
+    queryFn: () => api.getVersion(current?.id ?? ''),
+    enabled: !!current,
+  });
 
   const rollback = async () => {
     if (!current) return;
@@ -26,6 +35,22 @@ export default function ChapterReaderPage() {
     setMsg(`已回滚到 ${r.currentVersionId.slice(0, 8)}`);
     setSelected(null);
     void refetch();
+  };
+
+  const remove = async (versionId: string): Promise<void> => {
+    setDeleting(true);
+    try {
+      await api.deleteVersion(versionId);
+      setMsg('已删除该版本（删前快照已留 -predelete-）');
+      setSelected(null);
+      setConfirmingDeleteId(null);
+      void refetch();
+    } catch (e) {
+      setMsg(apiErrorText(e));
+      setConfirmingDeleteId(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const exportBook = async () => {
@@ -51,17 +76,44 @@ export default function ChapterReaderPage() {
 
       <section className="mt-4">
         <h2 className="font-semibold">版本链（新 → 旧）</h2>
-        <ul className="mt-2 flex flex-wrap gap-2">
-          {list.map((v) => (
-            <li key={v.id}>
-              <Button variant="quiet" size="sm" active={current?.id === v.id} onClick={() => setSelected(v.id)}>
-                {v.kind} · {v.wordCount}字 · {v.createdAt.slice(11, 19)}
-                {v.params && (v.params as { overall?: number }).overall != null && (
-                  <> · {((v.params as { overall?: number }).overall as number).toFixed(1)}分</>
+        <ul className="mt-2 flex flex-wrap items-center gap-2">
+          {list.map((v) => {
+            const isCurrent = v.id === currentVersionId;
+            return (
+              <li key={v.id} className="flex items-center gap-1">
+                <Button variant="quiet" size="sm" active={current?.id === v.id} onClick={() => setSelected(v.id)}>
+                  {v.kind} · {v.wordCount}字 · {v.createdAt.slice(11, 19)}
+                  {v.params && (v.params as { overall?: number }).overall != null && (
+                    <> · {((v.params as { overall?: number }).overall as number).toFixed(1)}分</>
+                  )}
+                </Button>
+                {confirmingDeleteId === v.id ? (
+                  <>
+                    <span className="text-danger text-xs">
+                      删除将从磁盘永久移除该版本正文，不可恢复（删前自动留 -predelete- 快照，同书保留最近 3 份）。
+                    </span>
+                    <Button variant="danger" size="sm" solid loading={deleting} onClick={() => void remove(v.id)}>
+                      确认删除
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
+                      取消
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="quiet"
+                    tone="danger"
+                    size="sm"
+                    disabled={isCurrent}
+                    title={isCurrent ? '当前版本不可删除（先回滚到其他版本）' : undefined}
+                    onClick={() => setConfirmingDeleteId(v.id)}
+                  >
+                    删除
+                  </Button>
                 )}
-              </Button>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
@@ -70,7 +122,7 @@ export default function ChapterReaderPage() {
         查看相邻版本 diff →
       </Link>
       <article className="mt-2 whitespace-pre-wrap rounded border bg-white p-6 text-sm leading-7">
-        {current?.content ?? '（本章尚无版本）'}
+        {currentFull?.content ?? '（本章尚无版本）'}
       </article>
     </main>
   );

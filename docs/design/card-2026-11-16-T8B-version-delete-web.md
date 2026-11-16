@@ -293,6 +293,15 @@ Refs: DEC-2026-1116-01
 
 （GUI 未跑成时改写为「GUI 未验证：<原因>」并继续提交，同时在完成通知里重申同句。）
 
+## 9.5 主审实测勘正（亲执期回填，后续卡照此避坑）
+
+1. **§4.1 mock 的 URL 分支顺序必须先判 `/api/versions/`、再判 `/versions`**：单取端点 URL 本身也含 `/versions`，按卡面原序会把单取请求误吞进列表分支（三个新测试文件全踩）。
+2. **本仓库 web 测试未配置 @testing-library/jest-dom**：`toBeDisabled()` 报 `Invalid Chai property`，禁用态断言一律写 `expect(btn.disabled).toBe(true)`（需 `as HTMLButtonElement`）。
+3. **计划与本卡文件清单均漏两处既有测试的形状适配**：`apps/web/test/t30.test.tsx`（`vi.mock('../src/api/client')` 的 `listVersions` 要改回信封并补 `getVersion`，否则 DiffPage 直接炸）与 `apps/web/src/pages/StyleProfilesSection.test.tsx`（`fetchFor` 三处 chapters/versions 分支改信封 + 新增 `/api/versions/` 分支）。二者属既有测试适配，不算新增用例。
+4. **DiffPage 提示文案改独立 `<p>`**：原实现把提示拼在计数同一行，既让 `findByText` 精确匹配失败，也让 UI 挤成一句。
+5. **GUI 判据同坑 + 响应体截断**：列表响应判定须用 `url.endsWith('/versions')`；`page.on('response')` 里 `res.text()` 的截断上限要给到 8000 字符（600 会把 3 项列表截断、JSON.parse 失败而误判 FAIL）。
+6. 实测测试数：新增 +6（Reader 3 / Diff 2 / BookSamplePicker 1），既有 2 文件用例数不变 → 全仓 307 → **313** 全绿。GUI 黑盒 13/13 PASS，5 图存 `gui-test-screenshots/b2-t8b/`。
+
 ## 9. 卡外（勿做）
 
 - 多选绑定风格档案、.epub、persona 模板、仿写预览可编辑 = 0.3 缓议项，勿动。

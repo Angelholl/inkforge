@@ -65,20 +65,36 @@ function fetchFor(url: string, init?: RequestInit): Response {
     return new Response(JSON.stringify({ ...BOOK_B2, chapters: B2_CHAPTERS, runs: [] }), { status: 200 });
   }
   if (url.includes('/api/books/b1/chapters/1/versions')) {
+    // B2 列表瘦身：信封 + 列表项不带 content
     return new Response(
-      JSON.stringify([
-        { id: 'ver-new', content: '新版正文一' },
-        { id: 'ver-old', content: '旧版正文一' },
-      ]),
+      JSON.stringify({
+        currentVersionId: 'ver-old',
+        versions: [
+          { id: 'ver-new', kind: 'draft', wordCount: 5, params: {}, styleSampleIds: [], createdAt: '2026-11-16T10:00:00.000Z' },
+          { id: 'ver-old', kind: 'original', wordCount: 5, params: {}, styleSampleIds: [], createdAt: '2026-11-16T09:00:00.000Z' },
+        ],
+      }),
       { status: 200 },
     );
   }
   if (url.includes('/api/books/b1/chapters/2/versions')) {
-    return new Response(JSON.stringify([{ id: 'v2a', content: '唯一正文二' }]), { status: 200 });
+    return new Response(
+      JSON.stringify({ currentVersionId: 'v2a', versions: [{ id: 'v2a', kind: 'original', wordCount: 5, params: {}, styleSampleIds: [], createdAt: '2026-11-16T10:00:00.000Z' }] }),
+      { status: 200 },
+    );
   }
   if (url.includes('/api/books/b2/chapters/') && url.includes('/versions')) {
     const no = Number(url.match(/chapters\/(\d+)\/versions/)![1]);
-    return new Response(JSON.stringify([{ id: `v-${no}`, content: `正文${no}` }]), { status: 200 });
+    return new Response(
+      JSON.stringify({ currentVersionId: `v-${no}`, versions: [{ id: `v-${no}`, kind: 'original', wordCount: 5, params: {}, styleSampleIds: [], createdAt: '2026-11-16T10:00:00.000Z' }] }),
+      { status: 200 },
+    );
+  }
+  if (url.includes('/api/versions/')) {
+    const id = url.split('/').pop() as string;
+    const m = /^v-(\d+)$/.exec(id);
+    const content = id === 'ver-new' ? '新版正文一' : id === 'ver-old' ? '旧版正文一' : id === 'v2a' ? '唯一正文二' : `正文${m ? m[1] : id}`;
+    return new Response(JSON.stringify({ id, chapterId: 'c', kind: 'original', content, wordCount: 5, params: {}, styleSampleIds: [], createdAt: '2026-11-16T10:00:00.000Z' }), { status: 200 });
   }
   return new Response('[]', { status: 200 });
 }

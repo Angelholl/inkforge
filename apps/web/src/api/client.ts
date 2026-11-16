@@ -25,6 +25,7 @@ import type {
   RunDto,
   RunWithStepsDto,
   VersionDto,
+  VersionListDto,
   BlueprintPutBody,
   StyleProfileDto,
   StyleBindBody,
@@ -50,6 +51,20 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!r.ok) throw new Error(`${init?.method ?? 'GET'} ${url} → ${r.status}: ${await r.text()}`);
   return r.json() as Promise<T>;
+}
+
+/** 把 req 抛出的 "METHOD url → STATUS: 响应体" 还原成服务端 error 文案；响应体非 JSON 或无 error 字段则原样返回。 */
+export function apiErrorText(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  const i = msg.lastIndexOf(': ');
+  const body = i >= 0 ? msg.slice(i + 2) : msg;
+  try {
+    const j = JSON.parse(body) as { error?: unknown };
+    if (typeof j.error === 'string' && j.error.length > 0) return j.error;
+  } catch {
+    /* 非 JSON 响应体 */
+  }
+  return msg;
 }
 
 export const api = {
@@ -129,8 +144,11 @@ export const api = {
   rerunChapter: (runId: string, chapterNo: number) =>
     req<{ runId: string }>(`/api/runs/${runId}/chapters/${chapterNo}/rerun`, { method: 'POST', body: '{}' }),
   listVersions: (bookId: string, chapterNo: number) =>
-    req<VersionDto[]>(`/api/books/${bookId}/chapters/${chapterNo}/versions`),
+    req<VersionListDto>(`/api/books/${bookId}/chapters/${chapterNo}/versions`),
   getVersion: (versionId: string) => req<VersionDto>(`/api/versions/${versionId}`),
+  deleteVersion: (versionId: string) =>
+    // body '{}' 必需：Fastify 对「已设 content-type 且空体」直接 400 FST_ERR_CTP_EMPTY_JSON_BODY
+    req<{ ok: boolean }>(`/api/versions/${versionId}`, { method: 'DELETE', body: '{}' }),
   rollback: (versionId: string) =>
     req<{ ok: boolean; currentVersionId: string }>(`/api/versions/${versionId}/rollback`, { method: 'POST', body: '{}' }),
   exportBook: (bookId: string, format?: ExportFormat) =>

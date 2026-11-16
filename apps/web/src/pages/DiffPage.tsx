@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { diffChars } from 'diff';
 import { api } from '../api/client';
-import type { VersionDto } from '@inkforge/shared';
+import type { VersionListItemDto } from '@inkforge/shared';
 
 export interface DiffPart {
   value: string;
@@ -19,13 +19,34 @@ export function computeVersionDiff(oldText: string, newText: string): DiffPart[]
 export default function DiffPage() {
   const { bookId = '', chapterNo = '1' } = useParams();
   const no = Number(chapterNo);
-  const { data: versions } = useQuery({ queryKey: ['versions', bookId, no], queryFn: () => api.listVersions(bookId, no), refetchInterval: 5000 });
-  const [older, newer] = useMemo(() => {
-    const list: VersionDto[] = versions ?? [];
-    // 新→旧列表；相邻对取 list[1]→list[0]
-    return [list[1], list[0]] as const;
-  }, [versions]);
-  const parts = useMemo(() => (older && newer ? computeVersionDiff(older.content, newer.content) : []), [older, newer]);
+  const { data: versionsData } = useQuery({
+    queryKey: ['versions', bookId, no],
+    queryFn: () => api.listVersions(bookId, no),
+    refetchInterval: 5000,
+  });
+  const list: VersionListItemDto[] = versionsData?.versions ?? [];
+  const currentVersionId = versionsData?.currentVersionId ?? null;
+  // B2 硬删后「列表相邻」不再等价于「父子相邻」：配对一律走 parentVersionId 链
+  const newer = useMemo(() => list.find((v) => v.id === currentVersionId) ?? list[0], [list, currentVersionId]);
+  const older = useMemo(
+    () => (newer?.parentVersionId ? list.find((v) => v.id === newer.parentVersionId) : undefined),
+    [list, newer],
+  );
+  // 列表已去 content：两版正文各走单取端点
+  const { data: newerFull } = useQuery({
+    queryKey: ['version', newer?.id],
+    queryFn: () => api.getVersion(newer?.id ?? ''),
+    enabled: !!newer,
+  });
+  const { data: olderFull } = useQuery({
+    queryKey: ['version', older?.id],
+    queryFn: () => api.getVersion(older?.id ?? ''),
+    enabled: !!older,
+  });
+  const parts = useMemo(
+    () => (olderFull && newerFull ? computeVersionDiff(olderFull.content, newerFull.content) : []),
+    [olderFull, newerFull],
+  );
   const addedCount = parts.filter((p) => p.added).length;
   const removedCount = parts.filter((p) => p.removed).length;
 
@@ -37,8 +58,9 @@ export default function DiffPage() {
       <h1 className="mt-2 text-2xl font-bold">版本对比 · 第{no}章</h1>
       <p className="mt-1 text-sm text-muted">
         插入段 {addedCount} · 删除段 {removedCount}
-        {!older && ' （不足两个版本，无法对比）'}
       </p>
+      {!older && !!newer && <p className="mt-1 text-sm text-muted">{list.length < 2 ? '不足两个版本，无法对比' : '上一版已删或不存在，无法对比'}</p>}
+      {!older && !newer && <p className="mt-1 text-sm text-muted">尚无版本，无法对比</p>}
       <div className="mt-4 rounded border bg-white p-4 text-sm leading-7 whitespace-pre-wrap">
         {parts.map((p, i) => (
           <span

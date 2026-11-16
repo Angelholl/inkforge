@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { Badge } from '../components/ui';
 import type { ReportDto } from '@inkforge/shared';
 
 export default function DashboardPage() {
@@ -27,6 +28,7 @@ export default function DashboardPage() {
             <th>轮</th>
             <th>耗时ms</th>
             <th>输出tok</th>
+            <th>产物</th>
           </tr>
         </thead>
         <tbody>
@@ -38,6 +40,7 @@ export default function DashboardPage() {
                 <td>{s.attempt}</td>
                 <td>{s.ms}</td>
                 <td>{s.usage.completionTokens}</td>
+                <td>{s.versionDeleted ? <Badge tone="muted">版本已删</Badge> : ''}</td>
               </tr>
             )),
           )}

@@ -38,9 +38,10 @@ export default function BookSamplePicker({ onImport }: { onImport: (text: string
         const c = chapters.find((ch) => ch.chapterNo === no);
         if (!c) continue;
         const versions = await api.listVersions(bookId, no);
-        if (versions.length === 0) continue;
-        const current = versions.find((v) => v.id === c.currentVersionId) ?? versions[0];
-        blocks.push(`【第${no}章 ${c.title}】\n${current.content}`);
+        if (versions.versions.length === 0) continue;
+        const current = versions.versions.find((v) => v.id === c.currentVersionId) ?? versions.versions[0];
+        const full = await api.getVersion(current.id); // 列表已去 content：正文走单取
+        blocks.push(`【第${no}章 ${c.title}】\n${full.content}`);
       }
       onImport(blocks.join('\n\n'));
       setOpen(false);

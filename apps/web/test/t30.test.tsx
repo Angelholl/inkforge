@@ -10,10 +10,23 @@ import { SelectionRewrite } from '../src/pages/SelectionRewrite';
 
 vi.mock('../src/api/client', () => ({
   api: {
-    listVersions: vi.fn(async () => [
-      { id: 'v2', kind: 'revised', content: '新版内容多了这句', wordCount: 9, params: {}, styleSampleIds: [], createdAt: '2026-11-12T00:00:00Z' },
-      { id: 'v1', kind: 'draft', content: '旧版内容', wordCount: 4, params: {}, styleSampleIds: [], createdAt: '2026-11-12T00:00:01Z' },
-    ]),
+    listVersions: vi.fn(async () => ({
+      currentVersionId: 'v2',
+      versions: [
+        { id: 'v2', kind: 'revised', parentVersionId: 'v1', wordCount: 9, params: {}, styleSampleIds: [], createdAt: '2026-11-12T00:00:00Z' },
+        { id: 'v1', kind: 'draft', wordCount: 4, params: {}, styleSampleIds: [], createdAt: '2026-11-12T00:00:01Z' },
+      ],
+    })),
+    getVersion: vi.fn(async (id: string) => ({
+      id,
+      chapterId: 'c1',
+      kind: 'draft',
+      content: id === 'v2' ? '新版内容多了这句' : '旧版内容',
+      wordCount: 4,
+      params: {},
+      styleSampleIds: [],
+      createdAt: '2026-11-12T00:00:01Z',
+    })),
     getReport: vi.fn(async () => ({
       chapters: [{ chapterNo: 1, steps: [{ step: 'draft', attempt: 1, ms: 1234, usage: { promptTokens: 10, completionTokens: 500 } }] }],
       totals: { ms: 1234, promptTokens: 10, completionTokens: 500 },
