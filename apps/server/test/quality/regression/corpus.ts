@@ -24,8 +24,6 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REAL_DIR = path.join(HERE, 'real');
-export const DB_PATH = path.join(HERE, '../../../data/inkforge.db');
-export const BOOK_ID = '1130c0e1-dddd-47d6-8b28-86e0dd558cce';
 /** L1 夹具对应的采章章号（T-C3 采集口径），供 quote⊆draft 校验。 */
 export const CAPTURE_CHAPTERS = [5, 8, 12] as const;
 

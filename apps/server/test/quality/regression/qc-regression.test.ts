@@ -1,9 +1,9 @@
-import Database from 'better-sqlite3';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadCliches, runL0Checks } from '../../../src/quality/l0';
 import { parseFindings } from '../../../src/llm/plainproto';
-import { BOOK_ID, DB_PATH, L0_BAD, L0_GOOD, L1_BAD_RAW, L1_GOOD_RAW, type L0Sample } from './corpus';
+import { L0_BAD, L0_GOOD, L1_BAD_RAW, L1_GOOD_RAW, REAL_DIR, type L0Sample } from './corpus';
 
 const cliches = loadCliches(path.join(process.cwd(), 'config/quality/cliches.default.txt'));
 
@@ -12,18 +12,7 @@ function runSample(sample: L0Sample) {
 }
 
 function draftFor(chapterNo: number): string {
-  const db = new Database(DB_PATH, { readonly: true });
-  try {
-    const row = db
-      .prepare('SELECT current_version_id FROM chapters WHERE book_id = ? AND chapter_no = ?')
-      .get(BOOK_ID, chapterNo) as { current_version_id: string };
-    const v = db.prepare('SELECT content FROM chapter_versions WHERE id = ?').get(row.current_version_id) as {
-      content: string;
-    };
-    return v.content;
-  } finally {
-    db.close();
-  }
+  return readFileSync(path.join(REAL_DIR, `draft-${String(chapterNo).padStart(3, '0')}.txt`), 'utf8');
 }
 
 describe('QC 召回回归集', () => {

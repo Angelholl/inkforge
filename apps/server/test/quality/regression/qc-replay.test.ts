@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,8 +7,6 @@ import { parseFindings } from '../../../src/llm/plainproto';
 /** D1 真模型 raw replay 回归（T-C3，DEC-2026-1113-01）：夹具=Strata 对同章 draft 输入的重采样 raw，原样入库禁修剪。 */
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REAL_DIR = path.join(HERE, 'real');
-const DB_PATH = path.join(HERE, '../../../data/inkforge.db');
-const BOOK_ID = '1130c0e1-dddd-47d6-8b28-86e0dd558cce';
 const CAPTURE_CHAPTERS = [5, 8, 12] as const;
 
 function readFixture(name: string): string {
@@ -17,18 +14,7 @@ function readFixture(name: string): string {
 }
 
 function draftFor(chapterNo: number): string {
-  const db = new Database(DB_PATH, { readonly: true });
-  try {
-    const row = db
-      .prepare('SELECT current_version_id FROM chapters WHERE book_id = ? AND chapter_no = ?')
-      .get(BOOK_ID, chapterNo) as { current_version_id: string };
-    const v = db.prepare('SELECT content FROM chapter_versions WHERE id = ?').get(row.current_version_id) as {
-      content: string;
-    };
-    return v.content;
-  } finally {
-    db.close();
-  }
+  return readFileSync(path.join(REAL_DIR, `draft-${String(chapterNo).padStart(3, '0')}.txt`), 'utf8');
 }
 
 describe('D1 真模型 raw replay 回归', () => {
