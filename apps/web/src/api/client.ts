@@ -29,8 +29,8 @@ import type {
   BlueprintPutBody,
   StyleProfileDto,
   StyleBindBody,
+  DistillJobDto,
   DistillStyleBody,
-  DistillStyleDraftDto,
   StyleProfileCreateBody,
   BookMetaPutBody,
   CharacterDto,
@@ -184,7 +184,12 @@ export const api = {
   listStyleProfileVersions: (id: string) =>
     req<Array<{ id: string; name: string; version: number; createdAt: string; selfScore?: number }>>(`/api/style-profiles/${id}/versions`),
   distillStyle: (body: DistillStyleBody) =>
-    req<{ draft: DistillStyleDraftDto }>('/api/style-profiles/distill', { method: 'POST', body: JSON.stringify(body) }),
+    req<{ jobId: string }>('/api/style-profiles/distill', { method: 'POST', body: JSON.stringify(body) }),
+  // 蒸馏已后台化（B5）：POST 只领 jobId，进度靠 GET job 轮询；done 时 result 是完整草稿（含 sourceText 回灌确认入库）
+  getDistillJob: (jobId: string) => req<DistillJobDto>(`/api/style-profiles/jobs/${jobId}`),
+  redistillStyle: (id: string) =>
+    // body '{}' 必需：Fastify 对「已设 content-type 且空体」直接 400（沿 deleteBook 先例）
+    req<{ jobId: string }>(`/api/style-profiles/${id}/redistill`, { method: 'POST', body: '{}' }),
   createStyleProfile: (body: StyleProfileCreateBody) =>
     req<{ profileId: string; version: number }>('/api/style-profiles', { method: 'POST', body: JSON.stringify(body) }),
   deleteStyleProfile: (id: string) =>

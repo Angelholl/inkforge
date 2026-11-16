@@ -49,7 +49,27 @@ function fetchFor(url: string, init?: RequestInit): Response {
   }
   if (url.endsWith('/api/style-profiles/distill')) {
     distilled = true;
-    return new Response(JSON.stringify({ draft: DRAFT }), { status: 200 });
+    // B5 后台化：POST 只领 jobId（202），进度走 GET job 轮询
+    return new Response(JSON.stringify({ jobId: 'job-1' }), { status: 202 });
+  }
+  if (url.includes('/api/style-profiles/jobs/')) {
+    jobPollCount += 1;
+    const status = jobStub === 'failed' ? 'failed' : jobStub === 'running-then-done' && jobPollCount === 1 ? 'running' : 'done';
+    const done = status === 'done';
+    return new Response(
+      JSON.stringify({
+        id: 'job-1',
+        status,
+        progress: done ? 100 : 30,
+        stage: done || status === 'failed' ? '' : 'analyzing',
+        error: status === 'failed' ? JOB_ERROR : null,
+        result: done ? { ...DRAFT, sourceText: 'x'.repeat(200) } : null,
+      }),
+      { status: 200 },
+    );
+  }
+  if (/\/api\/style-profiles\/sp\d+\/redistill$/.test(url) && init?.method === 'POST') {
+    return new Response(JSON.stringify({ jobId: 'job-1' }), { status: 202 });
   }
   if (url.endsWith('/api/style-profiles') && init?.method === 'POST') {
     return new Response(JSON.stringify({ profileId: 'sp2', version: 2 }), { status: 201 });
@@ -111,10 +131,16 @@ let distilled = false;
 // 档案删除桩状态（各用例首行自行重置，沿 distilled 的既有习惯）
 let deletedIds: string[] = [];
 let deleteOverride: { status: number; body: unknown } | null = null;
+// B5 蒸馏 job 轮询桩：'done'（首查即成，现有蒸馏路径用例的默认）| 'failed' | 'running-then-done'（首查 running、次查起 done）
+let jobStub: 'done' | 'failed' | 'running-then-done' = 'done';
+let jobPollCount = 0;
+const JOB_ERROR = '文风分析失败：输出缺少 DIM/AXIS/RULES 行';
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  jobStub = 'done';
+  jobPollCount = 0;
 });
 
 function setInput(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -350,6 +376,80 @@ describe('StyleProfilesSection 三态确认门', () => {
     await waitFor(() => expect(screen.getByText(/蒸馏失败：.*502/)).toBeTruthy());
     // 仍停留表单态可重试
     expect(screen.getByRole('button', { name: '蒸馏' })).toBeTruthy();
+  });
+
+  it('蒸馏后台化：POST 得 jobId 轮询至 done（先 running 后终态），预览出现且进度可见', async () => {
+    distilled = false;
+    jobStub = 'running-then-done';
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '后台测' } });
+    fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
+    fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
+
+    // POST 只领 jobId（202），不再直接回 draft
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/api/style-profiles/distill'))).toBe(true),
+    );
+    // 首查立即执行：running 态展示里程碑进度
+    expect(await screen.findByText(/蒸馏中（30%）· 分析中/)).toBeTruthy();
+    // 第二次轮询（间隔 2s）转 done → 预览态
+    expect(await screen.findByText('蒸馏完成（草稿未入库），可编辑后点「确认入库」', {}, { timeout: 4000 })).toBeTruthy();
+    expect(screen.getByLabelText('维度-节奏')).toBeTruthy();
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/style-profiles/jobs/')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('蒸馏后台化：job failed → 显性暴露失败原因，停留表单态可重试', async () => {
+    distilled = false;
+    jobStub = 'failed';
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init)));
+    renderSection();
+
+    fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '败测' } });
+    fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
+    fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
+
+    expect(await screen.findByText(`蒸馏失败：${JOB_ERROR}`)).toBeTruthy();
+    expect(screen.queryByLabelText('维度-节奏')).toBeNull();
+    expect(screen.getByRole('button', { name: '蒸馏' })).toBeTruthy();
+  });
+
+  it('重新蒸馏：档案行点击发 POST redistill 且按钮进入 loading，done 后按档案名+回灌原文入库', async () => {
+    distilled = false;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    const row = screen.getByText('测试档案').closest('li')!;
+    const btn = within(row).getByRole('button', { name: '重新蒸馏' });
+    fireEvent.click(btn);
+    // 点击同步置 busy：按钮进入 loading（aria-busy）且禁用
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          (c) => String(c[0]).endsWith('/api/style-profiles/sp1/redistill') && (c[1] as RequestInit).method === 'POST',
+        ),
+      ).toBe(true),
+    );
+    // done 后直接进预览；入库 body 用档案名与 job result.sourceText 回灌的原文
+    expect(await screen.findByText('蒸馏完成（草稿未入库），可编辑后点「确认入库」')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '确认入库' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles', expect.anything()));
+    const body = JSON.parse(
+      String(
+        (fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/style-profiles') && (c[1] as RequestInit).method === 'POST')![1] as RequestInit)
+          .body,
+      ),
+    );
+    expect(body.name).toBe('测试档案');
+    expect(body.text).toBe('x'.repeat(200));
   });
 
   it('档案行删除：L2 确认簇 → 发 DELETE → 该行消失', async () => {

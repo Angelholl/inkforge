@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorBody, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
@@ -7,6 +7,10 @@ import ImitationProfilesSection from './ImitationProfilesSection';
 import BookSamplePicker from './BookSamplePicker';
 
 type Phase = 'form' | 'preview';
+
+/** 蒸馏后台轮询间隔（B5）：首查立即执行，之后按此间隔追进度。 */
+const DISTILL_POLL_MS = 2000;
+const STAGE_LABEL: Record<string, string> = { sampling: '采样中', analyzing: '分析中' };
 
 /** 蒸馏三态流（确认门，DEC-2026-1115-04 #7）：表单 → 预览编辑（七维/六轴/规则可改）→ 确认入库 → 列表。 */
 export default function StyleProfilesSection() {
@@ -17,6 +21,9 @@ export default function StyleProfilesSection() {
   const [temperature, setTemperature] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  // B5 重蒸进行中的档案 id（meta 行按钮 loading 用；busy 仍是全局互斥）
+  const [redistillingId, setRedistillingId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [phase, setPhase] = useState<Phase>('form');
   const [draft, setDraft] = useState<DistillDraftState | null>(null);
   const [openVersions, setOpenVersions] = useState<string | null>(null);
@@ -25,19 +32,77 @@ export default function StyleProfilesSection() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const distill = async () => {
+  useEffect(() => {
+    // 卸载清轮询定时器（B5），避免组件没了还在打 GET job
+    return () => {
+      if (pollRef.current !== null) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, []);
+
+  // 轮询至终态；done 用 draftName+sourceText（result 未带则退回表单原文）组装草稿——重蒸场景表单为空，全靠回灌
+  const pollJob = (jobId: string, draftName: string, fallbackText: string): Promise<void> =>
+    new Promise((resolve) => {
+      const stop = (): void => {
+        if (pollRef.current !== null) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+      stop();
+      let queryFails = 0;
+      const tick = (): void => {
+        void (async () => {
+          try {
+            const job = await api.getDistillJob(jobId);
+            queryFails = 0;
+            if (job.status === 'done' && job.result) {
+              stop();
+              setDraft({
+                analysis: job.result.analysis,
+                samples: job.result.samples,
+                name: draftName,
+                sourceText: job.result.sourceText ?? fallbackText,
+              });
+              setPhase('preview');
+              setMsg('蒸馏完成（草稿未入库），可编辑后点「确认入库」');
+              resolve();
+            } else if (job.status === 'failed') {
+              stop();
+              setMsg(`蒸馏失败：${job.error ?? '未知原因'}`);
+              resolve();
+            } else {
+              const label = STAGE_LABEL[job.stage] ?? '';
+              setMsg(label !== '' ? `蒸馏中（${job.progress}%）· ${label}` : `蒸馏中（${job.progress}%）`);
+            }
+          } catch {
+            // 单次查询失败容忍（网络抖动），连续 3 次判失败退出，避免无限轮询
+            queryFails += 1;
+            if (queryFails >= 3) {
+              stop();
+              setMsg('蒸馏失败：进度查询连续失败，请稍后重试');
+              resolve();
+            }
+          }
+        })();
+      };
+      tick();
+      pollRef.current = setInterval(tick, DISTILL_POLL_MS);
+    });
+
+  const distill = async (): Promise<void> => {
     setMsg('');
     setBusy(true);
     try {
-      const r = await api.distillStyle({
+      const { jobId } = await api.distillStyle({
         name: name.trim(),
         text,
         ...(maxSegments.trim() !== '' ? { maxSegments: Number(maxSegments) } : {}),
         ...(temperature.trim() !== '' ? { temperature: Number(temperature) } : {}),
       });
-      setDraft({ analysis: r.draft.analysis, samples: r.draft.samples });
-      setPhase('preview');
-      setMsg('蒸馏完成（草稿未入库），可编辑后点「确认入库」');
+      await pollJob(jobId, name.trim(), text);
     } catch (e) {
       setMsg(`蒸馏失败：${(e as Error).message}`);
     } finally {
@@ -45,12 +110,29 @@ export default function StyleProfilesSection() {
     }
   };
 
+  // 重新蒸馏（B5）：服务端用 style_sources 留存的原文，表单无需有东西；409（原文未留存）显服务端文案
+  const redistill = async (p: StyleProfileDto): Promise<void> => {
+    setMsg('');
+    setBusy(true);
+    setRedistillingId(p.id);
+    try {
+      const { jobId } = await api.redistillStyle(p.id);
+      await pollJob(jobId, p.name, '');
+    } catch (e) {
+      setMsg(apiErrorText(e));
+    } finally {
+      setBusy(false);
+      setRedistillingId(null);
+    }
+  };
+
   const create = async () => {
     if (!draft) return;
     setBusy(true);
     try {
-      const r = await api.createStyleProfile({ name: name.trim(), text, analysis: draft.analysis, samples: draft.samples });
-      setMsg(`档案已入库：${name.trim()} v${r.version}`);
+      // 名称/原文一律取草稿自带：重蒸场景表单为空，原文靠 result.sourceText 回灌才保证同 hash version+1
+      const r = await api.createStyleProfile({ name: draft.name, text: draft.sourceText, analysis: draft.analysis, samples: draft.samples });
+      setMsg(`档案已入库：${draft.name} v${r.version}`);
       setDraft(null);
       setPhase('form');
       setName('');
@@ -151,7 +233,18 @@ export default function StyleProfilesSection() {
                   v{p.version} · {new Date(p.createdAt).toLocaleString()} · 句长中位数 {p.metrics.medianSentenceLen ?? '—'}
                   {typeof p.metrics.selfScore === 'number' ? ` · 自评 ${p.metrics.selfScore}/5` : ''}
                 </span>
-                <Button variant="quiet" tone="primary" size="sm" className="ml-auto" onClick={() => void toggleVersions(p.id)}>
+                <Button
+                  variant="quiet"
+                  tone="primary"
+                  size="sm"
+                  className="ml-auto"
+                  disabled={busy}
+                  loading={redistillingId === p.id}
+                  onClick={() => void redistill(p)}
+                >
+                  重新蒸馏
+                </Button>
+                <Button variant="quiet" size="sm" onClick={() => void toggleVersions(p.id)}>
                   {openVersions === p.id ? '收起版本' : '版本'}
                 </Button>
                 {confirmingDeleteId === p.id ? (
@@ -218,7 +311,7 @@ export default function StyleProfilesSection() {
               <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样温度（0-1，留空默认）"
                 min={0} max={1} step="0.1" placeholder="采样温度（0-1）" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
             </div>
-            <Button variant="primary" size="md" disabled={busy} onClick={() => void distill()}>
+            <Button variant="primary" size="md" loading={busy} onClick={() => void distill()}>
               蒸馏
             </Button>
           </div>
@@ -296,4 +389,8 @@ export default function StyleProfilesSection() {
 interface DistillDraftState {
   analysis: StyleAnalysisDto;
   samples: string[];
+  /** 确认入库用名称：新蒸=表单名，重蒸=档案名 */
+  name: string;
+  /** 确认入库用原文：重蒸靠 job result.sourceText 回灌（表单里没有），同 hash 才能算 version+1 */
+  sourceText: string;
 }
