@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { Loader2 } from 'lucide-react';
 
 /** 卡面容器：surface + line 边 + card 圆角（D2 公共组件）。 */
 export function Card({ className = '', children }: { className?: string; children: ReactNode }) {
@@ -73,4 +74,83 @@ export function runStatusTone(status: string): BadgeTone {
   if (status === 'running' || status === 'queued') return 'info';
   if (status === 'paused') return 'warn';
   return 'muted';
+}
+
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet';
+export type ButtonSize = 'md' | 'sm';
+
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant; // 默认 'secondary'
+  size?: ButtonSize; // 默认 'md'
+  tone?: 'neutral' | 'primary' | 'danger'; // 仅 variant='quiet' 生效，默认 'neutral'
+  solid?: boolean; // 仅 variant='danger'：两步确认第二步实底红
+  active?: boolean; // 仅 variant='quiet'：可点选 chip 选中态
+  iconOnly?: boolean; // 方形图标钮（调用方负责给 aria-label，组件不做运行时校验）
+  loading?: boolean; // 进行中态
+}
+
+const BUTTON_BASE =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-45';
+
+const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+  primary: 'bg-primary text-white hover:bg-primary-strong',
+  secondary: 'border border-line bg-surface text-ink hover:bg-bg',
+  danger: 'border border-danger/40 bg-danger-soft text-danger hover:bg-danger/25',
+  quiet: 'text-muted hover:bg-bg hover:text-ink',
+};
+
+const BUTTON_TONES: Record<'neutral' | 'primary' | 'danger', string> = {
+  neutral: 'text-muted hover:bg-bg hover:text-ink',
+  primary: 'text-primary-strong hover:bg-bg',
+  danger: 'text-danger hover:bg-danger-soft',
+};
+
+const BUTTON_SIZES: Record<ButtonSize, string> = {
+  md: 'h-ctl px-3.5 text-sm',
+  sm: 'h-8 px-2.5 text-xs',
+};
+
+/** 公共按钮（D4）：四变体/两尺寸/五状态，class 真值源 = spec-button-subtrans-2026-11-16 §1.2。 */
+export function Button(props: ButtonProps) {
+  const {
+    variant = 'secondary',
+    size = 'md',
+    tone = 'neutral',
+    solid = false,
+    active = false,
+    iconOnly = false,
+    loading = false,
+    className = '',
+    children,
+    disabled = false,
+    type = 'button',
+    ...rest
+  } = props;
+
+  const variantClass =
+    variant === 'danger' && solid ? 'bg-danger text-white hover:brightness-90' : variant === 'quiet' ? BUTTON_TONES[tone] : BUTTON_VARIANTS[variant];
+  const sizeClass = iconOnly ? `${BUTTON_SIZES.sm} w-8 px-0` : BUTTON_SIZES[size];
+  const activeClass = active && variant === 'quiet' ? ' bg-primary-soft text-primary-strong hover:bg-primary-soft' : '';
+  const loadingClass = loading ? ' relative' : '';
+
+  return (
+    <button
+      type={type}
+      className={`${BUTTON_BASE} ${variantClass} ${sizeClass}${activeClass}${loadingClass} ${className}`}
+      disabled={disabled || loading}
+      aria-busy={loading ? true : undefined}
+      {...rest}
+    >
+      {loading ? (
+        <>
+          <span className="invisible">{children}</span>
+          <span className="absolute inset-0 grid place-items-center">
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+          </span>
+        </>
+      ) : (
+        children
+      )}
+    </button>
+  );
 }
