@@ -145,6 +145,8 @@ export interface CharacterDto {
   id: string;
   name: string;
   baseSetting: string;
+  /** null=在场；N=第 N 章（含）起下线（0009） */
+  offlineFromChapter?: number | null;
 }
 
 export interface CreateCharacterBody {
@@ -155,6 +157,8 @@ export interface CreateCharacterBody {
 export interface UpdateCharacterBody {
   name?: string;
   baseSetting?: string;
+  /** null=恢复在场；数字=第 N 章起下线；缺省=不动（0009 下线控件） */
+  offlineFromChapter?: number | null;
 }
 
 export interface BookMetaPutBody {

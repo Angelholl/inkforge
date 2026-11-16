@@ -6,14 +6,12 @@ type SettingsResponse = {
   strataBaseUrl?: string;
   strataModel?: string;
   hasApiKey?: boolean;
-  mock?: boolean;
 };
 
 export default function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
-  const [mock, setMock] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [connError, setConnError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,7 +31,6 @@ export default function SettingsPage() {
         if (cancelled) return;
         setBaseUrl(s.strataBaseUrl ?? '');
         setModel(s.strataModel ?? '');
-        setMock(Boolean(s.mock));
         setHasApiKey(Boolean(s.hasApiKey));
       })
       .catch(() => {
@@ -66,7 +63,6 @@ export default function SettingsPage() {
     const body: Record<string, unknown> = {
       strataBaseUrl: baseUrl,
       strataModel: model,
-      mock,
     };
     if (apiKey.trim()) body.strataApiKey = apiKey.trim();
     try {
@@ -150,10 +146,6 @@ export default function SettingsPage() {
             placeholder="模型名称"
           />
         </div>
-        <label htmlFor="settings-mock" className="flex items-center gap-2 text-sm font-medium">
-          <input id="settings-mock" type="checkbox" checked={mock} onChange={(e) => setMock(e.target.checked)} />
-          启用 mock 模式
-        </label>
         <Button type="submit" variant="primary" loading={saving}>
           保存
         </Button>

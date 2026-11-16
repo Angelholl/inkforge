@@ -65,7 +65,8 @@ describe('人物卡 CRUD + 书籍 meta 端点', () => {
 
     const list = await app.inject({ method: 'GET', url: `/api/books/${bookId}/characters` });
     expect(list.statusCode).toBe(200);
-    expect(list.json()).toEqual([{ id: card.id, name: '张三', baseSetting: '{"身份":"主角"}' }]);
+    // 0009：人物卡统一形态带 offlineFromChapter（新建=null 在场）
+    expect(list.json()).toEqual([{ id: card.id, name: '张三', baseSetting: '{"身份":"主角"}', offlineFromChapter: null }]);
 
     const updated = await app.inject({
       method: 'PUT',

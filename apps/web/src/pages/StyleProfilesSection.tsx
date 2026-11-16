@@ -17,8 +17,9 @@ export default function StyleProfilesSection() {
   const { data: profiles, refetch } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
   const [name, setName] = useState('');
   const [text, setText] = useState('');
-  const [maxSegments, setMaxSegments] = useState('');
-  const [temperature, setTemperature] = useState('');
+  // 采样参数预填服务端默认（段数 20 = sample.ts；温度 0.3 = analysis.ts），不再裸露空框
+  const [maxSegments, setMaxSegments] = useState('20');
+  const [temperature, setTemperature] = useState('0.3');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   // B5 重蒸进行中的档案 id（meta 行按钮 loading 用；busy 仍是全局互斥）
@@ -94,6 +95,15 @@ export default function StyleProfilesSection() {
 
   const distill = async (): Promise<void> => {
     setMsg('');
+    // 前置校验（owner 反馈：空名直发 400 且报错不可读）
+    if (name.trim() === '') {
+      setMsg('请先填写档案名称');
+      return;
+    }
+    if (text.replace(/\s/g, '').length < 200) {
+      setMsg(`样本正文去空白后不足 200 字（当前 ${text.replace(/\s/g, '').length} 字），请粘贴或导入更多正文`);
+      return;
+    }
     setBusy(true);
     try {
       const { jobId } = await api.distillStyle({
@@ -305,10 +315,11 @@ export default function StyleProfilesSection() {
               }}
             />
             <BookSamplePicker onImport={setText} />
+            <p className="text-xs text-muted">采样参数（一般保持默认即可）：段数=从原文均匀抽取多少段送 AI 分析，越多越全面也越慢；温度=分析随机度，越低越稳定。</p>
             <div className="flex gap-2">
-              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样段数（4-20，留空默认）"
+              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样段数（4-20）"
                 min={4} max={20} placeholder="采样段数（4-20）" value={maxSegments} onChange={(e) => setMaxSegments(e.target.value)} />
-              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样温度（0-1，留空默认）"
+              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样温度（0-1）"
                 min={0} max={1} step="0.1" placeholder="采样温度（0-1）" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
             </div>
             <Button variant="primary" size="md" loading={busy} onClick={() => void distill()}>

@@ -20,7 +20,7 @@ const book = {
       title: '第一章',
       isOriginal: true,
       blueprint: null,
-      targetChars: 3000,
+      targetChars: 2500,
       status: 'done',
       createdAt: '2026-11-13T00:00:00Z',
     },
@@ -51,18 +51,20 @@ function jsonResponse(data: unknown, status = 200) {
   };
 }
 
-const CHARACTER_FIXTURE = [{ id: 'k1', name: '张三', baseSetting: '{"身份":"主角"}' }];
+const CHARACTER_FIXTURE = [{ id: 'k1', name: '张三', baseSetting: '{"身份":"主角"}', offlineFromChapter: null }];
 
 // 每测试自装 stub（afterEach unstubAllGlobals 会移除模块级 stub，第二个测试会裸奔）
 function installFetchStub() {
   let characters = [...CHARACTER_FIXTURE];
+  // book 可变副本：PUT blueprint 后章行入列（发起续写预检章蓝图存在）
+  let bookState = { ...book, chapters: book.chapters.map((c) => ({ ...c })) };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       calls.push({ url: u, init });
       if (u.endsWith('/api/books/b1/characters')) {
-        if (init?.method === 'POST') return jsonResponse({ id: 'k2', name: '李四', baseSetting: '{"设定":"反派"}' }, 201);
+        if (init?.method === 'POST') return jsonResponse({ id: 'k2', name: '李四', baseSetting: '{"设定":"反派"}', offlineFromChapter: null }, 201);
         return jsonResponse(characters);
       }
       const del = u.match(/\/api\/books\/b1\/characters\/([^/]+)$/);
@@ -70,9 +72,29 @@ function installFetchStub() {
         characters = characters.filter((c) => c.id !== del[1]);
         return jsonResponse({}, 204);
       }
-      if (u.includes('/api/books/b1/meta')) return jsonResponse({ ...book, description: '旧世界观', outline: '旧大纲' });
+      if (del && init?.method === 'PUT') {
+        // 0009 下线/恢复：patch 合并回读
+        const patch = JSON.parse(String(init.body)) as Record<string, unknown>;
+        const idx = characters.findIndex((c) => c.id === del[1]);
+        if (idx < 0) return jsonResponse({ error: 'not found' }, 404);
+        characters[idx] = { ...characters[idx], ...patch } as (typeof characters)[number];
+        return jsonResponse(characters[idx]);
+      }
+      if (u.includes('/blueprint-suggest')) {
+        return jsonResponse({ blueprint: { goal: '建议目标：入城遇阻', beats: ['守卫盘查'], mustHaveBeats: [], bannedTopics: [] }, source: 'llm' });
+      }
+      const bpPut = u.match(/\/api\/books\/b1\/chapters\/(\d+)\/blueprint$/);
+      if (bpPut && init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body)) as { title: string; blueprint: null; targetChars?: number };
+        const no = Number(bpPut[1]);
+        const ch = { id: `c-new-${no}`, bookId: 'b1', chapterNo: no, title: body.title, isOriginal: false, blueprint: body.blueprint, targetChars: body.targetChars ?? 3000, status: 'planned', createdAt: '2026-11-13T00:00:00Z' };
+        bookState = { ...bookState, chapters: [...bookState.chapters.filter((c) => c.chapterNo !== no), ch].sort((a, b) => a.chapterNo - b.chapterNo) };
+        return jsonResponse(ch, 201);
+      }
+      if (u.endsWith('/api/runs') && init?.method === 'POST') return jsonResponse({ runId: 'r1234567890' }, 202);
+      if (u.includes('/api/books/b1/meta')) return jsonResponse({ ...bookState, description: '旧世界观', outline: '旧大纲' });
       if (u.includes('/api/books/b1')) {
-        return { ok: true, status: 200, json: async () => book, text: async () => JSON.stringify(book) };
+        return { ok: true, status: 200, json: async () => bookState, text: async () => JSON.stringify(bookState) };
       }
       return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
     }),
@@ -306,7 +328,7 @@ describe('BookDetailPage', () => {
   it('逐书文风示例开关：绑定后出现 checkbox，勾选发 PUT style-fewshot {on:true} 并回读 checked', async () => {
     installStyleStub();
     stylePage();
-    const sel = (await screen.findByLabelText('风格档案绑定')) as HTMLSelectElement;
+    const sel = await screen.findByLabelText('风格档案绑定');
     await waitFor(() => expect(screen.getByRole('option', { name: /测试档案/ })).toBeTruthy());
     fireEvent.change(sel, { target: { value: 'sp1' } });
 
@@ -331,5 +353,119 @@ describe('BookDetailPage', () => {
     );
     await waitFor(() => expect((screen.getByLabelText('文风示例注入') as HTMLInputElement).checked).toBe(true));
     expect(await screen.findByText('文风示例注入已开启')).toBeTruthy();
+  });
+
+  it('蓝图编辑区（owner 反馈②④）：章号默认接续末章；字数随章号同步；AI 建议蓝图回填；保存透传 targetChars', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // 章号默认 = 末章(2)+1 = 3；下一章无章行 → 字数默认 3000
+    const chNoInput = (await screen.findByLabelText('章号')) as HTMLInputElement;
+    await waitFor(() => expect(chNoInput.value).toBe('3'));
+    expect((screen.getByLabelText('本章目标字数') as HTMLInputElement).value).toBe('3000');
+
+    // 切到第 1 章 → 字数同步该章 targetChars=2500
+    fireEvent.change(chNoInput, { target: { value: '1' } });
+    await waitFor(() => expect((screen.getByLabelText('本章目标字数') as HTMLInputElement).value).toBe('2500'));
+
+    // AI 建议蓝图 → 回填 textarea
+    fireEvent.change(chNoInput, { target: { value: '3' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 建议蓝图' }));
+    const bpArea = (await waitFor(() => {
+      const el = screen.getByPlaceholderText(/蓝图 JSON/) as HTMLTextAreaElement;
+      expect(el.value).toContain('建议目标');
+      return el;
+    })) as HTMLTextAreaElement;
+
+    // 手改字数后保存 → PUT body 带 targetChars
+    fireEvent.change(screen.getByLabelText('本章目标字数'), { target: { value: '2800' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存蓝图' }));
+    const bpPut = await waitFor(() => {
+      const c = calls.find((c) => /\/chapters\/3\/blueprint$/.test(c.url) && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    const bpBody = JSON.parse(String(bpPut.init?.body));
+    expect(bpBody.targetChars).toBe(2800);
+    expect(bpBody.blueprint.goal).toContain('建议目标');
+    void bpArea;
+  });
+
+  it('发起续写（owner 反馈②④）：未保存蓝图先拦截提示；保存后 mode=continue 透传 maxRounds', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /发起续写/ }));
+    await waitFor(() => expect(screen.getByText(/还没有蓝图/)).toBeTruthy());
+    expect(calls.some((c) => c.url.endsWith('/api/runs'))).toBe(false);
+
+    // 填蓝图 → 保存（stub 把章 3 入列）→ 发起续写
+    const bpArea = screen.getByPlaceholderText(/蓝图 JSON/) as HTMLTextAreaElement;
+    setInput(bpArea, JSON.stringify({ goal: '入城遇阻', beats: ['守卫盘查'], mustHaveBeats: [], bannedTopics: [] }));
+    fireEvent.click(screen.getByRole('button', { name: '保存蓝图' }));
+    fireEvent.click(await screen.findByRole('button', { name: /发起续写/ }));
+    const runCall = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/runs') && c.init?.method === 'POST');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(runCall.init?.body))).toMatchObject({
+      bookId: 'b1',
+      fromChapter: 3,
+      toChapter: 3,
+      mode: 'continue',
+      maxRounds: 2,
+    });
+  });
+
+  it('人物下线（0009 专用控件）：章号默认下一章，下线发 PUT offlineFromChapter；徽标回显+恢复在场发 null', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('张三')).toBeTruthy());
+
+    const chInput = screen.getByLabelText('下线章号-张三') as HTMLInputElement;
+    expect(chInput.value).toBe('3'); // 默认下一章
+    fireEvent.change(chInput, { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: '下线' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => /\/characters\/k1$/.test(c.url) && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body))).toEqual({ offlineFromChapter: 5 });
+
+    // stub 回读 → 徽标与恢复钮出现
+    fireEvent.click(await screen.findByRole('button', { name: '恢复在场' }));
+    const revivePut = await waitFor(() => {
+      const list = calls.filter((c) => /\/characters\/k1$/.test(c.url) && c.init?.method === 'PUT');
+      expect(list.length).toBeGreaterThanOrEqual(2);
+      return list[list.length - 1]!;
+    });
+    expect(JSON.parse(String(revivePut.init?.body))).toEqual({ offlineFromChapter: null });
+    await waitFor(() => expect(screen.getByLabelText('下线章号-张三')).toBeTruthy());
   });
 });

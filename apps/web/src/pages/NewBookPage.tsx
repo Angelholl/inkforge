@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/client';
-import type { ChapterBlueprint } from '@inkforge/shared';
 import { Button } from '../components/ui';
 
 // 章题行：第X章/节/回（汉字或数字），其后同行不带句号换行
@@ -31,11 +30,45 @@ export function splitChapters(raw: string): ParsedChapter[] {
   return out;
 }
 
-type WizardState =
-  | { step: 1 }
-  | { step: 2; bookId: string }
-  | { step: 3; bookId: string; nextChapterNo: number };
+export interface DecodedText {
+  text: string;
+  encoding: string;
+}
 
+/**
+ * 文本文件解码探测（owner 反馈③：GBK 文件按 UTF-8 直读全篇乱码）：
+ * ① BOM 定码（UTF-16LE/BE、UTF-8）；② 无 BOM 先试 strict UTF-8；
+ * ③ 解出含 C1 控制符（U+0080–U+009F，正常中文文本几乎不含）→ 判误判回退 GB18030（GBK/GB2312 超集）。
+ */
+export function decodeTextFile(buf: ArrayBuffer): DecodedText {
+  const bytes = new Uint8Array(buf);
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return { text: new TextDecoder('utf-16le').decode(buf), encoding: 'UTF-16LE' };
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return { text: new TextDecoder('utf-16be').decode(buf), encoding: 'UTF-16BE' };
+  }
+  const hasUtf8Bom = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+  const body = hasUtf8Bom ? buf.slice(3) : buf;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(body);
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      if (c >= 0x80 && c <= 0x9f) return { text: new TextDecoder('gb18030').decode(body), encoding: 'GB18030' };
+    }
+    return { text, encoding: 'UTF-8' };
+  } catch {
+    /* 非 UTF-8：按中文 Windows 最常见编码回退 */
+  }
+  return { text: new TextDecoder('gb18030').decode(body), encoding: 'GB18030' };
+}
+
+type WizardState = { step: 1 } | { step: 2; bookId: string };
+
+/**
+ * 入口 A 续写向导（owner 四反馈②④拍板：设定统一落点=书详情页）：
+ * ① 建书 → ② 导入原文 → 成功后直接进书详情页（世界观/大纲/人物卡/蓝图编辑/发起续写都在那一套面板，不再有第三步）。
+ */
 export default function NewBookPage() {
   const navigate = useNavigate();
   const [wiz, setWiz] = useState<WizardState>({ step: 1 });
@@ -43,9 +76,7 @@ export default function NewBookPage() {
   const [description, setDescription] = useState('');
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedChapter[]>([]);
-  const [blueprintJson, setBlueprintJson] = useState('');
-  // B3：发起续写时透传给 run（服务端默认 2）
-  const [maxRounds, setMaxRounds] = useState(2);
+  const [fileInfo, setFileInfo] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -78,60 +109,9 @@ export default function NewBookPage() {
     setBusy(true);
     try {
       const bookId = wiz.step === 2 ? wiz.bookId : '';
-      const r = await api.importOriginal(bookId, { chapters: parsed });
-      setWiz({ step: 3, bookId, nextChapterNo: r.lastChapterNo + 1 });
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const suggestBlueprint = async () => {
-    setError('');
-    const bookId = wiz.step === 3 ? wiz.bookId : '';
-    const chapterNo = wiz.step === 3 ? wiz.nextChapterNo : 0;
-    setBusy(true);
-    try {
-      const r = await api.suggestBlueprint(bookId, { chapterNo });
-      setBlueprintJson(JSON.stringify(r.blueprint, null, 2));
-    } catch (e) {
-      setError(`${String(e)}\n（AI 建议失败，可直接在下方手填蓝图 JSON）`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const summarize = async (chapterNo: number) => {
-    setError('');
-    const bookId = wiz.step === 3 ? wiz.bookId : '';
-    setBusy(true);
-    try {
-      await api.summarizeChapter(bookId, chapterNo);
-      setError(`第 ${chapterNo} 章摘要已生成`);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startContinue = async () => {
-    setError('');
-    const bookId = wiz.step === 3 ? wiz.bookId : '';
-    const chapterNo = wiz.step === 3 ? wiz.nextChapterNo : 0;
-    let blueprint: ChapterBlueprint;
-    try {
-      blueprint = JSON.parse(blueprintJson) as ChapterBlueprint;
-    } catch {
-      return setError('蓝图 JSON 解析失败，请检查格式');
-    }
-    if (!blueprint.goal?.trim()) return setError('蓝图缺 goal');
-    setBusy(true);
-    try {
-      await api.putBlueprint(bookId, chapterNo, { title: `第${chapterNo}章`, blueprint, targetChars: 3000 });
-      const r = await api.createRun({ bookId, fromChapter: chapterNo, toChapter: chapterNo, mode: 'continue', maxRounds });
-      navigate(`/runs/${r.runId}`);
+      await api.importOriginal(bookId, { chapters: parsed });
+      // 统一落点（owner 拍板）：导入完成直接进书详情页，设定只有一套
+      navigate(`/books/${bookId}`);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -142,13 +122,19 @@ export default function NewBookPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-bold">新建小说（续写）</h1>
-      <p className="mt-1 text-sm text-muted">① 建书 → ② 导入原文 → ③ 发起续写</p>
+      <p className="mt-1 text-sm text-muted">① 建书 → ② 导入原文 → ③ 到书详情页设定剧情/人物/字数并发起续写</p>
       {error && <pre className="mt-4 whitespace-pre-wrap rounded border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</pre>}
 
       {wiz.step === 1 && (
         <div className="mt-6 space-y-3">
           <input className="w-full rounded border px-3 py-2" placeholder="书名" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <textarea className="w-full rounded border px-3 py-2" placeholder="简介（可选）" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <textarea
+            className="w-full rounded border px-3 py-2"
+            placeholder="简介 / 世界观（可选；导入后也可在书详情页编辑）"
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
           <Button variant="primary" disabled={busy} onClick={createBook}>
             建书并进入导入
           </Button>
@@ -164,17 +150,33 @@ export default function NewBookPage() {
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
           />
-          <input
-            type="file"
-            accept=".txt,.md"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              const reader = new FileReader();
-              reader.onload = () => setRawText(String(reader.result ?? ''));
-              reader.readAsText(f);
-            }}
-          />
+          {/* 文件选择区（owner 反馈①：原生 file input 裸奔无底框）——虚线框+文件名/编码回显 */}
+          <div>
+            <input
+              type="file"
+              id="import-original-file"
+              accept=".txt,.md"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const { text, encoding } = decodeTextFile(reader.result as ArrayBuffer);
+                  setRawText(text);
+                  setFileInfo(`${f.name} · 已按 ${encoding} 解码（${text.length} 字）`);
+                };
+                reader.readAsArrayBuffer(f);
+              }}
+            />
+            <label
+              htmlFor="import-original-file"
+              className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed px-3 py-6 text-sm text-muted hover:border-primary hover:bg-primary-soft/40"
+            >
+              <span>点击选择本地 txt / md 文件（自动识别 UTF-8 / GBK 编码）</span>
+              {fileInfo && <span className="text-xs font-medium text-primary-strong">{fileInfo}</span>}
+            </label>
+          </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={preview}>
               拆章预览
@@ -202,53 +204,6 @@ export default function NewBookPage() {
               ))}
             </ul>
           )}
-        </div>
-      )}
-
-      {wiz.step === 3 && (
-        <div className="mt-6 space-y-3">
-          <p className="text-sm">
-            导入完成，下一章为 <strong>第 {wiz.step === 3 ? wiz.nextChapterNo : 0} 章</strong>。
-          </p>
-          <div>
-            <p className="text-sm text-muted">补摘要（可选，逐章；导入章无摘要会影响续写连续性）：</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {wiz.step === 3 &&
-                Array.from({ length: wiz.nextChapterNo - 1 }, (_, k) => k + 1).map((n) => (
-                  <Button key={n} variant="secondary" size="sm" disabled={busy} onClick={() => summarize(n)}>
-                    补摘要·第 {n} 章
-                  </Button>
-                ))}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" disabled={busy} onClick={suggestBlueprint}>
-              AI 建议蓝图
-            </Button>
-          </div>
-          <textarea
-            className="w-full rounded border px-3 py-2 font-mono text-sm"
-            placeholder='蓝图 JSON，如 {"goal":"…","beats":["…"],"mustHaveBeats":[],"bannedTopics":[]}'
-            rows={10}
-            value={blueprintJson}
-            onChange={(e) => setBlueprintJson(e.target.value)}
-          />
-          <label className="flex items-center gap-1.5 text-sm text-muted">
-            质量轮数
-            <select
-              aria-label="质量轮数"
-              className="h-ctl rounded-ctl border border-line bg-surface px-2 text-sm"
-              value={maxRounds}
-              onChange={(e) => setMaxRounds(Number(e.target.value))}
-            >
-              <option value={1}>1 轮</option>
-              <option value={2}>2 轮</option>
-              <option value={3}>3 轮</option>
-            </select>
-          </label>
-          <Button variant="primary" disabled={busy} onClick={startContinue}>
-            发起续写（第 {wiz.step === 3 ? wiz.nextChapterNo : 0} 章）
-          </Button>
         </div>
       )}
     </main>

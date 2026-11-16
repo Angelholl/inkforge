@@ -87,14 +87,15 @@ export function listBooks(db: Database): Book[] {
   return (db.prepare('SELECT * FROM books ORDER BY created_at DESC').all() as BookRow[]).map(toBook);
 }
 
-export function listCharacters(db: Database, bookId: string): Array<{ id: string; name: string; baseSetting: string }> {
+export function listCharacters(db: Database, bookId: string): CharacterCard[] {
   return (
-    db.prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? ORDER BY created_at').all(bookId) as Array<{
+    db.prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? ORDER BY created_at`).all(bookId) as Array<{
       id: string;
       name: string;
       base_setting: string;
+      offline_from_chapter: number | null;
     }>
-  ).map((r) => ({ id: r.id, name: r.name, baseSetting: r.base_setting }));
+  ).map(toCharacterCard);
 }
 
 /** 风格绑定/解绑：绑定且传 snapshot 时同步写 persona 快照（DEC-2026-1115-04 批次三）；解绑/未传清快照。 */
@@ -145,33 +146,48 @@ export function updateBookMeta(
   return getBook(db, bookId);
 }
 
-export function getCharacter(
-  db: Database,
-  bookId: string,
-  characterId: string,
-): { id: string; name: string; baseSetting: string } | undefined {
-  const row = db
-    .prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? AND id = ?')
-    .get(bookId, characterId) as { id: string; name: string; base_setting: string } | undefined;
-  return row ? { id: row.id, name: row.name, baseSetting: row.base_setting } : undefined;
+/** 人物卡统一形态（0009）：offlineFromChapter=null 在场；N=第 N 章（含）起下线。 */
+export interface CharacterCard {
+  id: string;
+  name: string;
+  baseSetting: string;
+  offlineFromChapter: number | null;
 }
 
-export function getCharacterByName(
-  db: Database,
-  bookId: string,
-  name: string,
-): { id: string; name: string; baseSetting: string } | undefined {
+const CHARACTER_COLS = 'id, name, base_setting, offline_from_chapter';
+
+function toCharacterCard(r: { id: string; name: string; base_setting: string; offline_from_chapter: number | null }): CharacterCard {
+  return { id: r.id, name: r.name, baseSetting: r.base_setting, offlineFromChapter: r.offline_from_chapter ?? null };
+}
+
+export function getCharacter(db: Database, bookId: string, characterId: string): CharacterCard | undefined {
   const row = db
-    .prepare('SELECT id, name, base_setting FROM characters WHERE book_id = ? AND name = ?')
-    .get(bookId, name) as { id: string; name: string; base_setting: string } | undefined;
-  return row ? { id: row.id, name: row.name, baseSetting: row.base_setting } : undefined;
+    .prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? AND id = ?`)
+    .get(bookId, characterId) as { id: string; name: string; base_setting: string; offline_from_chapter: number | null } | undefined;
+  return row ? toCharacterCard(row) : undefined;
+}
+
+export function getCharacterByName(db: Database, bookId: string, name: string): CharacterCard | undefined {
+  const row = db
+    .prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? AND name = ?`)
+    .get(bookId, name) as { id: string; name: string; base_setting: string; offline_from_chapter: number | null } | undefined;
+  return row ? toCharacterCard(row) : undefined;
+}
+
+/** 在场人物（写第 chapterNo 章时的口径）：下线章当章即不在场（offline_from_chapter > chapterNo 才保留）。 */
+export function listActiveCharacters(db: Database, bookId: string, chapterNo: number): CharacterCard[] {
+  return (
+    db
+      .prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? AND (offline_from_chapter IS NULL OR offline_from_chapter > ?) ORDER BY created_at`)
+      .all(bookId, chapterNo) as Array<{ id: string; name: string; base_setting: string; offline_from_chapter: number | null }>
+  ).map(toCharacterCard);
 }
 
 export function createCharacter(
   db: Database,
   bookId: string,
   input: { name: string; baseSetting?: string },
-): { id: string; name: string; baseSetting: string } {
+): CharacterCard {
   const id = randomUUID();
   db.prepare('INSERT INTO characters(id, book_id, name, base_setting, created_at) VALUES(?,?,?,?,?)').run(
     id,
@@ -180,26 +196,32 @@ export function createCharacter(
     input.baseSetting ?? '{}',
     new Date().toISOString(),
   );
-  return { id, name: input.name, baseSetting: input.baseSetting ?? '{}' };
+  return { id, name: input.name, baseSetting: input.baseSetting ?? '{}', offlineFromChapter: null };
 }
 
+/**
+ * patch 三态（0009 下线控件）：offlineFromChapter=undefined 保留现值；null 恢复在场；数字=第 N 章起下线。
+ * name/baseSetting 沿旧语义（undefined 保留）。
+ */
 export function updateCharacter(
   db: Database,
   bookId: string,
   characterId: string,
-  patch: { name?: string; baseSetting?: string },
-): { id: string; name: string; baseSetting: string } | undefined {
+  patch: { name?: string; baseSetting?: string; offlineFromChapter?: number | null },
+): CharacterCard | undefined {
   const cur = getCharacter(db, bookId, characterId);
   if (!cur) return undefined;
   const name = patch.name ?? cur.name;
   const baseSetting = patch.baseSetting ?? cur.baseSetting;
-  db.prepare('UPDATE characters SET name = ?, base_setting = ? WHERE book_id = ? AND id = ?').run(
+  const offlineFromChapter = patch.offlineFromChapter === undefined ? cur.offlineFromChapter : patch.offlineFromChapter;
+  db.prepare('UPDATE characters SET name = ?, base_setting = ?, offline_from_chapter = ? WHERE book_id = ? AND id = ?').run(
     name,
     baseSetting,
+    offlineFromChapter,
     bookId,
     characterId,
   );
-  return { id: characterId, name, baseSetting };
+  return getCharacter(db, bookId, characterId);
 }
 
 /** 删书：外键无级联（SQLite 默认 RESTRICT），按依赖序显式清空全部关联表，书不存在返回 false。 */

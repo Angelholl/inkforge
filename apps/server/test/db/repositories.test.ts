@@ -147,6 +147,7 @@ describe('人物卡仓储 + 书籍 meta', () => {
     const bid = booksRepo.createBook(db, { title: '卡测之书' }).id;
     const c = booksRepo.createCharacter(db, bid, { name: '李四', baseSetting: '{"身份":"反派"}' });
     expect(c.name).toBe('李四');
+    expect(c.offlineFromChapter).toBeNull(); // 新建即在场（0009）
     expect(booksRepo.getCharacter(db, bid, c.id)?.baseSetting).toBe('{"身份":"反派"}');
     expect(() => booksRepo.createCharacter(db, bid, { name: '李四' })).toThrow(/UNIQUE/);
     const u = booksRepo.updateCharacter(db, bid, c.id, { baseSetting: '{"身份":"盟友"}' });
@@ -158,6 +159,44 @@ describe('人物卡仓储 + 书籍 meta', () => {
     expect(booksRepo.deleteCharacter(db, bid, 'nonexistent')).toBe(false);
     // 删除后重名约束解除
     expect(booksRepo.createCharacter(db, bid, { name: '李四' }).name).toBe('李四');
+  });
+
+  it('人物下线三态（0009）：数字=第N章起下线、null=恢复在场、undefined=保留；listActiveCharacters 边界=下线当章即不在场', () => {
+    const bid = booksRepo.createBook(db, { title: '下线之书' }).id;
+    const a = booksRepo.createCharacter(db, bid, { name: '甲' });
+    const b = booksRepo.createCharacter(db, bid, { name: '乙' });
+    // 下线：甲第 5 章起
+    expect(booksRepo.updateCharacter(db, bid, a.id, { offlineFromChapter: 5 })?.offlineFromChapter).toBe(5);
+    // undefined 保留现值
+    expect(booksRepo.updateCharacter(db, bid, a.id, { baseSetting: '{"设定":"改"}' })?.offlineFromChapter).toBe(5);
+    // 边界：写第 5 章（下线当章）→ 甲不在场；写第 4 章 → 甲在场。
+    // 同毫秒插入 created_at 相同 → ORDER BY 顺序无契约；且 JS sort 按码点（'乙'<'甲'），断言用集合比顺序无关。
+    expect(booksRepo.listActiveCharacters(db, bid, 5).map((c) => c.name)).toEqual(['乙']);
+    expect(new Set(booksRepo.listActiveCharacters(db, bid, 4).map((c) => c.name))).toEqual(new Set(['甲', '乙']));
+    expect(new Set(booksRepo.listCharacters(db, bid).map((c) => c.name))).toEqual(new Set(['甲', '乙']));
+    // 恢复在场：null
+    expect(booksRepo.updateCharacter(db, bid, a.id, { offlineFromChapter: null })?.offlineFromChapter).toBeNull();
+    expect(new Set(booksRepo.listActiveCharacters(db, bid, 9).map((c) => c.name))).toEqual(new Set(['甲', '乙']));
+    // 不存在的卡 → undefined
+    expect(booksRepo.updateCharacter(db, bid, 'missing', { offlineFromChapter: 1 })).toBeUndefined();
+    void b;
+  });
+
+  it('快照 offlined（0009）：下线章起出 offlined 行，恢复在场后消失；renderSnapshotText 渲染防复活行', () => {
+    const bid = booksRepo.createBook(db, { title: '快照下线之书' }).id;
+    const a = booksRepo.createCharacter(db, bid, { name: '王五', baseSetting: '{"身份":"配角"}' });
+    booksRepo.updateCharacter(db, bid, a.id, { offlineFromChapter: 3 });
+    const snapAt4 = continuityRepo.getContinuitySnapshot(db, bid, 4);
+    expect(snapAt4.offlined).toEqual([{ name: '王五', fromChapter: 3 }]);
+    // 下线章当章即标注
+    expect(continuityRepo.getContinuitySnapshot(db, bid, 3).offlined).toEqual([{ name: '王五', fromChapter: 3 }]);
+    // 下线前不标注
+    expect(continuityRepo.getContinuitySnapshot(db, bid, 2).offlined).toEqual([]);
+    const text = continuityRepo.renderSnapshotText(snapAt4);
+    expect(text).toContain('[已下线] 王五（第3章起退场，不得再登场）');
+    // 恢复在场 → offlined 清空
+    booksRepo.updateCharacter(db, bid, a.id, { offlineFromChapter: null });
+    expect(continuityRepo.getContinuitySnapshot(db, bid, 4).offlined).toEqual([]);
   });
 
   it('updateBookMeta 持久化 outline 与 description；createBook 收 outline 往返', () => {

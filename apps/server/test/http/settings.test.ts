@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 describe('GET/PUT /api/settings', () => {
-  it('PUT 全字段后 GET 返回对应值、hasApiKey=true 且文件含 API Key', async () => {
+  it('PUT 全字段后 GET 返回对应值、hasApiKey=true 且文件含 API Key；mock 开关已删除（payload 带也不落盘）', async () => {
     const put = await app.inject({
       method: 'PUT',
       url: '/api/settings',
@@ -45,7 +45,7 @@ describe('GET/PUT /api/settings', () => {
         cloudBaseUrl: 'https://cloud.example.com/v1',
         cloudApiKey: 'cloud-test-key',
         cloudModel: 'cloud-model',
-        mock: true,
+        mock: true, // 已删开关：schema 剥离该字段，不得写入配置
       },
     });
     expect(put.statusCode).toBe(200);
@@ -61,9 +61,10 @@ describe('GET/PUT /api/settings', () => {
       cloudBaseUrl: 'https://cloud.example.com/v1',
       cloudModel: 'cloud-model',
       hasCloudApiKey: true,
-      mock: true,
       configPath: configFile,
     });
+    // 回归（owner 拍板删开关）：GET 不再回显 mock，PUT 不再写 INKFORGE_MOCK
+    expect(body).not.toHaveProperty('mock');
     // 不回显 Key 明文
     expect(get.body).not.toContain('sk-test-local');
     expect(get.body).not.toContain('cloud-test-key');
@@ -72,7 +73,7 @@ describe('GET/PUT /api/settings', () => {
     const saved = JSON.parse(raw) as Record<string, string>;
     expect(saved.STRATA_API_KEY).toBe('sk-test-local');
     expect(saved.STRATA_BASE_URL).toBe('http://127.0.0.1:12345/v1');
-    expect(saved.INKFORGE_MOCK).toBe('1');
+    expect(saved.INKFORGE_MOCK).toBeUndefined();
   });
 
   it('PUT 空串字段视为删除，GET hasApiKey=false', async () => {
@@ -97,7 +98,7 @@ describe('GET/PUT /api/settings', () => {
     expect(saved.STRATA_BASE_URL).toBeUndefined();
   });
 
-  it('无文件时 GET 全空且 hasApiKey=false', async () => {
+  it('无文件时 GET 全空且 hasApiKey=false（无 mock 字段）', async () => {
     const get = await app.inject({ method: 'GET', url: '/api/settings' });
     expect(get.statusCode).toBe(200);
     const body = get.json();
@@ -108,9 +109,9 @@ describe('GET/PUT /api/settings', () => {
       cloudBaseUrl: '',
       cloudModel: '',
       hasCloudApiKey: false,
-      mock: false,
       configPath: configFile,
     });
+    expect(body).not.toHaveProperty('mock');
   });
 
   it('loadConfig：仅文件提供 STRATA_* 时不抛，providers.local 取文件值', () => {

@@ -43,7 +43,7 @@ const settingsPutSchema = z.object({
   cloudBaseUrl: z.string().optional(),
   cloudApiKey: z.string().optional(),
   cloudModel: z.string().optional(),
-  mock: z.boolean().optional(),
+  // mock 开关已彻底删除（owner 拍板）：mock 只认 INKFORGE_MOCK 环境变量（开发/测试用）
 });
 
 const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive() });
@@ -976,7 +976,6 @@ ${repairPrompt(first.errors)}`))).text,
       cloudBaseUrl: s.INKFORGE_CLOUD_BASE_URL ?? '',
       cloudModel: s.INKFORGE_CLOUD_MODEL ?? '',
       hasCloudApiKey: Boolean(s.INKFORGE_CLOUD_API_KEY),
-      mock: s.INKFORGE_MOCK === '1',
       configPath: configFilePath(),
     };
   });
@@ -996,7 +995,6 @@ ${repairPrompt(first.errors)}`))).text,
     setOrDelete('INKFORGE_CLOUD_BASE_URL', body.cloudBaseUrl);
     setOrDelete('INKFORGE_CLOUD_API_KEY', body.cloudApiKey);
     setOrDelete('INKFORGE_CLOUD_MODEL', body.cloudModel);
-    if (body.mock !== undefined) next.INKFORGE_MOCK = body.mock ? '1' : '0';
     writeSettingsFile(next);
     reply.send({ saved: true, restartRequired: true });
   });
@@ -1019,7 +1017,10 @@ function parseBody<T extends z.ZodTypeAny>(reply: FastifyReply, schema: T, body:
   try {
     return schema.parse(body) as z.infer<T>;
   } catch (e) {
-    reply.code(400).send({ error: (e as z.ZodError).message });
+    // 400 人话化（owner 反馈：zod 原始 issue JSON 数组不可读）：逐 issue「path: message」分号连接
+    const zerr = e as z.ZodError;
+    const detail = zerr?.issues?.map((i) => `${i.path.length > 0 ? i.path.join('.') : '(body)'}: ${i.message}`).join('；');
+    reply.code(400).send({ error: `请求参数不合法：${detail ?? zerr.message}` });
     return null;
   }
 }

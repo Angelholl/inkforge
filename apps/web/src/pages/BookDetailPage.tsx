@@ -5,7 +5,7 @@ import { api, apiErrorText } from '../api/client';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
-import { Button, Chip } from '../components/ui';
+import { Badge, Button, Chip } from '../components/ui';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleProfileDto } from '@inkforge/shared';
 
 function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string | null) => void }) {
@@ -64,6 +64,13 @@ export default function BookDetailPage() {
   const [chapterNo, setChapterNo] = useState(1);
   // B3：本页一枚 select 统管本页三个生成入口（单章/整书/行内），默认 2 = 服务端默认
   const [maxRounds, setMaxRounds] = useState(2);
+  // 蓝图编辑区（owner 反馈②④）：章号默认接续末章；字数随章号同步（防 4s 轮询覆盖编辑，仅章号变化时重置）
+  const [targetChars, setTargetChars] = useState(3000);
+  const [suggesting, setSuggesting] = useState(false);
+  const chapterNoInitRef = useRef(false);
+  const targetCharsSyncRef = useRef(-1);
+  // 人物下线（0009）：每卡行内章号草稿（默认下一章）
+  const [offlineDraft, setOfflineDraft] = useState<Record<string, number>>({});
   const [msg, setMsg] = useState('');
   const [worldText, setWorldText] = useState('');
   const [outlineText, setOutlineText] = useState('');
@@ -90,6 +97,26 @@ export default function BookDetailPage() {
     }
   }, [book, chapterNo, blueprintText]);
 
+  // 章号默认接续末章（只初始化一次，不覆盖用户手改）
+  useEffect(() => {
+    if (book && !chapterNoInitRef.current) {
+      const maxNo = book.chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0);
+      setChapterNo(maxNo + 1);
+      chapterNoInitRef.current = true;
+    }
+  }, [book]);
+
+  // 字数随章号同步：章号没变就不重置（轮询 book 引用常变，防覆盖用户编辑中的字数）
+  useEffect(() => {
+    if (book && targetCharsSyncRef.current !== chapterNo) {
+      const ch = book.chapters.find((c) => c.chapterNo === chapterNo);
+      setTargetChars(ch?.targetChars ?? 3000);
+      targetCharsSyncRef.current = chapterNo;
+    }
+  }, [book, chapterNo]);
+
+  const nextChapterNo = book ? book.chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0) + 1 : 1;
+
   const saveBlueprint = async () => {
     try {
       const blueprint = JSON.parse(blueprintText) as ChapterBlueprint;
@@ -97,12 +124,41 @@ export default function BookDetailPage() {
       const r = await api.putBlueprint(bookId, chapterNo, {
         title: ch?.title || `第${chapterNo}章`,
         blueprint,
-        targetChars: ch?.targetChars,
+        targetChars,
       });
-      setMsg(`蓝图已保存：${r.title}`);
+      setMsg(`蓝图已保存：${r.title}（目标 ${targetChars} 字）`);
       void refetch();
     } catch (e) {
       setMsg(`保存失败：${(e as Error).message}`);
+    }
+  };
+
+  const suggest = async () => {
+    setMsg('');
+    setSuggesting(true);
+    try {
+      const r = await api.suggestBlueprint(bookId, { chapterNo });
+      setBlueprintText(JSON.stringify(r.blueprint, null, 2));
+      setMsg(`已填入第 ${chapterNo} 章蓝图建议，可编辑后点「保存蓝图」`);
+    } catch (e) {
+      setMsg(`AI 建议失败：${apiErrorText(e)}（可直接在下方手填蓝图 JSON）`);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  const startContinue = async () => {
+    setMsg('');
+    const ch = book?.chapters.find((c) => c.chapterNo === chapterNo);
+    if (!ch?.blueprint) {
+      setMsg(`第 ${chapterNo} 章还没有蓝图：请先「保存蓝图」（或用 AI 建议生成）再发起续写`);
+      return;
+    }
+    try {
+      const r = await api.createRun({ bookId, fromChapter: chapterNo, toChapter: chapterNo, mode: 'continue', maxRounds });
+      setMsg(`续写已入队 run ${r.runId.slice(0, 8)}，进度见右侧「运行」卡`);
+    } catch (e) {
+      setMsg(`发起续写失败：${apiErrorText(e)}`);
     }
   };
 
@@ -179,6 +235,28 @@ export default function BookDetailPage() {
       void refetchCharacters();
     } catch (e) {
       setMsg(`删除失败：${(e as Error).message}`);
+    }
+  };
+
+  // 人物下线（0009）：第 N 章起不再以在场身份注入写手；连续性快照带「已下线」防复活
+  const offlineCard = async (card: CharacterDto) => {
+    const ch = offlineDraft[card.id] ?? nextChapterNo;
+    try {
+      await api.updateCharacter(bookId, card.id, { offlineFromChapter: ch });
+      setMsg(`人物「${card.name}」已设为第 ${ch} 章起下线`);
+      void refetchCharacters();
+    } catch (e) {
+      setMsg(`下线失败：${apiErrorText(e)}`);
+    }
+  };
+
+  const reviveCard = async (card: CharacterDto) => {
+    try {
+      await api.updateCharacter(bookId, card.id, { offlineFromChapter: null });
+      setMsg(`人物「${card.name}」已恢复在场`);
+      void refetchCharacters();
+    } catch (e) {
+      setMsg(`恢复失败：${apiErrorText(e)}`);
     }
   };
 
@@ -313,6 +391,7 @@ export default function BookDetailPage() {
                 <div className="flex items-start gap-2">
                   <span className="font-medium">{c.name}</span>
                   <span className="min-w-0 flex-1 text-muted">{settingPreview(c.baseSetting)}</span>
+                  {c.offlineFromChapter != null && <Badge tone="muted">第{c.offlineFromChapter}章起下线</Badge>}
                   {confirmingDeleteId === c.id ? (
                     <>
                       <span className="text-danger text-xs">该人物卡及其历史状态将一并删除，不可恢复。</span>
@@ -335,6 +414,28 @@ export default function BookDetailPage() {
                       >
                         编辑
                       </Button>
+                      {c.offlineFromChapter == null ? (
+                        <>
+                          <input
+                            type="number"
+                            min={1}
+                            aria-label={`下线章号-${c.name}`}
+                            title="从第几章起该角色退场"
+                            className="w-16 rounded border px-2 py-1 text-xs"
+                            value={offlineDraft[c.id] ?? nextChapterNo}
+                            onChange={(e) =>
+                              setOfflineDraft({ ...offlineDraft, [c.id]: Number(e.target.value) || nextChapterNo })
+                            }
+                          />
+                          <Button variant="quiet" tone="danger" size="sm" onClick={() => void offlineCard(c)}>
+                            下线
+                          </Button>
+                        </>
+                      ) : (
+                        <Button variant="quiet" tone="primary" size="sm" onClick={() => void reviveCard(c)}>
+                          恢复在场
+                        </Button>
+                      )}
                       <Button variant="quiet" tone="danger" size="sm" onClick={() => setConfirmingDeleteId(c.id)}>
                         删除
                       </Button>
@@ -448,7 +549,7 @@ export default function BookDetailPage() {
 
       <section className="mt-6">
         <h2 className="font-semibold">蓝图编辑</h2>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <label className="text-sm">
             章号
             <input
@@ -456,18 +557,41 @@ export default function BookDetailPage() {
               min={1}
               className="ml-2 w-20 rounded border px-2 py-1"
               value={chapterNo}
-              onChange={(e) => setChapterNo(Number(e.target.value))}
+              onChange={(e) => setChapterNo(Number(e.target.value) || 1)}
             />
           </label>
+          <label className="text-sm">
+            字数
+            <input
+              type="number"
+              min={500}
+              step={100}
+              aria-label="本章目标字数"
+              className="ml-2 w-24 rounded border px-2 py-1"
+              value={targetChars}
+              onChange={(e) => setTargetChars(Number(e.target.value) || 3000)}
+            />
+          </label>
+          <Button variant="secondary" loading={suggesting} onClick={() => void suggest()}>
+            AI 建议蓝图
+          </Button>
           <Button variant="primary" onClick={saveBlueprint}>
             保存蓝图
           </Button>
           <Button variant="secondary" onClick={generate}>
             生成本章
           </Button>
+          <Button variant="primary" onClick={() => void startContinue()}>
+            发起续写（第{chapterNo}章）
+          </Button>
         </div>
+        <p className="mt-1 text-xs text-faint">
+          下一章续写：章号默认接续末章 → 「AI 建议蓝图」或手填 JSON → 「保存蓝图」→ 「发起续写」（取前文锚点声线；「生成本章」则按蓝图全新生成）。
+          字数=本章目标字数，QC 按其 ±10% 校验。
+        </p>
         <textarea
           className="mt-2 h-72 w-full rounded border p-3 font-mono text-xs"
+          placeholder='蓝图 JSON，如 {"goal":"…","beats":["…"],"mustHaveBeats":[],"bannedTopics":[]}'
           value={blueprintText}
           onChange={(e) => setBlueprintText(e.target.value)}
         />

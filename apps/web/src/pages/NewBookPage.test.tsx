@@ -2,7 +2,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import NewBookPage, { splitChapters } from './NewBookPage';
+import NewBookPage, { decodeTextFile, splitChapters } from './NewBookPage';
 
 const SAMPLE = `第一章 入山
 他背起行囊走进山门。
@@ -17,6 +17,9 @@ function fetchFor(url: string): Response {
   if (url.endsWith('/api/books')) {
     return new Response(JSON.stringify({ id: 'b1', title: '试炼', chapters: [], runs: [] }), { status: 201 });
   }
+  if (url.endsWith('/import-original')) {
+    return new Response(JSON.stringify({ imported: 3, firstChapterNo: 1, lastChapterNo: 3 }), { status: 201 });
+  }
   return new Response('[]', { status: 200 });
 }
 
@@ -25,19 +28,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function renderPage(initial = '/new') {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={[initial]}>
+        <Routes>
+          <Route path="/new" element={<NewBookPage />} />
+          <Route path="/books/:bookId" element={<div>BOOK_DETAIL</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
 describe('NewBookPage', () => {
-  it('拆章预览：粘贴 3 章渲染 3 条且可删一条', async () => {
+  it('拆章预览：粘贴 3 章渲染 3 条且可删一条；文件选择区为虚线底框（回归 owner 反馈①）', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => fetchFor(url)),
     );
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter>
-          <NewBookPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderPage();
 
     // step1 → 建书
     fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '试炼' } });
@@ -46,6 +56,15 @@ describe('NewBookPage', () => {
     expect(createBtn.className).toContain('h-ctl');
     fireEvent.click(createBtn);
     await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+
+    // 文件选择区：虚线底框 label（不再是无样式的原生 file input）
+    const dropLabel = screen.getByText(/点击选择本地 txt \/ md 文件/).closest('label') as HTMLElement;
+    expect(dropLabel.className).toContain('border-dashed');
+    expect(dropLabel.className).toContain('rounded');
+    expect(dropLabel.getAttribute('for')).toBe('import-original-file');
+    const fileInput = document.getElementById('import-original-file') as HTMLInputElement;
+    expect(fileInput.type).toBe('file');
+    expect(fileInput.className).toContain('hidden');
 
     // step2 → 粘贴 + 拆章预览
     fireEvent.change(screen.getByPlaceholderText(/粘贴全文/), { target: { value: SAMPLE } });
@@ -66,52 +85,64 @@ describe('NewBookPage', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
   });
 
-  it('质量轮数 select：发起续写时把 maxRounds 透传给 POST /api/runs', async () => {
-    const calls: Array<{ url: string; method?: string; body?: string }> = [];
+  it('导入成功 → 直接跳转书详情页（回归 owner 反馈②④：统一落点，不再有向导第三步）', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
-        const u = String(url);
-        calls.push({ url: u, method: init?.method, body: init?.body ? String(init.body) : undefined });
-        if (u.endsWith('/api/books')) {
-          return new Response(JSON.stringify({ id: 'b1', title: '试炼', chapters: [], runs: [] }), { status: 201 });
-        }
-        if (u.endsWith('/import-original')) {
-          return new Response(JSON.stringify({ lastChapterNo: 3, importedChapterNos: [1, 2, 3] }), { status: 200 });
-        }
-        if (u.endsWith('/api/runs')) return new Response(JSON.stringify({ runId: 'r1' }), { status: 200 });
-        return new Response('{}', { status: 200 });
-      }),
+      vi.fn(async (url: string) => fetchFor(url)),
     );
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={['/books/new']}>
-          <Routes>
-            <Route path="*" element={<NewBookPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderPage();
 
     fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '试炼' } });
     fireEvent.click(screen.getByRole('button', { name: '建书并进入导入' }));
     await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
     fireEvent.change(screen.getByPlaceholderText(/粘贴全文/), { target: { value: SAMPLE } });
     fireEvent.click(screen.getByRole('button', { name: '拆章预览' }));
-    fireEvent.click(await screen.findByRole('button', { name: /导入 3 章/ }));
-    await waitFor(() => screen.getByRole('button', { name: /发起续写/ }));
+    fireEvent.click(screen.getByRole('button', { name: /导入 3 章/ }));
 
-    const sel = (await screen.findByLabelText('质量轮数')) as HTMLSelectElement;
-    expect(sel.value).toBe('2');
-    fireEvent.change(sel, { target: { value: '1' } });
-    fireEvent.change(screen.getByPlaceholderText(/蓝图 JSON/), {
-      target: { value: JSON.stringify({ goal: '入城遇阻', beats: ['守卫盘查'] }) },
+    // 落点=书详情页；向导第三步不复存在
+    await waitFor(() => expect(screen.getByText('BOOK_DETAIL')).toBeTruthy());
+    expect(screen.queryByPlaceholderText(/蓝图 JSON/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /发起续写/ })).toBeNull();
+  });
+
+  it('文件选择：GBK 字节经 decodeTextFile 正确解码并回显文件名与编码（回归 owner 反馈③）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => fetchFor(url)),
+    );
+    renderPage();
+    fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '试炼' } });
+    fireEvent.click(screen.getByRole('button', { name: '建书并进入导入' }));
+    await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+
+    // 「第一章 你好」的 GBK 字节（第 B5DA 一 D2BB 章 D5C2 空 20 你 C4E3 好 BAC3）
+    const gbk = new Uint8Array([0xb5, 0xda, 0xd2, 0xbb, 0xd5, 0xc2, 0x20, 0xc4, 0xe3, 0xba, 0xc3]);
+    const file = new File([gbk], '旧稿.txt', { type: 'text/plain' });
+    const fileInput = document.getElementById('import-original-file') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // textarea 收到 GBK 正确解码文本，不是 U+FFFD 乱码
+    await waitFor(() => {
+      const ta = screen.getByPlaceholderText(/粘贴全文/) as HTMLTextAreaElement;
+      expect(ta.value).toBe('第一章 你好');
     });
-    fireEvent.click(screen.getByRole('button', { name: /发起续写/ }));
+    expect(screen.getByText(/旧稿\.txt · 已按 GB18030 解码/)).toBeTruthy();
+  });
 
-    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/runs'))).toBe(true));
-    const runCall = calls.find((c) => c.method === 'POST' && c.url.endsWith('/api/runs'));
-    expect(JSON.parse(String(runCall?.body))).toMatchObject({ mode: 'continue', maxRounds: 1 });
+  it('decodeTextFile：UTF-8 / UTF-8 BOM / UTF-16LE BOM 定码正确', () => {
+    const utf8 = new TextEncoder().encode('第一章 雪落');
+    expect(decodeTextFile(utf8.buffer as ArrayBuffer).encoding).toBe('UTF-8');
+    expect(decodeTextFile(utf8.buffer as ArrayBuffer).text).toBe('第一章 雪落');
+
+    const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...utf8]);
+    const bomRes = decodeTextFile(withBom.buffer as ArrayBuffer);
+    expect(bomRes.encoding).toBe('UTF-8');
+    expect(bomRes.text).toBe('第一章 雪落');
+
+    const le = new Uint8Array([0xff, 0xfe, 0x60, 0x4f, 0x7d, 0x59]); // BOM + 「你好」UTF-16LE（低字节在前）
+    const leRes = decodeTextFile(le.buffer as ArrayBuffer);
+    expect(leRes.encoding).toBe('UTF-16LE');
+    expect(leRes.text).toBe('你好');
   });
 
   it('splitChapters：零章题命中 → 整篇单章', () => {

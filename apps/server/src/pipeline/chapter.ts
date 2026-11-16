@@ -226,7 +226,10 @@ export async function runChapterPipeline(
       ensureStep('draft', 1);
       throwIfAborted();
       const draftFlusher = createPartialFlusher(db, inflightRef.current!.id);
-      const charactersText = renderCharacterCards(booksRepo.listCharacters(db, args.bookId));
+      const charactersText = renderCharacterCards(
+        // 0009 下线：写第 X 章时已下线（第N章起下线，X>=N）的角色不进人物卡槽，防写手让其再登场
+        booksRepo.listActiveCharacters(db, args.bookId, args.chapterNo),
+      );
       const draftAssembled = assembleContext(
         draftSlots(
           {

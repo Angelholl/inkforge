@@ -138,7 +138,7 @@ export function getContinuitySnapshot(
   db: Database,
   bookId: string,
   chapterNo: number,
-): { characters: Array<{ name: string; state: object }>; openForeshadowings: Foreshadowing[]; summaries: Summary[] } {
+): { characters: Array<{ name: string; state: object }>; offlined: Array<{ name: string; fromChapter: number }>; openForeshadowings: Foreshadowing[]; summaries: Summary[] } {
   // 角色：仅取 < chapterNo 的最新一章状态
   const charRows = db
     .prepare(
@@ -149,24 +149,37 @@ export function getContinuitySnapshot(
        ORDER BY c.name`,
     )
     .all(bookId, chapterNo, chapterNo) as Array<{ state_json: string; name: string }>;
+  // 已下线（0009）：第 N 章起下线 → 写第 N 章起即标注，防写手让角色复活
+  const offlinedRows = db
+    .prepare('SELECT name, offline_from_chapter AS fromChapter FROM characters WHERE book_id = ? AND offline_from_chapter IS NOT NULL AND offline_from_chapter <= ?')
+    .all(bookId, chapterNo) as Array<{ name: string; fromChapter: number }>;
   const openRows = db
     .prepare("SELECT * FROM foreshadowings WHERE book_id = ? AND status != 'resolved' ORDER BY planted_ch")
     .all(bookId) as Foreshadowing[];
   return {
     characters: charRows.map((r) => ({ name: r.name, state: JSON.parse(r.state_json) as object })),
+    offlined: offlinedRows,
     openForeshadowings: openRows,
     summaries: getRecentSummaries(db, bookId, chapterNo),
   };
 }
 
 /** 渲染连续性快照为 L1/重写用的纯文本基线。 */
-export function renderSnapshotText(snapshot: { characters: Array<{ name: string; state: object }>; openForeshadowings: Foreshadowing[]; summaries: Summary[] }): string {
+export function renderSnapshotText(snapshot: {
+  characters: Array<{ name: string; state: object }>;
+  offlined: Array<{ name: string; fromChapter: number }>;
+  openForeshadowings: Foreshadowing[];
+  summaries: Summary[];
+}): string {
   const lines: string[] = [];
   for (const s of [...snapshot.summaries].sort((a, b) => a.chapterNo - b.chapterNo)) {
     lines.push(`[第${s.chapterNo}章摘要] ${s.summary}`);
   }
   for (const c of snapshot.characters) {
     lines.push(`[角色状态] ${c.name}=${JSON.stringify(c.state)}`);
+  }
+  for (const c of snapshot.offlined) {
+    lines.push(`[已下线] ${c.name}（第${c.fromChapter}章起退场，不得再登场）`);
   }
   for (const f of snapshot.openForeshadowings) {
     lines.push(`[未回收伏笔] (第${f.plantedCh}章埋) ${f.description}`);

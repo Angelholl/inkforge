@@ -81,7 +81,7 @@ describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
     expect(n.n).toBe(0);
   });
 
-  it('distill 参数校验：temperature 越界 / maxSegments 越界 / 空样本 → 400', async () => {
+  it('distill 参数校验：temperature 越界 / maxSegments 越界 / 空样本 → 400；zod 400 人话化（回归 owner 反馈）', async () => {
     const t1 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: 'x', text: SAMPLE_TEXT, temperature: 2 } });
     expect(t1.statusCode).toBe(400);
     const t2 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: 'x', text: SAMPLE_TEXT, maxSegments: 25 } });
@@ -89,6 +89,13 @@ describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
     const t3 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '空白', text: '   \n  ' } });
     expect(t3.statusCode).toBe(400);
     expect((t3.json() as { error: string }).error).toBe('样本为空，禁止蒸馏');
+    // 空名 → 400 且错误体是人话（「请求参数不合法：name: …」），不再是 zod issue 原始 JSON
+    const t4 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '', text: SAMPLE_TEXT } });
+    expect(t4.statusCode).toBe(400);
+    const err = (t4.json() as { error: string }).error;
+    expect(err).toContain('请求参数不合法');
+    expect(err).toContain('name');
+    expect(err).not.toContain('[{');
   });
 
   it('create → 201 入库：list 可见 inline 前缀与 metrics；同文二存 version+1 旧行不变', async () => {

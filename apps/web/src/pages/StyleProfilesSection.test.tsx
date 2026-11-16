@@ -325,17 +325,19 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(area.value).not.toContain('第21章');
   });
 
-  it('高级项随蒸馏提交、留空不传键', async () => {
+  it('高级项预填服务端默认（20/0.3）随蒸馏提交、手动清空不传键（回归 owner 反馈：参数不再裸露空框）', async () => {
     distilled = false;
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
     vi.stubGlobal('fetch', fetchMock);
     renderSection();
 
     await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    expect((screen.getByLabelText('采样段数（4-20）') as HTMLInputElement).value).toBe('20');
+    expect((screen.getByLabelText('采样温度（0-1）') as HTMLInputElement).value).toBe('0.3');
     fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '高级测' } });
     fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
-    fireEvent.change(screen.getByLabelText('采样段数（4-20，留空默认）'), { target: { value: '7' } });
-    fireEvent.change(screen.getByLabelText('采样温度（0-1，留空默认）'), { target: { value: '0.5' } });
+    fireEvent.change(screen.getByLabelText('采样段数（4-20）'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('采样温度（0-1）'), { target: { value: '0.5' } });
     fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles/distill', expect.anything()));
     const distillCall = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/style-profiles/distill'))!;
@@ -347,8 +349,8 @@ describe('StyleProfilesSection 三态确认门', () => {
     distilled = false;
     fireEvent.click(screen.getByRole('button', { name: '放弃' }));
     fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '高级测2' } });
-    fireEvent.change(screen.getByLabelText('采样段数（4-20，留空默认）'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('采样温度（0-1，留空默认）'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('采样段数（4-20）'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('采样温度（0-1）'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
     await waitFor(() => expect(screen.getByText('蒸馏完成（草稿未入库），可编辑后点「确认入库」')).toBeTruthy());
     const calls = fetchMock.mock.calls.filter((c) => String(c[0]).endsWith('/api/style-profiles/distill'));
