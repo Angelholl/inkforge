@@ -19,6 +19,19 @@ let db: Database;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let captured: string[] = [];
 
+/** B5 后台化：POST 只登记 job 回 202，模型调用在 job 里异步跑 → 先轮询到终态，captured 才完整。 */
+async function waitJob(jobId: string, timeoutMs = 30000): Promise<{ status: string; result: { samples: string[] } | null }> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const g = await app.inject({ method: 'GET', url: `/api/style-profiles/jobs/${jobId}` });
+    expect(g.statusCode).toBe(200);
+    const job = g.json() as { status: string; result: { samples: string[] } | null };
+    if (job.status === 'done' || job.status === 'failed') return job;
+    if (Date.now() > deadline) throw new Error(`job 未收敛：${job.status}`);
+    await new Promise((res) => setTimeout(res, 20));
+  }
+}
+
 beforeAll(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-tpl-'));
   const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
@@ -75,7 +88,8 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
     await app.inject({ method: 'PUT', url: '/api/settings/distill-template', payload: { template: CUSTOM_TEMPLATE } });
     captured = [];
     const r = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '模板测', text: SAMPLE_TEXT } });
-    expect(r.statusCode).toBe(200);
+    expect(r.statusCode).toBe(202);
+    await waitJob((r.json() as { jobId: string }).jobId);
     expect(captured[0]).toContain(CUSTOM_TEMPLATE);
     expect(captured[0]).not.toContain('七维：节奏、对话'); // 默认指令被模板覆盖
     // 样本段仍拼接在模板后
@@ -86,7 +100,8 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
     await app.inject({ method: 'PUT', url: '/api/settings/distill-template', payload: { template: '' } });
     captured = [];
     const r = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '默认测', text: SAMPLE_TEXT } });
-    expect(r.statusCode).toBe(200);
+    expect(r.statusCode).toBe(202);
+    await waitJob((r.json() as { jobId: string }).jobId);
     expect(captured[0]).toContain('七维：节奏、对话、描写、情感基调、写作特点、特色词汇、章节结构');
     expect(captured[0]).toContain('六轴：叙述温度、语言密度、叙述者姿态、节奏、幽默、情绪表达');
   });
@@ -97,8 +112,9 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
       url: '/api/style-profiles/distill',
       payload: { name: '参数测', text: SAMPLE_TEXT, temperature: 0.5, maxSegments: 6 },
     });
-    expect(r.statusCode).toBe(200);
-    const draft = (r.json() as { draft: { samples: string[] } }).draft;
+    expect(r.statusCode).toBe(202);
+    const job = await waitJob((r.json() as { jobId: string }).jobId);
+    const draft = job.result as { samples: string[] };
     expect(draft.samples.length).toBeLessThanOrEqual(6);
     expect(draft.samples.length).toBeGreaterThan(0);
   });

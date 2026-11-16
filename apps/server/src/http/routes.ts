@@ -21,9 +21,10 @@ import { exportBook } from '../export/export';
 import { handleSse } from './sse';
 import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
-import { analyzeStyle, saveStyleProfile } from '../style/analysis';
+import { saveStyleProfile } from '../style/analysis';
+import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
-import type { StyleAnalysisDto } from '@inkforge/shared';
+import type { DistillStyleDraftDto, StyleAnalysisDto } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
@@ -678,27 +679,57 @@ ${repairPrompt(first.errors)}`))).text,
     reply.send({ saved: true });
   });
 
-  // 蒸馏两步（DEC-2026-1115-04 #7 确认门）：distill 产分析 draft 不入库，create 显式入库
+  // 蒸馏两步（DEC-2026-1115-04 #7 确认门 + DEC-2026-1116-01 反馈⑤后台化）：守卫仍同步 400，
+  // 模型调用挪进 distill_jobs（202 + 轮询 GET job），「草稿→确认入库」两步不变
   app.post('/api/style-profiles/distill', async (req, reply) => {
     const body = parseBody(reply, distillStyleSchema, req.body);
     if (!body) return;
     if (body.text.replace(/\s/g, '').length < 200) {
       return reply.code(400).send({ error: '样本为空，禁止蒸馏' });
     }
-    const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
-    const { fewShot, heldOut } = pickFewShotAndHeldOut(body.text, { count: body.maxSegments });
-    if (fewShot.length === 0) {
+    if (pickFewShotAndHeldOut(body.text, { count: body.maxSegments }).fewShot.length === 0) {
       return reply.code(400).send({ error: '样本过短，无法采样' });
     }
-    try {
-      const { analysis, evaluation } = await analyzeStyle(
-        { provider },
-        { sourceText: body.text, samples: fewShot, heldOut, temperature: body.temperature, instruction: getDistillTemplate() || undefined },
-      );
-      reply.send({ draft: { analysis, samples: fewShot, evaluation } });
-    } catch (e) {
-      reply.code(502).send({ error: (e as Error).message });
-    }
+    const jobId = distillJobRepo.createDistillJob(db, null);
+    void distillJobRepo.runDistillJob(
+      { db, provider: state.summarizerProvider ?? createRoleProvider(config, 'summarizer'), config, getTemplate: getDistillTemplate },
+      jobId,
+      { name: body.name, text: body.text, maxSegments: body.maxSegments, temperature: body.temperature },
+    );
+    reply.code(202).send({ jobId });
+  });
+
+  // 轮询端点：queued/running/done/failed 四态 + 里程碑进度；未知 404
+  app.get('/api/style-profiles/jobs/:jobId', async (req, reply) => {
+    const { jobId } = req.params as { jobId: string };
+    const job = distillJobRepo.getDistillJob(db, jobId);
+    if (!job) return reply.code(404).send({ error: 'not found' });
+    reply.send({
+      id: job.id,
+      status: job.status,
+      progress: job.progress,
+      stage: job.stage,
+      error: job.error,
+      result: job.result_json ? (JSON.parse(job.result_json) as DistillStyleDraftDto) : null,
+    });
+  });
+
+  // 重新蒸馏（B5）：复用 style_sources 里留存的原文；未留存 → 409，绝不要求前端回传整篇原文
+  app.post('/api/style-profiles/:id/redistill', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const profile = db
+      .prepare('SELECT id, name, source_hash FROM style_profiles WHERE id = ?')
+      .get(id) as { id: string; name: string; source_hash: string } | undefined;
+    if (!profile) return reply.code(404).send({ error: 'not found' });
+    const src = db.prepare('SELECT text FROM style_sources WHERE source_hash = ?').get(profile.source_hash) as { text: string } | undefined;
+    if (!src) return reply.code(409).send({ error: '原文未留存，无法重新蒸馏' });
+    const jobId = distillJobRepo.createDistillJob(db, profile.id);
+    void distillJobRepo.runDistillJob(
+      { db, provider: state.summarizerProvider ?? createRoleProvider(config, 'summarizer'), config, getTemplate: getDistillTemplate },
+      jobId,
+      { name: profile.name, text: src.text },
+    );
+    reply.code(202).send({ jobId });
   });
 
   app.post('/api/style-profiles', async (req, reply) => {

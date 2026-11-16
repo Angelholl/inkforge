@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { migrate } from './db/migrate';
 import { openDb, type Database } from './db/open';
 import { registerRoutes, type RouteState } from './http/routes';
+import { failStaleDistillJobs } from './style/distill-job';
 import { runQueueLoop } from './worker/queue';
 import type { AppConfig } from './config';
 import type { LlmProvider } from './llm/types';
@@ -31,6 +32,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   const db = opts.db ?? openDb(path.join(opts.config.dataDir, 'inkforge.db'));
   migrate(db);
+  failStaleDistillJobs(db); // 蒸馏 job 是进程内异步：重启即失败，别让轮询端点挂着 running
   const state: RouteState = {
     db,
     config: opts.config,

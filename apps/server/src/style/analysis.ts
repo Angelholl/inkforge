@@ -119,5 +119,13 @@ export function saveStyleProfile(
     JSON.stringify(metrics),
     new Date().toISOString(),
   );
+  // 0008：整篇原文按 hash 唯一留存一份，供「重新蒸馏」复用（同 hash 二次入库不覆盖）
+  db.prepare('INSERT INTO style_sources(id, source_hash, name, text, created_at) VALUES(?,?,?,?,?) ON CONFLICT(source_hash) DO NOTHING').run(
+    randomUUID(),
+    sourceHash,
+    input.name,
+    input.source,
+    new Date().toISOString(),
+  );
   return { id, version };
 }

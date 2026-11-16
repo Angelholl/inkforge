@@ -6,7 +6,7 @@ import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
 import { createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
-import type { DistillStyleDraftDto } from '@inkforge/shared';
+import type { DistillJobDto, DistillStyleDraftDto } from '@inkforge/shared';
 
 let dir: string;
 let db: Database;
@@ -49,14 +49,29 @@ afterAll(async () => {
   }
 });
 
+/** 轮询后台蒸馏 job 到终态并取草稿（mock provider 即时返回，20ms 步进足够）。 */
+async function waitDistillJob(jobId: string, timeoutMs = 30000): Promise<DistillStyleDraftDto> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const g = await app.inject({ method: 'GET', url: `/api/style-profiles/jobs/${jobId}` });
+    expect(g.statusCode).toBe(200);
+    const job = g.json() as DistillJobDto;
+    if (job.status === 'done') return job.result as DistillStyleDraftDto;
+    if (job.status === 'failed') throw new Error(`蒸馏 job 失败：${job.error}`);
+    if (Date.now() > deadline) throw new Error(`蒸馏 job 未收敛：${JSON.stringify(job)}`);
+    await new Promise((res) => setTimeout(res, 20));
+  }
+}
+
+/** B5 后台化：POST 只登记 job 回 202，草稿从 job 轮询取；helper 对外形状不变，故各调用点无需改动。 */
 async function distill(name = '山风体'): Promise<DistillStyleDraftDto> {
   const r = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name, text: SAMPLE_TEXT } });
-  expect(r.statusCode).toBe(200);
-  return (r.json() as { draft: DistillStyleDraftDto }).draft;
+  expect(r.statusCode).toBe(202);
+  return waitDistillJob((r.json() as { jobId: string }).jobId);
 }
 
 describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
-  it('distill → 200 分析 draft（七维六轴+样本）且不入库', async () => {
+  it('distill → 202 登记 job，轮询到 done 得 draft（七维六轴+样本）且不入库', async () => {
     const draft = await distill();
     expect(draft.analysis.dims['节奏']).toBe('短句为主，段落 3-6 行。');
     expect(draft.analysis.axes['叙述温度']).toBe(72);
@@ -114,8 +129,8 @@ describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
       url: '/api/style-profiles/distill',
       payload: { name: '收敛', text: SAMPLE_TEXT.repeat(20), maxSegments: 4 },
     });
-    expect(r.statusCode).toBe(200);
-    const draft = (r.json() as { draft: DistillStyleDraftDto }).draft;
+    expect(r.statusCode).toBe(202); // B5 后台化：只登记 job
+    const draft = await waitDistillJob((r.json() as { jobId: string }).jobId);
     expect(draft.samples.length).toBeLessThanOrEqual(4);
     expect(draft.samples.length).toBeGreaterThan(0);
   });

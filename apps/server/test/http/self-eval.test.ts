@@ -22,6 +22,20 @@ let dir: string;
 let db: Database;
 let app: Awaited<ReturnType<typeof buildApp>>;
 
+/** B5 后台化：POST 只登记 job 回 202 → 轮询到 done 取草稿。 */
+async function waitDistillDraft(jobId: string, timeoutMs = 30000): Promise<DistillStyleDraftDto> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const g = await app.inject({ method: 'GET', url: `/api/style-profiles/jobs/${jobId}` });
+    expect(g.statusCode).toBe(200);
+    const job = g.json() as { status: string; error: string | null; result: DistillStyleDraftDto | null };
+    if (job.status === 'done') return job.result as DistillStyleDraftDto;
+    if (job.status === 'failed') throw new Error(`蒸馏 job 失败：${job.error}`);
+    if (Date.now() > deadline) throw new Error(`job 未收敛：${job.status}`);
+    await new Promise((res) => setTimeout(res, 20));
+  }
+}
+
 beforeAll(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-selfeval-'));
   const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
@@ -68,8 +82,8 @@ describe('蒸馏自评（held-out SCORE/REASON）', () => {
 
   it('distill→create 链路：draft.evaluation 两段（钳制后）→ create 入库 metrics_json 含 selfScore/selfReason → list 可见', async () => {
     const d = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '自评测', text: SAMPLE_TEXT } });
-    expect(d.statusCode).toBe(200);
-    const draft = (d.json() as { draft: DistillStyleDraftDto }).draft;
+    expect(d.statusCode).toBe(202);
+    const draft = await waitDistillDraft((d.json() as { jobId: string }).jobId);
     expect(draft.evaluation).toEqual([
       { score: 4, reason: '句长与对话占比贴合，但段落节奏略平。' },
       { score: 5, reason: '第二段术语习惯完全一致。' },

@@ -318,6 +318,8 @@ export interface DistillStyleDraftDto {
   analysis: StyleAnalysisDto;
   samples: string[];
   evaluation: SelfEvalItemDto[];
+  /** 后台 job 才带：整篇原文一并留档，重蒸后的草稿才能走同一条「确认入库」（前端手里没有整篇原文） */
+  sourceText?: string;
 }
 
 export interface StyleProfileCreateBody {
@@ -380,4 +382,14 @@ export interface ImitationProfileDto {
 
 export interface ImitationBindBody {
   profileId: string | null;
+}
+
+/** 蒸馏后台 job（B5）：status=done 时 result 非空；failed 时 error 是给人看的文案。 */
+export interface DistillJobDto {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  progress: number;
+  stage: string;
+  error: string | null;
+  result: DistillStyleDraftDto | null;
 }
