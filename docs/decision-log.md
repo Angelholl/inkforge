@@ -305,3 +305,13 @@
 3. **lessons 补登记令**：上轮完成通知披露但未走 config-write 协议的四条教训当场补登记——L-20261115-01..04（GUI 目验前时机，轻量入清单：无状态 stub/幽灵实例甄别/stub 兜底 Array.isArray 防御/stable 槽进 system）；顺带修复上轮悬挂双射三笔（L-20261110-01/L-20261114-01/L-20261114-02 补 ✓ 状态行，UN 8→5）。
 
 **执行留痕：** 打点 C-20261115-1518 在先；一体命令 HARD=0 BACKUP-BASELINE-REFRESHED（锚点 20261115-1523 lines=134）+只读检查复跑 HARD=0；memory release012-owner-gates 同步刷新。登记口径勘正（code-reader 勘探实证）：「stable 槽」=hardRules/worldview/characters/styleRules 四固定槽进 system（fewShot/renderStyleBlock 属 volatile 走 user）；「Array.isArray」=web 侧 React Query fetch stub 兜底防御（非 server 解析层）。
+
+## DEC-2026-1116-01 [OWNER] 四反馈方案裁决——critic 四异议采纳 + owner 四问答复（2026-11-16）
+
+**背景：** owner 四条反馈（按钮不统一无底框/蒸馏效果太差/多版本无法删除/评分不知是否合意不知在哪调参）→ R1/R2 只读调研卡实证：①ui.tsx 无 Button 组件、全站 65 处裸按钮、16 处无边框无底色；②七维六轴产出落库但从未进生成上下文（chapter.ts 只取 rulesText/terms、fewShot 首参空串）、full 整章重写不传风格槽、六轴不参与 QC；③chapter_versions/style_profiles API+UI 均无删除通路，版本列表 SELECT * 连全文读；④阈值全硬编码（scoreThreshold 8.0 等），全 UI 唯一分数露点=版本 chip overall，无锚点无解释。→ 草案 33395f9 → decision-critic 四条 [HIGH_RISK_OBJECTION]+targetChars [MATERIAL_CONFLICT]，关键断言主审复核成立（线性父子链致叶子规则删不动/run 前快照不含本 run 版本/resume 用 getVersion!/runs.book_id NOT NULL/config.quality.targetChars 无消费方）。
+
+**主模型裁定（异议回应，全部采纳）：** D1 删除机制重定（见 owner①）；风格档案删除语义=有绑定拒绝；⑨多选绑定移出本批另立 0.3 设计稿（合并语义/快照结构/drift 基准三题先决）；④蒸馏后台化改独立 distill_jobs 表+轮询（不塞 runs 状态机、不堵 worker 并发=1 生成）；targetChars 全局旋钮取消（settings 只留 scoreThreshold，maxRounds 去开跑入口 ≤3，OVERALL 锚点与阈值校准同批=D3）；批一修正=独立 styleDims 槽（预算 600 字，8k 档=0 注明）+六轴渲染语义句不裸注数字+targeted 重写也补 styleRules 精简槽+fewShot 空规则头一行修随批一；效果验收门=确定性装配测试+owner 盲评（qc-replay 语料只验解析不作效果门）；⑥档案删除去重归 D1；⑤重蒸前置 style_sources 原文留存。
+
+**owner 亲决（AskUserQuestion 四问）：** ①章节版本=**硬删+删前快照+墓碑**（事务：backupBook 快照独立命名 `-predelete-` 保留 3 → 墓碑表（不存 content）→ 子版本 parent 置 NULL → 删行；拦截 current + queued/running/paused 的 output_version_id 引用；DTO 补 currentVersionId、Reader 回退、DiffPage 配对、报表墓碑显示同卡）；②风格档案=**有绑定拒绝删**（409+绑定书列表）；③按钮归一=**立即先行**（代价登记：后续功能卡对已替换页面 GUI 复验）；④文风示例=**全局默认关+逐书开关**（books.style_fewshot_on DEFAULT 0，存量绑定书一并关，owner 接受存量输出变化）。主模型随案钉设计细节一条（owner 可驳回）：④开关仅控注入，抄用检测 referenceTexts 恒取绑定样本，硬检查不随开关关闭。缓议默认通过：⑨设计稿+批三（.epub/persona 模板/仿写预览可编辑）→0.3；B1 盲评门。
+
+**执行留痕：** 调研卡 1ba858c；R1 报告 fc27044；R2 报告 c62230a；Button 规范 fed8d00（SubTrans 四变体+65 处映射表实证）；计划草案 33395f9（已标取代）；计划 v2 31456fe+终拍板段与本日志同提交。计划真值=docs/plans/2026-11-16-four-feedbacks.md（code-planner 产出，writing-plans 粒度，owner 审后按 dispatch-discipline 派卡）。

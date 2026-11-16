@@ -27,9 +27,11 @@
 
 **测试基线**：开工前实测钉 shared/web/server 三包 vitest 用例数，逐卡卡面钉 +N 落点；只增不减。
 
-## 三、待 owner 拍板（四项）
-1. 版本删除机制：软删（推荐）/ 硬删+删前快照+墓碑 / 其他；
-2. 风格档案删除：有绑定拒绝（推荐）/ 静默解绑 / 连族全删；
-3. 按钮归一时序：串行尾批（推荐）/ 立即先行；
-4. 文风示例开关：老书保持开+新书默认关（推荐）/ 全局默认关 / 默认开只给开关。
-另两项按采纳默认走，owner 可否：⑨与批三缓议 0.3；B1 效果门含 owner 盲评一轮（3 章×2 版）。
+## 三、owner 终拍板（2026-11-16，AskUserQuestion 直答，归档 DEC-2026-1116-01）
+1. **章节版本删除=硬删+删前快照+墓碑**：事务内 ①backupBook 删前快照（独立命名 `-predelete-`、独立保留 3 份、不挤占 run 快照额度）→②写墓碑表（id/chapter_id/kind/run_id/word_count/created_at/deleted_at，不存 content）→③子版本 parent_version_id 置 NULL（仅元数据，content 永不就地改）→④删行。拦截集=current + queued/running/**paused** run 的 output_version_id 引用。VersionDto 补 currentVersionId、Reader 回退不再取 list[0]、DiffPage 配对修正同卡落地；报表对墓碑显示「版本已删」，usage 写进 outputJson 彻底解耦。磁盘真回收。
+2. **风格档案删除=有绑定拒绝（409+绑定书列表）**，解绑（含⑦修复）后方可删。
+3. **按钮全量归一=立即先行**：执行序改为 D4（组件卡→按页替换卡，单卡 ≤13 处）→B1→B2→B3→B4→B5；代价登记：后续功能卡对已替换页面 GUI 复验。
+4. **文风示例=全局默认关+逐书开关**：`books.style_fewshot_on` 列 DEFAULT 0（存量绑定书一并关，owner 接受存量输出变化，书详情可逐书开）；**开关仅控注入**——抄用检测 referenceTexts 恒取绑定样本（有绑定且有样本即运行），硬检查不随开关关闭（主模型设计细节，随 DEC 归档可驳回）。
+5. 默认通过项：⑨多选绑定设计稿+批三（.epub/persona 模板/仿写预览可编辑）缓议 0.3；B1 效果门=装配确定性测试+owner 盲评（3 章×注入前后）。
+
+**计划真值**：docs/plans/2026-11-16-four-feedbacks.md（code-planner 产出，writing-plans 粒度），owner 审后按 dispatch-discipline 派卡。
