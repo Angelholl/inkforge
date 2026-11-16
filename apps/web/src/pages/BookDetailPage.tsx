@@ -5,7 +5,7 @@ import { api } from '../api/client';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
-import { Chip } from '../components/ui';
+import { Button, Chip } from '../components/ui';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleProfileDto } from '@inkforge/shared';
 
 function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string) => void }) {
@@ -63,6 +63,8 @@ export default function BookDetailPage() {
   const [newCardName, setNewCardName] = useState('');
   const [newCardSetting, setNewCardSetting] = useState('');
   const [editingCard, setEditingCard] = useState<{ id: string; name: string; setting: string } | null>(null);
+  // L2 两步确认：记录待确认删除的人物卡；取消/成功后收簇
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   // book 每 4s 轮询；世界观/大纲编辑态只在首次加载同步一次，避免轮询覆盖未保存的编辑
   const metaSyncedRef = useRef(false);
 
@@ -164,6 +166,7 @@ export default function BookDetailPage() {
   const removeCard = async (card: CharacterDto) => {
     try {
       await api.deleteCharacter(bookId, card.id);
+      setConfirmingDeleteId(null);
       setMsg(`人物卡「${card.name}」已删除`);
       void refetchCharacters();
     } catch (e) {
@@ -206,12 +209,12 @@ export default function BookDetailPage() {
         {book?.imitationProfileId && <Chip active>仿写已绑</Chip>}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button className="h-ctl rounded-ctl bg-primary px-4 text-white" onClick={generateAll}>
+        <Button variant="primary" onClick={generateAll}>
           整书生成
-        </button>
-        <button className="h-ctl rounded-ctl border border-line bg-surface px-4" onClick={() => void refetch()}>
+        </Button>
+        <Button variant="secondary" onClick={() => void refetch()}>
           刷新
-        </button>
+        </Button>
         <select
           aria-label="导出格式"
           className="h-ctl rounded-ctl border border-line bg-surface px-2 text-sm"
@@ -222,9 +225,9 @@ export default function BookDetailPage() {
           <option value="combined-md">全书合并</option>
           <option value="txt">分章 TXT</option>
         </select>
-        <button className="h-ctl rounded-ctl border border-line bg-surface px-4 text-sm" onClick={() => void exportNow()}>
+        <Button variant="secondary" onClick={() => void exportNow()}>
           导出
-        </button>
+        </Button>
       </div>
       <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
@@ -247,9 +250,9 @@ export default function BookDetailPage() {
           value={outlineText}
           onChange={(e) => setOutlineText(e.target.value)}
         />
-        <button className="mt-2 rounded bg-primary px-4 py-1.5 text-white" onClick={() => void saveMeta()}>
+        <Button variant="primary" className="mt-2" onClick={() => void saveMeta()}>
           保存设定
-        </button>
+        </Button>
       </section>
 
       {bookId && <OutlineTreeSection bookId={bookId} />}
@@ -277,29 +280,45 @@ export default function BookDetailPage() {
                     onChange={(e) => setEditingCard({ ...editingCard, setting: e.target.value })}
                   />
                   <div className="flex gap-2">
-                    <button className="rounded bg-primary px-3 py-1 text-white" onClick={() => void saveCard()}>
+                    <Button variant="primary" size="sm" onClick={() => void saveCard()}>
                       保存
-                    </button>
-                    <button className="rounded bg-bg px-3 py-1" onClick={() => setEditingCard(null)}>
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setEditingCard(null)}>
                       取消
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-start gap-2">
                   <span className="font-medium">{c.name}</span>
-                  <span className="flex-1 text-muted">{settingPreview(c.baseSetting)}</span>
-                  <button
-                    className="text-primary-strong"
-                    onClick={() =>
-                      setEditingCard({ id: c.id, name: c.name, setting: settingRawText(c.baseSetting) })
-                    }
-                  >
-                    编辑
-                  </button>
-                  <button className="text-danger" onClick={() => void removeCard(c)}>
-                    删除
-                  </button>
+                  <span className="min-w-0 flex-1 text-muted">{settingPreview(c.baseSetting)}</span>
+                  {confirmingDeleteId === c.id ? (
+                    <>
+                      <span className="text-danger text-xs">该人物卡及其历史状态将一并删除，不可恢复。</span>
+                      <Button variant="danger" size="sm" solid onClick={() => void removeCard(c)}>
+                        确认删除
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
+                        取消
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="quiet"
+                        tone="primary"
+                        size="sm"
+                        onClick={() =>
+                          setEditingCard({ id: c.id, name: c.name, setting: settingRawText(c.baseSetting) })
+                        }
+                      >
+                        编辑
+                      </Button>
+                      <Button variant="quiet" tone="danger" size="sm" onClick={() => setConfirmingDeleteId(c.id)}>
+                        删除
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             </li>
@@ -321,9 +340,9 @@ export default function BookDetailPage() {
             value={newCardSetting}
             onChange={(e) => setNewCardSetting(e.target.value)}
           />
-          <button className="rounded bg-bg px-3 py-1 text-sm" onClick={() => void addCard()}>
+          <Button variant="secondary" size="sm" onClick={() => void addCard()}>
             添加人物
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -360,13 +379,19 @@ export default function BookDetailPage() {
                 {c.status}
               </span>
               {c.isOriginal && (
-                <button className="text-sm text-primary-strong" onClick={() => void summarize(c.chapterNo)}>
+                <Button variant="quiet" tone="primary" size="sm" onClick={() => void summarize(c.chapterNo)}>
                   补摘要
-                </button>
+                </Button>
               )}
-              <button className="ml-auto text-sm text-primary-strong" onClick={() => void api.generateChapter(bookId, c.chapterNo).then(() => setMsg(`第${c.chapterNo}章已入队`))}>
+              <Button
+                variant="quiet"
+                tone="primary"
+                size="sm"
+                className="ml-auto"
+                onClick={() => void api.generateChapter(bookId, c.chapterNo).then(() => setMsg(`第${c.chapterNo}章已入队`))}
+              >
                 生成
-              </button>
+              </Button>
               <Link className="text-sm text-primary-strong" to={`/books/${bookId}/chapters/${c.chapterNo}`}>
                 阅读
               </Link>
@@ -388,12 +413,12 @@ export default function BookDetailPage() {
               onChange={(e) => setChapterNo(Number(e.target.value))}
             />
           </label>
-          <button className="rounded bg-primary px-4 py-1.5 text-white" onClick={saveBlueprint}>
+          <Button variant="primary" onClick={saveBlueprint}>
             保存蓝图
-          </button>
-          <button className="rounded bg-bg px-4 py-1.5" onClick={generate}>
+          </Button>
+          <Button variant="secondary" onClick={generate}>
             生成本章
-          </button>
+          </Button>
         </div>
         <textarea
           className="mt-2 h-72 w-full rounded border p-3 font-mono text-xs"

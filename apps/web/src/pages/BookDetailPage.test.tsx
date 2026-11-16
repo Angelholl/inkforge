@@ -55,6 +55,7 @@ const CHARACTER_FIXTURE = [{ id: 'k1', name: '张三', baseSetting: '{"身份":"
 
 // 每测试自装 stub（afterEach unstubAllGlobals 会移除模块级 stub，第二个测试会裸奔）
 function installFetchStub() {
+  let characters = [...CHARACTER_FIXTURE];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -62,7 +63,12 @@ function installFetchStub() {
       calls.push({ url: u, init });
       if (u.endsWith('/api/books/b1/characters')) {
         if (init?.method === 'POST') return jsonResponse({ id: 'k2', name: '李四', baseSetting: '{"设定":"反派"}' }, 201);
-        return jsonResponse(CHARACTER_FIXTURE);
+        return jsonResponse(characters);
+      }
+      const del = u.match(/\/api\/books\/b1\/characters\/([^/]+)$/);
+      if (del && init?.method === 'DELETE') {
+        characters = characters.filter((c) => c.id !== del[1]);
+        return jsonResponse({}, 204);
       }
       if (u.includes('/api/books/b1/meta')) return jsonResponse({ ...book, description: '旧世界观', outline: '旧大纲' });
       if (u.includes('/api/books/b1')) {
@@ -141,8 +147,52 @@ describe('BookDetailPage', () => {
     });
 
     fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
     await waitFor(() =>
       expect(calls.some((c) => /\/api\/books\/b1\/characters\/k1$/.test(c.url) && c.init?.method === 'DELETE')).toBe(true),
     );
+  });
+
+  it('人物卡删除：展开 L2 确认簇且取消不发 DELETE', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('张三')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    expect(screen.getByText('该人物卡及其历史状态将一并删除，不可恢复。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    await waitFor(() =>
+      expect(screen.queryByText('该人物卡及其历史状态将一并删除，不可恢复。')).toBeNull(),
+    );
+    expect(calls.some((c) => c.init?.method === 'DELETE')).toBe(false);
+  });
+
+  it('人物卡删除：确认后发出 DELETE 且该行消失', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('张三')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+    await waitFor(() =>
+      expect(calls.some((c) => /\/api\/books\/b1\/characters\/k1$/.test(c.url) && c.init?.method === 'DELETE')).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByText('张三')).toBeNull());
   });
 });
