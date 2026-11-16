@@ -153,6 +153,30 @@ describe('DELETE /api/versions/:versionId（B2 硬删四步）', () => {
     expect(r.json()).toMatchObject({ error: 'not found' });
   });
 
+  it('GET /api/versions/:versionId/qc 回读 qc 步明细（l0/l1/gate 逐 attempt），版本不存在 404', async () => {
+    const v = addVersion('draft');
+    const runId = `r-qc-${Math.random().toString(36).slice(2)}`;
+    db.prepare("INSERT INTO runs(id, book_id, mode, status, chapter_scope_json, created_at) VALUES(?,?, 'generate', 'done', '{\"from\":1,\"to\":1}', ?)").run(
+      runId,
+      bookId,
+      new Date().toISOString(),
+    );
+    db.prepare("INSERT INTO run_steps(id, run_id, chapter_id, step, attempt, status, output_version_id, output_json) VALUES(?,?,?,'qc',1,'done',?,?)").run(
+      `rs-${runId}`,
+      runId,
+      chapterId,
+      v,
+      JSON.stringify({ l0: { checks: [], hardFail: false }, l1: { overall: 7, findings: [] }, gate: { action: 'rewrite', reasons: ['overall 7 < 8'] } }),
+    );
+    const r = await app.inject({ method: 'GET', url: `/api/versions/${v}/qc` });
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { attempts: Array<{ attempt: number; l1: { overall: number }; gate: { action: string; reasons: string[] } }> };
+    expect(body.attempts).toHaveLength(1);
+    expect(body.attempts[0]).toMatchObject({ attempt: 1, l1: { overall: 7 }, gate: { action: 'rewrite', reasons: ['overall 7 < 8'] } });
+    const nf = await app.inject({ method: 'GET', url: '/api/versions/no-such-version/qc' });
+    expect(nf.statusCode).toBe(404);
+  });
+
   it('版本列表去 content 并包壳 currentVersionId', async () => {
     const v = addVersion('draft');
     setCurrentVersion(db, chapterId, v);

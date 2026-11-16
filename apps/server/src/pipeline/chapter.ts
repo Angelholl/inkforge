@@ -16,6 +16,7 @@ import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite } fro
 import { loadCliches, runL0Checks } from '../quality/l0';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
+import { readScoreThreshold } from '../settings';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
 import { getLatestProfile } from '../style/distill';
@@ -89,6 +90,8 @@ export async function runChapterPipeline(
   const runRow = runsRepo.getRun(db, args.runId);
   const runMode = runRow?.mode ?? 'generate';
   const maxRounds = runRow?.maxRounds ?? config.quality.maxRounds;
+  // B3：入库分阈值可入库覆盖；每章管线开始读一次 → run 内逐章生效、单章中途不变（改值无需重启）
+  const scoreThreshold = readScoreThreshold(db) ?? config.quality.scoreThreshold;
 
   const fallback = deps.provider;
   const roleProvider = (role: PipelineRole): LlmProvider => deps.providers?.[role] ?? fallback;
@@ -297,7 +300,7 @@ export async function runChapterPipeline(
           signal,
         },
       );
-      const gate = decideGate({ l0, l1, roundsUsed: rounds, prevOverall }, { ...config.quality, maxRounds });
+      const gate = decideGate({ l0, l1, roundsUsed: rounds, prevOverall }, { scoreThreshold, minGain: config.quality.minGain, maxRounds });
       finishStep('qc', qcAttempt, { outputVersionId: currentVersion.id, outputJson: { l0, l1, gate, usageProvider: roleLabel('qc') } });
       chaptersRepo.setVersionParams(db, currentVersion.id, { overall: l1.overall });
       if (!roundVersions.some((rv) => rv.id === currentVersion.id)) roundVersions.push({ id: currentVersion.id, overall: l1.overall ?? -1 });

@@ -15,11 +15,26 @@ describe('prompt 渲染契约', () => {
   it('renderQcTask：四字段标记 + 七维度各一次 + 负约束 + 示例块', () => {
     const out = renderQcTask();
     for (const marker of ['SEVERITY:', 'QUOTE:', 'OVERALL', 'COMMENT:']) expect(out).toContain(marker);
+    // 维度「各一次」的契约只管七维度清单行（B3 的 OVERALL 锚点行在散文里提到「节奏」，不计入清单）
+    const checklist = out
+      .split('\n')
+      .filter((l) => l.startsWith('- '))
+      .join('\n');
     for (const d of DIMENSIONS) {
-      expect(out.split(d).length - 1).toBe(1);
+      expect(checklist.split(d).length - 1).toBe(1);
     }
     expect(out).toContain('不要输出 JSON');
     expect(out).toContain('示例维度');
+  });
+
+  it('renderQcTask 含 OVERALL 四档锚点（B3 评分解释），且锚点行不会被 parseFindings 误取为 OVERALL 值', () => {
+    const out = renderQcTask();
+    expect(out).toContain('【OVERALL 锚点】1=废稿');
+    expect(out).toContain('5=不合格');
+    expect(out).toContain('8=可入库');
+    expect(out).toContain('10=范文级');
+    // parseFindings 只认「行首大写键 + 冒号」：锚点行行首是【，故全提示里以 OVERALL 开头的行只有示例行一条
+    expect(out.split('\n').filter((l) => l.startsWith('OVERALL'))).toEqual(['OVERALL: 6']);
   });
 
   it('renderQcTask 不嵌入正文', () => {

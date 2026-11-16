@@ -53,6 +53,24 @@ export interface VersionListDto {
   versions: VersionListItemDto[];
 }
 
+/** 入库分阈值（B3）：isDefault=true 表示 DB 无有效覆盖、正用 config 默认。 */
+export interface SettingsQualityDto {
+  scoreThreshold: number;
+  isDefault: boolean;
+}
+
+/** 一个版本的某轮质检明细（来自 run_steps.qc.outputJson）。 */
+export interface VersionQcAttemptDto {
+  attempt: number;
+  l0: object;
+  l1: object;
+  gate: { action: string; reasons: string[] };
+}
+
+export interface VersionQcDto {
+  attempts: VersionQcAttemptDto[];
+}
+
 export interface RunDto {
   id: string;
   bookId: string;

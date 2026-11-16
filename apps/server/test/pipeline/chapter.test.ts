@@ -280,3 +280,69 @@ COMMENT: 节奏拖沓，需压缩。`;
     expect(rw.system).not.toContain('【文风画像】');
   }, 30000);
 });
+
+describe('B3 入库分阈值 app_meta 覆盖（章级生效）', () => {
+  function bookWithChapter(tag: string): string {
+    const id = createBook(db, { title: `阈值测试书 ${tag}` }).id;
+    db.prepare('INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)').run(
+      `th-ch-${tag}`,
+      id,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '阈值场景', beats: [], mustHaveBeats: [], bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+    return id;
+  }
+
+  function newRun(bid: string): string {
+    const runId = `run-${Math.random().toString(36).slice(2)}`;
+    db.prepare("INSERT INTO runs(id, book_id, mode, max_rounds, chapter_scope_json, created_at) VALUES(?,?, 'generate', 2, ?, ?)").run(
+      runId,
+      bid,
+      JSON.stringify({ from: 1, to: 1 }),
+      new Date().toISOString(),
+    );
+    return runId;
+  }
+
+  function providerOverall8(): LlmProvider {
+    return createMockProvider({
+      draft: { textFn: (m) => `【章${m.chapterNo}阈】独有开头。` + '阈'.repeat(480) },
+      qc: { repeat: { text: 'OVERALL: 8' } },
+      rewrite: { textFn: (m) => `【章${m.chapterNo}阈】重写后。` + '改'.repeat(480) },
+      summarize: { text: 'SUMMARY: 第1章完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
+    });
+  }
+
+  function setThreshold(v: string | null): void {
+    if (v === null) db.prepare("DELETE FROM app_meta WHERE key = 'quality_score_threshold'").run();
+    else
+      db
+        .prepare("INSERT INTO app_meta(key, value) VALUES('quality_score_threshold', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .run(v);
+  }
+
+  async function firstQcGate(tag: string): Promise<{ action: string; reasons: string[] }> {
+    const bid = bookWithChapter(tag);
+    const runId = newRun(bid);
+    await runChapterPipeline({ db, provider: providerOverall8(), config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    const qc1 = listSteps(db, runId).find((s) => s.step === 'qc' && s.attempt === 1)!;
+    return (qc1.outputJson as { gate: { action: string; reasons: string[] } }).gate;
+  }
+
+  it('overall 8 遇入库阈值 9 → 第一轮 qc 判 rewrite（reasons 含「< 9」）；未覆盖时同场景判 pass', async () => {
+    try {
+      setThreshold('9');
+      const overridden = await firstQcGate('a');
+      expect(overridden.action).toBe('rewrite');
+      expect(overridden.reasons.some((r) => r.includes('< 9'))).toBe(true);
+      setThreshold(null);
+      const defaulted = await firstQcGate('b');
+      expect(defaulted.action).toBe('pass');
+    } finally {
+      setThreshold(null);
+    }
+  }, 60000);
+});

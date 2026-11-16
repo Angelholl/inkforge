@@ -133,3 +133,28 @@ describe('GET/PUT /api/settings', () => {
     expect(config.providers.local.model).toBe('file-model');
   });
 });
+
+describe('GET/PUT /api/settings/quality（B3 入库分阈值可调）', () => {
+  it('PUT scoreThreshold=9 → saved 且 GET 回读覆盖值 isDefault=false', async () => {
+    const put = await app.inject({ method: 'PUT', url: '/api/settings/quality', payload: { scoreThreshold: 9 } });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toEqual({ saved: true, restartRequired: false });
+    const get = await app.inject({ method: 'GET', url: '/api/settings/quality' });
+    expect(get.statusCode).toBe(200);
+    expect(get.json()).toEqual({ scoreThreshold: 9, isDefault: false });
+  });
+
+  it('PUT 越界 11 → 400（不落库）', async () => {
+    const put = await app.inject({ method: 'PUT', url: '/api/settings/quality', payload: { scoreThreshold: 11 } });
+    expect(put.statusCode).toBe(400);
+    const get = await app.inject({ method: 'GET', url: '/api/settings/quality' });
+    expect(get.json()).toMatchObject({ scoreThreshold: 8, isDefault: true });
+  });
+
+  it('app_meta 存非法值 → readScoreThreshold 判非法，GET 回落默认 8.0 且 isDefault=true', async () => {
+    db.prepare("INSERT INTO app_meta(key, value) VALUES('quality_score_threshold', 'abc') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+    const get = await app.inject({ method: 'GET', url: '/api/settings/quality' });
+    expect(get.statusCode).toBe(200);
+    expect(get.json()).toMatchObject({ scoreThreshold: 8, isDefault: true });
+  });
+});

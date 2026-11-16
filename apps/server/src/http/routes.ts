@@ -19,13 +19,13 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, styleBindSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzeStyle, saveStyleProfile } from '../style/analysis';
 import { pickFewShotAndHeldOut } from '../style/sample';
 import type { StyleAnalysisDto } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
-import { configFilePath, readSettingsFile, writeSettingsFile } from '../settings';
+import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
 import { parseBlueprint, parseOutline, parseOutlineTree } from '../llm/plainproto';
 import { repairPrompt } from '../quality/l1';
@@ -795,6 +795,25 @@ ${repairPrompt(first.errors)}`))).text,
     reply.send({ ok: true });
   });
 
+  // 版本 → 质检明细（B3 解释性）：qc 步 outputJson 已存 l0/l1/gate，按 output_version_id 反查
+  app.get('/api/versions/:versionId/qc', async (req, reply) => {
+    const { versionId } = req.params as { versionId: string };
+    if (!chaptersRepo.getVersion(db, versionId)) return reply.code(404).send({ error: 'not found' });
+    const rows = db
+      .prepare("SELECT attempt, output_json FROM run_steps WHERE output_version_id = ? AND step = 'qc' AND status = 'done' ORDER BY attempt")
+      .all(versionId) as Array<{ attempt: number; output_json: string }>;
+    const attempts = rows.map((r) => {
+      const oj = JSON.parse(r.output_json || '{}') as { l0?: object; l1?: object; gate?: { action?: string; reasons?: string[] } };
+      return {
+        attempt: r.attempt,
+        l0: oj.l0 ?? {},
+        l1: oj.l1 ?? {},
+        gate: { action: oj.gate?.action ?? 'unknown', reasons: oj.gate?.reasons ?? [] },
+      };
+    });
+    reply.send({ attempts });
+  });
+
   // ── report / 选段重写（T30）──
   app.get('/api/runs/:runId/report', async (req, reply) => {
     const { runId } = req.params as { runId: string };
@@ -924,6 +943,19 @@ ${repairPrompt(first.errors)}`))).text,
     if (body.mock !== undefined) next.INKFORGE_MOCK = body.mock ? '1' : '0';
     writeSettingsFile(next);
     reply.send({ saved: true, restartRequired: true });
+  });
+
+  // ── 质量阈值（B3：app_meta 持久化，章级生效，改值不重启）──
+  app.get('/api/settings/quality', async (req, reply) => {
+    const stored = readScoreThreshold(db);
+    reply.send({ scoreThreshold: stored ?? config.quality.scoreThreshold, isDefault: stored === undefined });
+  });
+
+  app.put('/api/settings/quality', async (req, reply) => {
+    const body = parseBody(reply, qualityPutSchema, req.body ?? {});
+    if (!body) return;
+    writeScoreThreshold(db, body.scoreThreshold);
+    reply.send({ saved: true, restartRequired: false });
   });
 }
 

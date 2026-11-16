@@ -263,6 +263,13 @@ GUI: 未验证（本卡纯 server，GUI 目验属 Task9B）
 Refs: DEC-2026-1116-01
 ```
 
+## 8.5 主审实测勘正（亲执期回填，后续卡照此避坑）
+
+1. **`apps/server/test/prompts/contract.test.ts` 必须同步改（计划与本卡 §2 清单均未列）**：其「七维度各一次」断言是对**全文**计数（`out.split(d).length - 1`），而 OVERALL 锚点行的散文里含维度名「节奏」→ 计数变 2 → 红。正解：把该断言收窄到七维度清单行（`out.split('\n').filter(l => l.startsWith('- '))`），另加一条锚点契约用例（四档文案在场 + `out.split('\n').filter(l => l.startsWith('OVERALL'))` 恰为 `['OVERALL: 6']`，即锚点行不会被 `parseFindings` 误取为 OVERALL 值）。
+2. 计划 Task9A 未给 `GET /api/versions/:versionId/qc` 配测试；按「新功能必带回归」在 `test/http/versions-delete.test.ts` 补 1 例（造 qc 步 output_json 断言 attempts 映射 + 未知版本 404）。
+3. 实测新增 **+6**（settings 3 / chapter 1 / qc 明细 1 / 契约 1），非卡面 §4 预估 +4；全仓 313 → **319**。
+4. 冒烟踩坑（通用）：**Git Bash 的 `kill $!` 杀不掉 Windows 上的 node 进程**，残留旧 server 占端口会让「新路由 404」的假象出现；按端口 `netstat -ano | grep LISTENING` 取 PID 再 `taskkill //F //PID` 才可靠。跨进程重启复读是证明「阈值真落 DB 而非内存」的关键判据。
+
 ## 9. 卡外（勿做）
 
 - web 侧「设置→质量」分区、三入口 maxRounds 选择器、阅读器图例行、`VersionQcPanel` = Task9B。
