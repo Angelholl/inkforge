@@ -315,3 +315,15 @@
 **owner 亲决（AskUserQuestion 四问）：** ①章节版本=**硬删+删前快照+墓碑**（事务：backupBook 快照独立命名 `-predelete-` 保留 3 → 墓碑表（不存 content）→ 子版本 parent 置 NULL → 删行；拦截 current + queued/running/paused 的 output_version_id 引用；DTO 补 currentVersionId、Reader 回退、DiffPage 配对、报表墓碑显示同卡）；②风格档案=**有绑定拒绝删**（409+绑定书列表）；③按钮归一=**立即先行**（代价登记：后续功能卡对已替换页面 GUI 复验）；④文风示例=**全局默认关+逐书开关**（books.style_fewshot_on DEFAULT 0，存量绑定书一并关，owner 接受存量输出变化）。主模型随案钉设计细节一条（owner 可驳回）：④开关仅控注入，抄用检测 referenceTexts 恒取绑定样本，硬检查不随开关关闭。缓议默认通过：⑨设计稿+批三（.epub/persona 模板/仿写预览可编辑）→0.3；B1 盲评门。
 
 **执行留痕：** 调研卡 1ba858c；R1 报告 fc27044；R2 报告 c62230a；Button 规范 fed8d00（SubTrans 四变体+65 处映射表实证）；计划草案 33395f9（已标取代）；计划 v2 31456fe+终拍板段与本日志同提交。计划真值=docs/plans/2026-11-16-four-feedbacks.md（code-planner 产出，writing-plans 粒度，owner 审后按 dispatch-discipline 派卡）。
+
+## DEC-2026-1116-02 [OWNER] 四反馈执行轮收口——测试分工改口径、free 链兜底亲执与规格勘正集（2026-11-16）
+
+**owner 新口径（执行中亲述，原话）：** 「项目不生成盲评材料进行测试，所有的测试都由我做真实测试，你只要做跑通测试即可。」
+
+**释义与落地（修订 DEC-2026-1116-01 的效果验收门）：** agent ①不再生成盲评材料（已备的 v1/v2 材料仅在 temp 存档，不再生产、不作验收门）；②不再做自动化 GUI 黑盒目验（puppeteer 隔离栈/截图全停）；③每卡仍跑完整验证链硬序（typecheck→lint→定向→全仓→真服务冒烟→安全比基线，基线只增不减）；④提交信息 GUI 行统一写「未验证（owner 真实测试）」；⑤GUI/效果类验收权归 owner 本人。已入项目记忆 owner-real-testing-division。
+
+**执行账：** Task0–Task11A 全部落卡收口。提交链：T9B=af4388f、T10A=21b70c6、T10B=54f996f、T11A=65b0f85（卡面 d40a634/d3ac9d7/27ccef0/57ab700）；测试基线 296→319→324→329→333→338 只增不减；真服务冒烟均含跨进程持久/重启置 failed 等关键项；生产库与 backups/ 全程零接触（mtime 12:51 未变）。free 链 19 连 CHAIN_EXHAUSTED（14:00–18:41，三模型全 RATE_LIMIT，每轮候满 5 分钟未双轮转）：T9B/T10A/T11A 主审兜底亲执；T10B 执行者限流前半交付（client/shared/StyleBindSelect 三处与卡面逐字一致，主审核对采纳后续做）。未完成：Task11B（web 轮询 UI）——新会话按开工提示词执行。
+
+**规格勘正集（执行中钉死，owner 可驳回）：** ①蒸馏 job result 附 `sourceText`（shared DistillStyleDraftDto 可选字段）——重蒸草稿须有整篇原文才能走「确认入库」，否则重蒸闭环断半路；入库侧 `ON CONFLICT(source_hash) DO NOTHING` 保证同 hash 只留一份原文。②DELETE 档案 409 文案改中文「该风格档案已被书绑定，请先解绑再删除」（仓库 409 文案惯例，计划原钉 'profile bound'）。③档案删除/绑定反查走路由内联 SQL（`styles.ts` 不存在，仓库档案投影本就内联于 routes.ts）。④每页一枚「质量轮数」select 统管本页全部生成入口（BookDetailPage 三处、NewBookPage 一处），UI 上限 3 轮。⑤迁移卡面模板固 §1.1 段：user_version 硬编码 7 处+旧库回滚块 DROP（0008 两表，style_sources 带 UNIQUE）。⑥全文 Qc 明细面板按轮 gate/l1 findings/L0 未过项渲染；质检明细仅新 run 版本携带。
+
+**执行留痕：** 打点 C-20261116-2352/2353 在先（LEDGER 追加 L-20261116-02..06 + R-none）；本条目与 65b0f85（T11A）后单独 docs 提交归档；push 未做——本地 ahead origin 约 37 提交，push 前须 code-review（≥3 文件/≥100 行规则）+ owner 点头（沿「任务结束统一 push 需 owner 命」口径）。
