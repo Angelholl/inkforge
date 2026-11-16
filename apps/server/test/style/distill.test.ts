@@ -119,8 +119,11 @@ describe('管线风格注入断言', () => {
         const rr = await app.inject({ method: 'GET', url: `/api/runs/${runId}` });
         if ((rr.json() as { status: string }).status === 'done') break;
       }
-      const versions = (await app.inject({ method: 'GET', url: `/api/books/${bookId}/chapters/1/versions` })).json() as Array<{ styleSampleIds: string[] }>;
-      expect(versions.some((v) => v.styleSampleIds.length === 3)).toBe(true);
+      const versions = (await app.inject({ method: 'GET', url: `/api/books/${bookId}/chapters/1/versions` })).json() as {
+        currentVersionId: string | null;
+        versions: Array<{ styleSampleIds: string[] }>;
+      };
+      expect(versions.versions.some((v) => v.styleSampleIds.length === 3)).toBe(true);
       await app.close();
       // 无绑定回归锚：新书不绑档案 → 版本 styleSampleIds=[]
       const app2 = await buildApp({ config: loadConfig({ STRATA_BASE_URL: 'http://x', STRATA_API_KEY: 'k', STRATA_MODEL: 'm', INKFORGE_DATA_DIR: path.join(dataDir, 'no-style'), INKFORGE_MOCK: '1' }), provider: createMockProvider({ draft: { textFn: (m) => `【章${m.chapterNo}ns】无风格稿。` + 'n'.repeat(478) }, qc: { text: 'OVERALL: 9' }, rewrite: { text: 'OVERALL: 9' }, summarize: { text: 'SUMMARY: 无。' } }), inlineQueue: true });
@@ -134,8 +137,11 @@ describe('管线风格注入断言', () => {
         const rr = await app2.inject({ method: 'GET', url: `/api/runs/${runId2}` });
         if ((rr.json() as { status: string }).status === 'done') break;
       }
-      const versions2 = (await app2.inject({ method: 'GET', url: `/api/books/${bookId2}/chapters/1/versions` })).json() as Array<{ styleSampleIds: string[] }>;
-      expect(versions2.every((v) => v.styleSampleIds.length === 0)).toBe(true);
+      const versions2 = (await app2.inject({ method: 'GET', url: `/api/books/${bookId2}/chapters/1/versions` })).json() as {
+        currentVersionId: string | null;
+        versions: Array<{ styleSampleIds: string[] }>;
+      };
+      expect(versions2.versions.every((v) => v.styleSampleIds.length === 0)).toBe(true);
       await app2.close();
     } finally {
       try {

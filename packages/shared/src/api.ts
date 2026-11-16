@@ -45,6 +45,14 @@ export interface VersionDto {
   createdAt: string;
 }
 
+/** 版本列表项：B2 裁决① 后列表不带正文，正文走单取端点。 */
+export type VersionListItemDto = Omit<VersionDto, 'content'>;
+
+export interface VersionListDto {
+  currentVersionId: string | null;
+  versions: VersionListItemDto[];
+}
+
 export interface RunDto {
   id: string;
   bookId: string;
@@ -92,6 +100,8 @@ export interface ReportStepDto {
   attempt: number;
   ms: number;
   usage: { promptTokens: number; completionTokens: number };
+  /** 该步产物版本已被硬删（报表仍按 outputJson 记账） */
+  versionDeleted?: boolean;
 }
 
 export interface ReportChapterDto {

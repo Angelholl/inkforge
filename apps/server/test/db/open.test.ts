@@ -35,10 +35,10 @@ afterEach(() => {
 });
 
 describe('openDb + migrate', () => {
-  it('迁移后 user_version=5、WAL 开启、12 个核心对象存在、幂等', () => {
+  it('迁移后 user_version=6、WAL 开启、13 个核心对象存在、幂等', () => {
     const { db } = tmpDb();
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     const names = (
       db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>
@@ -56,18 +56,19 @@ describe('openDb + migrate', () => {
       'chapter_fts',
       'outline_nodes',
       'imitation_profiles',
+      'chapter_version_tombstones',
     ]) {
       expect(names).toContain(t);
     }
     expect(() => migrate(db)).not.toThrow();
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     db.close();
   });
 
   it('迁移 0002：run_steps 唯一约束与 partial_outputs UPSERT 幂等', () => {
     const { db } = tmpDb();
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     const now = new Date().toISOString();
     db.prepare(
       "INSERT INTO books(id, title, created_at, updated_at) VALUES('b1','书',?,?)",

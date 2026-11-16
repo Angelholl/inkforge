@@ -60,8 +60,9 @@ describe('REST API', () => {
     }
     expect(run!.status).toBe('done');
     const versions = await app.inject({ method: 'GET', url: `/api/books/${bookId}/chapters/1/versions` });
-    expect((versions.json() as unknown[]).length).toBeGreaterThanOrEqual(1);
-    const list = versions.json() as Array<{ id: string; kind: string }>;
+    const body = versions.json() as { currentVersionId: string | null; versions: Array<{ id: string; kind: string }> };
+    expect(body.versions.length).toBeGreaterThanOrEqual(1);
+    const list = body.versions;
     // rollback 到最早版本
     const oldest = list[list.length - 1];
     const rb = await app.inject({ method: 'POST', url: `/api/versions/${oldest.id}/rollback` });

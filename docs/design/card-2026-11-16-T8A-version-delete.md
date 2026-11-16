@@ -301,7 +301,7 @@ function addRunReferencing(status: 'queued' | 'running' | 'paused' | 'done', ver
   db.prepare("INSERT INTO runs(id, book_id, mode, status, chapter_scope_json, created_at) VALUES(?,?, 'generate', ?, '{\"from\":1,\"to\":1}', ?)").run(
     runId, bookId, status, new Date().toISOString(),
   );
-  db.prepare("INSERT INTO run_steps(id, run_id, chapter_id, step, attempt, status, output_version_id) VALUES(?,?,?,?, 'draft', 1, 'done', ?)").run(
+  db.prepare("INSERT INTO run_steps(id, run_id, chapter_id, step, attempt, status, output_version_id) VALUES(?,?,?,'draft',1,'done',?)").run(
     `rs-${runId}`, runId, chapterId, versionId,
   );
 }

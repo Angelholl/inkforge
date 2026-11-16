@@ -26,11 +26,11 @@ describe('migrate', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('0003 索引 + 0004 outline 列：user_version=5 且迁移物在场；user_version=2 旧库升级数据 intact', () => {
+  it('0003 索引 + 0004 outline 列：user_version=6 且迁移物在场；user_version=2 旧库升级数据 intact', () => {
     const dir = tmpDir();
     const db = openDb(path.join(dir, 'inkforge.db'));
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     const indexes = (
       db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?)").all(
         'idx_chapter_versions_chapter',
@@ -43,8 +43,8 @@ describe('migrate', () => {
     const outlineCol = db.prepare("SELECT name FROM pragma_table_info('books') WHERE name = 'outline'").all();
     expect(outlineCol).toHaveLength(1);
 
-    // 模拟 user_version=2 的旧库（0001+0002 已跑过、有数据）：先移除 0003-0005 全部增量物再造数据，回拨后重迁
-    // （ADD COLUMN/CREATE 无 SQL 级幂等，须把 schema 真实还原到 v2 态再升 0003+0004+0005）
+    // 模拟 user_version=2 的旧库（0001+0002 已跑过、有数据）：先移除 0003-0006 全部增量物再造数据，回拨后重迁
+    // （ADD COLUMN/CREATE 无 SQL 级幂等，须把 schema 真实还原到 v2 态再升 0003+0004+0005+0006）
     const now = new Date().toISOString();
     db.exec('DROP INDEX IF EXISTS idx_chapter_versions_chapter');
     db.exec('DROP INDEX IF EXISTS idx_runs_book_created');
@@ -54,6 +54,7 @@ describe('migrate', () => {
     db.exec('ALTER TABLE books DROP COLUMN imitation_profile_id');
     db.exec('ALTER TABLE books DROP COLUMN style_snapshot_json');
     db.exec('ALTER TABLE runs DROP COLUMN kind');
+    db.exec('DROP TABLE IF EXISTS chapter_version_tombstones');
     db.prepare("INSERT INTO books(id, title, created_at, updated_at) VALUES('b1','书',?,?)").run(now, now);
     db.prepare("INSERT INTO chapters(id, book_id, chapter_no, created_at) VALUES('c1','b1',1,?)").run(now);
     db.prepare(
@@ -73,7 +74,7 @@ describe('migrate', () => {
     const before = snapshot();
     db.pragma('user_version = 2');
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     expect(snapshot()).toEqual(before);
     expect(db.prepare("SELECT name FROM pragma_table_info('books') WHERE name = 'outline'").all()).toHaveLength(1);
 
@@ -85,7 +86,7 @@ describe('migrate', () => {
     const dir = tmpDir();
     const db = openDb(path.join(dir, 'inkforge.db'));
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     const newTables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('outline_nodes','imitation_profiles')").all() as Array<{ name: string }>)
       .map((r) => r.name)
       .sort();
@@ -103,6 +104,7 @@ describe('migrate', () => {
     db.exec('ALTER TABLE books DROP COLUMN imitation_profile_id');
     db.exec('ALTER TABLE books DROP COLUMN style_snapshot_json');
     db.exec('ALTER TABLE runs DROP COLUMN kind');
+    db.exec('DROP TABLE IF EXISTS chapter_version_tombstones');
     db.prepare("INSERT INTO books(id, title, created_at, updated_at) VALUES('b5','书五',?,?)").run(now, now);
     db.prepare(
       "INSERT INTO runs(id, book_id, mode, chapter_scope_json, created_at) VALUES('r5','b5','generate','{\"from\":1,\"to\":1}',?)",
@@ -110,7 +112,7 @@ describe('migrate', () => {
     const before = db.prepare('SELECT id, book_id, mode, chapter_scope_json, created_at FROM runs ORDER BY id').all();
     db.pragma('user_version = 4');
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     const after = db.prepare('SELECT id, book_id, mode, chapter_scope_json, created_at FROM runs ORDER BY id').all();
     expect(after).toEqual(before);
     expect((db.prepare("SELECT kind FROM runs WHERE id = 'r5'").get() as { kind: string }).kind).toBe('pipeline');

@@ -32,6 +32,9 @@ export interface ChapterVersion {
   createdAt: string;
 }
 
+/** 版本列表项：B2 裁决① 后列表不带正文，正文一律走 getVersion 单取（与 packages/shared 同形各落一份）。 */
+export type VersionListItemDto = Omit<ChapterVersion, 'content'>;
+
 interface ChapterRow {
   id: string;
   book_id: string;
@@ -82,6 +85,23 @@ function toVersion(r: VersionRow): ChapterVersion {
     parentVersionId: r.parent_version_id ?? undefined,
     kind: r.kind as ChapterKind,
     content: r.content,
+    wordCount: r.word_count,
+    runId: r.run_id ?? undefined,
+    promptHash: r.prompt_hash ?? undefined,
+    model: r.model ?? undefined,
+    params: JSON.parse(r.params_json) as object,
+    styleSampleIds: JSON.parse(r.style_sample_ids_json) as string[],
+    createdAt: r.created_at,
+  };
+}
+
+/** 列表项映射：与 toVersion 逐字段对齐，独缺 content（键也不产出，勿靠 Omit 后塞空串）。 */
+function toVersionListItem(r: Omit<VersionRow, 'content'>): VersionListItemDto {
+  return {
+    id: r.id,
+    chapterId: r.chapter_id,
+    parentVersionId: r.parent_version_id ?? undefined,
+    kind: r.kind as ChapterKind,
     wordCount: r.word_count,
     runId: r.run_id ?? undefined,
     promptHash: r.prompt_hash ?? undefined,
@@ -232,12 +252,49 @@ export function setCurrentVersion(db: Database, chapterId: string, versionId: st
   db.prepare('UPDATE chapters SET current_version_id = ? WHERE id = ?').run(versionId, chapterId);
 }
 
-export function listVersions(db: Database, chapterId: string): ChapterVersion[] {
-  // rowid 决胜：同毫秒时间戳下保持插入序（新版本在前）
-  return (db.prepare('SELECT * FROM chapter_versions WHERE chapter_id = ? ORDER BY created_at DESC, rowid DESC').all(chapterId) as VersionRow[]).map(toVersion);
+export function listVersions(db: Database, chapterId: string): VersionListItemDto[] {
+  // rowid 决胜：同毫秒时间戳下保持插入序（新版本在前）。B2 裁决①：列表不取正文，正文走 getVersion 单取。
+  return (
+    db
+      .prepare(
+        'SELECT id, chapter_id, parent_version_id, kind, word_count, run_id, prompt_hash, model, params_json, style_sample_ids_json, created_at FROM chapter_versions WHERE chapter_id = ? ORDER BY created_at DESC, rowid DESC',
+      )
+      .all(chapterId) as Array<Omit<VersionRow, 'content'>>
+  ).map(toVersionListItem);
 }
 
 export function getVersion(db: Database, versionId: string): ChapterVersion | undefined {
   const row = db.prepare('SELECT * FROM chapter_versions WHERE id = ?').get(versionId) as VersionRow | undefined;
   return row ? toVersion(row) : undefined;
+}
+
+/** 该版本是否被「活 run」（queued/running/paused）的某步引用为产物（B2 删除守卫）。 */
+export function findActiveRunRef(db: Database, versionId: string): { runId: string; status: string } | undefined {
+  return db
+    .prepare(
+      "SELECT rs.run_id AS runId, r.status AS status FROM run_steps rs JOIN runs r ON r.id = rs.run_id WHERE rs.output_version_id = ? AND r.status IN ('queued','running','paused') LIMIT 1",
+    )
+    .get(versionId) as { runId: string; status: string } | undefined;
+}
+
+/**
+ * 硬删一个版本并留墓碑（DEC-2026-1116-01 ①）：
+ * ① INSERT 墓碑（id/chapter_id/kind/run_id/word_count/created_at 取原行，deleted_at=now，墓碑 id = 原版本 id）
+ * ② 子版本 parent_version_id 置 NULL（断孤链，不级联删子）
+ * ③ DELETE 原行。行不存在返回 false。不动 chapters.current_version_id（调用方已拦截 current）。
+ */
+export function deleteChapterVersionWithTombstone(db: Database, versionId: string): boolean {
+  const tx = db.transaction((vid: string): boolean => {
+    const row = db
+      .prepare('SELECT id, chapter_id, kind, run_id, word_count, created_at FROM chapter_versions WHERE id = ?')
+      .get(vid) as { id: string; chapter_id: string; kind: string; run_id: string | null; word_count: number; created_at: string } | undefined;
+    if (!row) return false;
+    db.prepare(
+      'INSERT INTO chapter_version_tombstones(id, chapter_id, kind, run_id, word_count, created_at, deleted_at) VALUES(?,?,?,?,?,?,?)',
+    ).run(row.id, row.chapter_id, row.kind, row.run_id, row.word_count, row.created_at, new Date().toISOString());
+    db.prepare('UPDATE chapter_versions SET parent_version_id = NULL WHERE parent_version_id = ?').run(vid);
+    db.prepare('DELETE FROM chapter_versions WHERE id = ?').run(vid);
+    return true;
+  });
+  return tx(versionId);
 }

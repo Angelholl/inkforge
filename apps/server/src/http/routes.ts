@@ -16,6 +16,7 @@ import * as runsRepo from '../db/repositories/runs';
 import * as outlineRepo from '../db/repositories/outline';
 import * as imitationRepo from '../db/repositories/imitation';
 import { searchChapters } from '../db/repositories/fts';
+import { backupBookPredelete } from '../db/backup';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
 import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, styleBindSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
@@ -756,7 +757,7 @@ ${repairPrompt(first.errors)}`))).text,
     const { bookId, chapterNo } = req.params as { bookId: string; chapterNo: string };
     const chapter = chaptersRepo.getChapter(db, bookId, Number(chapterNo));
     if (!chapter) return reply.code(404).send({ error: 'not found' });
-    reply.send(chaptersRepo.listVersions(db, chapter.id));
+    reply.send({ currentVersionId: chapter.currentVersionId ?? null, versions: chaptersRepo.listVersions(db, chapter.id) });
   });
 
   app.get('/api/versions/:versionId', async (req, reply) => {
@@ -774,13 +775,33 @@ ${repairPrompt(first.errors)}`))).text,
     reply.send({ ok: true, currentVersionId: versionId });
   });
 
+  // B2 裁决①（DEC-2026-1116-01）四步：取版本 → 拦 current → 拦活 run 引用 → 删前快照 → 硬删留墓碑
+  app.delete('/api/versions/:versionId', async (req, reply) => {
+    const { versionId } = req.params as { versionId: string };
+    const v = chaptersRepo.getVersion(db, versionId);
+    if (!v) return reply.code(404).send({ error: 'not found' });
+    const chapter = chaptersRepo.getChapterById(db, v.chapterId);
+    if (!chapter) return reply.code(404).send({ error: 'not found' });
+    if (chapter.currentVersionId === versionId) {
+      return reply.code(409).send({ error: '当前版本不可删除（先回滚到其他版本）', reason: 'current' });
+    }
+    const active = chaptersRepo.findActiveRunRef(db, versionId);
+    if (active) {
+      return reply.code(409).send({ error: `版本被 ${active.status} 状态的运行引用，暂不可删除`, reason: 'run-active', runStatus: active.status });
+    }
+    // 快照先于删除事务（VACUUM INTO 不能在事务内）；目录沿用 queue.ts 的按书子目录惯例
+    backupBookPredelete(db, chapter.bookId, path.join(config.dataDir, 'backups', chapter.bookId));
+    chaptersRepo.deleteChapterVersionWithTombstone(db, versionId);
+    reply.send({ ok: true });
+  });
+
   // ── report / 选段重写（T30）──
   app.get('/api/runs/:runId/report', async (req, reply) => {
     const { runId } = req.params as { runId: string };
     const run = runsRepo.getRun(db, runId);
     if (!run) return reply.code(404).send({ error: 'not found' });
     const steps = runsRepo.listSteps(db, runId);
-    const chapters: Array<{ chapterNo: number; steps: Array<{ step: string; attempt: number; ms: number; usage: { promptTokens: number; completionTokens: number } }> }> = [];
+    const chapters: Array<{ chapterNo: number; steps: Array<{ step: string; attempt: number; ms: number; usage: { promptTokens: number; completionTokens: number }; versionDeleted?: boolean }> }> = [];
     let totalMs = 0;
     let totalPrompt = 0;
     let totalCompletion = 0;
@@ -792,15 +813,18 @@ ${repairPrompt(first.errors)}`))).text,
       const stepRows = chSteps.map((st) => {
         const ms = st.startedAt && st.endedAt ? new Date(st.endedAt).getTime() - new Date(st.startedAt).getTime() : 0;
         totalMs += ms;
+        // B2：usage 解析序 outputJson.usage（draft/rewrite 自本卡起落）→ 版本 params.usage（历史）→ 零；
+        // 版本行已被硬删 → 标 versionDeleted，报表不再依赖版本行存活
         let usage = { promptTokens: 0, completionTokens: 0 };
-        if (st.outputVersionId) {
-          const v = chaptersRepo.getVersion(db, st.outputVersionId);
-          const u = (v?.params as { usage?: { promptTokens?: number; completionTokens?: number } } | undefined)?.usage;
-          if (u) usage = { promptTokens: u.promptTokens ?? 0, completionTokens: u.completionTokens ?? 0 };
-        }
+        let versionDeleted: boolean | undefined;
+        const outV = st.outputVersionId ? chaptersRepo.getVersion(db, st.outputVersionId) : undefined;
+        if (st.outputVersionId && !outV) versionDeleted = true;
+        const oj = st.outputJson as { usage?: { promptTokens?: number; completionTokens?: number } } | undefined;
+        const u = oj?.usage ?? (outV?.params as { usage?: { promptTokens?: number; completionTokens?: number } } | undefined)?.usage;
+        if (u) usage = { promptTokens: u.promptTokens ?? 0, completionTokens: u.completionTokens ?? 0 };
         totalPrompt += usage.promptTokens;
         totalCompletion += usage.completionTokens;
-        return { step: st.step, attempt: st.attempt, ms, usage };
+        return { step: st.step, attempt: st.attempt, ms, usage, ...(versionDeleted ? { versionDeleted: true } : {}) };
       });
       chapters.push({ chapterNo, steps: stepRows });
     }

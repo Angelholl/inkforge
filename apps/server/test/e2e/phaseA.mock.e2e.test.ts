@@ -70,9 +70,12 @@ describe('Phase A mock 单章闭环 e2e', () => {
     const files = (ex.json() as { files: string[] }).files;
     expect(files.length).toBe(1);
     const content = fs.readFileSync(path.join(dataDir, 'exports', 'E2E_书', files[0]), 'utf8');
+    // 列表已去 content（B2）：先取 id，再单取正文
     const versions = await app.inject({ method: 'GET', url: `/api/books/${bookId}/chapters/1/versions` });
-    const cur = (versions.json() as Array<{ id: string; content: string }>).find((v) => v.id === (run as RunWithStepsDto).steps.find((s) => s.step === 'finalize')!.outputVersionId);
-    expect(content).toContain(cur!.content);
+    const finalizeVersionId = (run as RunWithStepsDto).steps.find((s) => s.step === 'finalize')!.outputVersionId!;
+    const cur = (versions.json() as { versions: Array<{ id: string }> }).versions.find((v) => v.id === finalizeVersionId)!;
+    const curFull = (await app.inject({ method: 'GET', url: `/api/versions/${cur.id}` })).json() as { content: string };
+    expect(content).toContain(curFull.content);
   }, 30000);
 
   it('needs_human：maxRounds=1 + qc 恒 blocker → ≤1 轮重写必停', async () => {

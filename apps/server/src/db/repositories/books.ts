@@ -206,6 +206,7 @@ export function deleteBook(db: Database, id: string): boolean {
     db.prepare('DELETE FROM runs WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM chapter_fts WHERE chapter_id IN (SELECT id FROM chapters WHERE book_id = ?)').run(id);
     db.prepare('DELETE FROM chapter_versions WHERE chapter_id IN (SELECT id FROM chapters WHERE book_id = ?)').run(id);
+    db.prepare('DELETE FROM chapter_version_tombstones WHERE chapter_id IN (SELECT id FROM chapters WHERE book_id = ?)').run(id);
     db.prepare('DELETE FROM chapters WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM chapter_summaries WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM character_states WHERE character_id IN (SELECT id FROM characters WHERE book_id = ?)').run(id);

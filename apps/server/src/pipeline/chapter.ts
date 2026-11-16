@@ -263,7 +263,7 @@ export async function runChapterPipeline(
         params: { usage: draftRes.usage, provider: roleLabel('drafter') },
         styleSampleIds,
       });
-      finishStep('draft', 1, { outputVersionId: draftVersion.id });
+      finishStep('draft', 1, { outputVersionId: draftVersion.id, outputJson: { usage: draftRes.usage, provider: roleLabel('drafter') } });
       draftFlusher.discard();
       currentVersion = { id: draftVersion.id, content: draftVersion.content };
     }
@@ -374,7 +374,7 @@ export async function runChapterPipeline(
         parentVersionId: currentVersion.id,
         params: { usage: rwRes.usage, round: rounds, provider: roleLabel('rewriter') },
       });
-      finishStep('rewrite', rwAttempt, { outputVersionId: revised.id });
+      finishStep('rewrite', rwAttempt, { outputVersionId: revised.id, outputJson: { usage: rwRes.usage, round: rounds, provider: roleLabel('rewriter') } });
       rwFlusher.discard();
       currentVersion = { id: revised.id, content: revised.content };
       prevOverall = l1.overall;

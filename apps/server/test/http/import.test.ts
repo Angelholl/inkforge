@@ -73,9 +73,9 @@ describe('POST /api/books/:bookId/import-original', () => {
 
     const versions = await app.inject({ method: 'GET', url: `/api/books/${bookId}/chapters/1/versions` });
     expect(versions.statusCode).toBe(200);
-    const list = versions.json() as Array<{ kind: string; content: string }>;
-    expect(list).toHaveLength(1);
-    expect(list[0].kind).toBe('original');
+    const body = versions.json() as { currentVersionId: string | null; versions: Array<{ kind: string }> };
+    expect(body.versions).toHaveLength(1);
+    expect(body.versions[0].kind).toBe('original');
 
     const hits = await app.inject({ method: 'GET', url: `/api/books/${bookId}/search?q=${encodeURIComponent('青云山下')}` });
     expect(hits.statusCode).toBe(200);
