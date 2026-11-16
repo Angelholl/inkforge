@@ -11,6 +11,7 @@ import { listSteps } from '../../src/db/repositories/runs';
 import { createDefaultMockProvider, createMockProvider } from '../../src/llm/mock';
 import type { RunEvent } from '@inkforge/shared';
 import { runChapterPipeline } from '../../src/pipeline/chapter';
+import type { CompletionRequest, LlmProvider } from '../../src/llm/types';
 
 const config = loadConfig({
   STRATA_BASE_URL: 'http://127.0.0.1:47831/v1',
@@ -181,3 +182,101 @@ function versionsByKind(chapterId: string, kind: string): { content: string } {
 // 静默 unused 警告（appendChapterVersion/setCurrentVersion 供后续 T20 使用）
 void appendChapterVersion;
 void setCurrentVersion;
+
+describe('B1 风格注入接线（T7B）', () => {
+  function boundProfileBook(tag: string): string {
+    const id = createBook(db, { title: `注入接线测试书 ${tag}`, description: '这是一个修真世界的注入测试设定。' }).id;
+    db.prepare(
+      "INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      `inj-ch-${tag}`,
+      id,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '推进注入测试', beats: [], mustHaveBeats: [], bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+    const dims = { 节奏: '场景从容，少跳切', 对话: '对话稀疏', 描写: '白描为主', 情感基调: '克制', 写作特点: '短句为主', 特色词汇: '冷僻字少', 章节结构: '单层推进' };
+    const axes = { 叙述温度: 20, 语言密度: 80, 叙述者姿态: 50, 节奏: 50, 幽默: 50, 情绪表达: 50 };
+    db.prepare(
+      'INSERT INTO style_profiles(id, name, source_path, source_hash, version, rules_json, samples_json, metrics_json, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+    ).run(
+      `inj-profile-${tag}`,
+      '注入档案',
+      'src/inj.txt',
+      `injhash-${tag}`,
+      1,
+      JSON.stringify({ rulesText: '短句为主，克制抒情。', dims, axes }),
+      JSON.stringify([{ id: 's1', text: '范例片段：他推开门，雨停了。' }]),
+      JSON.stringify({}),
+      new Date().toISOString(),
+    );
+    db.prepare('UPDATE books SET style_profile_id = ? WHERE id = ?').run(`inj-profile-${tag}`, id);
+    return id;
+  }
+
+  function runFor(bid: string): string {
+    db.prepare("INSERT INTO runs(id, book_id, mode, chapter_scope_json, max_rounds, created_at) VALUES(?,?, 'generate', ?, 2, ?)").run(
+      `run-${Math.random().toString(36).slice(2)}`,
+      bid,
+      JSON.stringify({ from: 1, to: 1 }),
+      new Date().toISOString(),
+    );
+    return (db.prepare('SELECT id FROM runs ORDER BY created_at DESC, rowid DESC LIMIT 1').get() as { id: string }).id;
+  }
+
+  function capturing(inner: LlmProvider): { calls: Array<{ step: string; system: string; user: string }>; provider: LlmProvider } {
+    const calls: Array<{ step: string; system: string; user: string }> = [];
+    return {
+      calls,
+      provider: {
+        complete: async (req: CompletionRequest) => {
+          calls.push({ step: String((req.meta as { step?: string } | undefined)?.step ?? ''), system: req.system ?? '', user: req.user ?? '' });
+          return inner.complete(req);
+        },
+      },
+    };
+  }
+
+  it('绑定档案：draft system 含七维画像与六轴低带映射句；fewShot 不再产出空【文风规则】头', async () => {
+    const bid = boundProfileBook('a');
+    const runId = runFor(bid);
+    const cap = capturing(createDefaultMockProvider());
+    const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    expect(outcome.status).toBe('done');
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    // stable 槽进 system（不进 user）：断言抓 system
+    expect(draft.system).toContain('【文风画像】');
+    expect(draft.system).toContain('· 节奏：场景从容，少跳切');
+    expect(draft.system).toContain('【六轴锚点】');
+    expect(draft.system).toContain('叙述温度：叙述温度偏冷');
+    expect(draft.system).toContain('（值 20）');
+    expect(draft.system).not.toContain('幽默：');
+    expect(draft.user).toContain('【范例片段】');
+    expect(draft.user).not.toContain('【文风规则】');
+  }, 30000);
+
+  it('重写轮（targeted）：rewrite system 含 styleRules 精简槽，且不带七维画像槽', async () => {
+    const bid = boundProfileBook('b');
+    const runId = runFor(bid);
+    const majorQc = `OVERALL: 6
+---
+SEVERITY: major
+DIMENSION: 节奏
+QUOTE: 【章
+COMMENT: 节奏拖沓，需压缩。`;
+    const inner = createMockProvider({
+      draft: { textFn: (m) => `【章${m.chapterNo}修】独有开头。` + '线'.repeat(480) },
+      qc: { sequence: [{ text: majorQc }, { repeat: { text: 'OVERALL: 9' } }] },
+      rewrite: { textFn: (m) => `【章${m.chapterNo}改】重写开头。` + '改'.repeat(480) },
+      summarize: { text: 'SUMMARY: 第1章推进完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
+    });
+    const cap = capturing(inner);
+    const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    expect(outcome.rounds).toBeGreaterThanOrEqual(1);
+    const rw = cap.calls.find((c) => c.step === 'rewrite')!;
+    expect(rw.system).toContain('短句为主，克制抒情。');
+    expect(rw.system).not.toContain('【文风画像】');
+  }, 30000);
+});

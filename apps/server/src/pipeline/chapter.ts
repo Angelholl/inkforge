@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ChapterBlueprint, RunEvent, StepName, StyleTermDto } from '@inkforge/shared';
+import type { ChapterBlueprint, RunEvent, StepName, StyleAxis, StyleDimension, StyleTermDto } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import * as booksRepo from '../db/repositories/books';
 import * as chaptersRepo from '../db/repositories/chapters';
@@ -19,7 +19,7 @@ import { decideGate, type L1Report } from '../quality/gate';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
 import { getLatestProfile } from '../style/distill';
-import { pickStyleSamples, renderStyleBlock } from '../style/inject';
+import { pickStyleSamples, renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
 import { computeStyleMetrics, type StyleMetrics } from '../style/metrics';
 import type { StyleSample } from '../style/distill';
 import { runSummarizeStep } from './summarize';
@@ -173,6 +173,8 @@ export async function runChapterPipeline(
     // ── 风格注入素材（book 绑定档案时；0.1 挂机路径恒无档案 → 跳过）──
     let styleRulesText = '';
     let styleTerms: StyleTermDto[] = [];
+    let styleDims: Record<StyleDimension, string> | undefined;
+    let styleAxes: Record<StyleAxis, number> | undefined;
     let styleSamples: StyleSample[] = [];
     let styleSampleIds: string[] = [];
     if (book.styleProfileId && runMode !== 'continue') {
@@ -190,13 +192,23 @@ export async function runChapterPipeline(
             /* 损坏快照回落档案现值 */
           }
         }
-        const rulesData = JSON.parse(rulesSource) as { rulesText?: string; terms?: StyleTermDto[] };
+        const rulesData = JSON.parse(rulesSource) as {
+          rulesText?: string;
+          terms?: StyleTermDto[];
+          dims?: Record<StyleDimension, string>;
+          axes?: Record<StyleAxis, number>;
+        };
         styleRulesText = rulesData.rulesText ?? '';
         styleTerms = rulesData.terms ?? [];
+        styleDims = rulesData.dims;
+        styleAxes = rulesData.axes;
         styleSamples = pickStyleSamples(JSON.parse(samplesSource) as StyleSample[], args.chapterNo);
         styleSampleIds = styleSamples.map((x) => x.id);
       }
     }
+    // B1：七维六轴画像文本与 fewShot 块提前装配（draft 与 full 重写共用同一块；targeted 只补 styleRules 精简槽）
+    const styleDimsText = styleDims && styleAxes ? renderStyleDimsBlock(styleDims, styleAxes, config.budgets.draft.styleDims) : '';
+    const fewShotBlock = styleSamples.length > 0 ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot, styleTerms) : undefined;
 
     // ── draft（复用或新建）──
     if (resumeFrom && resumeFrom !== 'draft' && doneCount('draft') > 0) {
@@ -214,11 +226,12 @@ export async function runChapterPipeline(
             hardRules,
             worldview: book.description,
             characters: charactersText || undefined,
+            styleDims: styleDimsText || undefined,
             styleRules: styleRulesText || undefined,
             blueprint: blueprintText(blueprint),
             continuity: continuityText,
             prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
-            fewShot: styleSamples.length > 0 ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot, styleTerms) : undefined,
+            fewShot: fewShotBlock,
             task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }),
           },
           config.budgets.draft,
@@ -285,7 +298,7 @@ export async function runChapterPipeline(
         },
       );
       const gate = decideGate({ l0, l1, roundsUsed: rounds, prevOverall }, { ...config.quality, maxRounds });
-      finishStep('qc', qcAttempt, { outputJson: { l0, l1, gate, usageProvider: roleLabel('qc') } });
+      finishStep('qc', qcAttempt, { outputVersionId: currentVersion.id, outputJson: { l0, l1, gate, usageProvider: roleLabel('qc') } });
       chaptersRepo.setVersionParams(db, currentVersion.id, { overall: l1.overall });
       if (!roundVersions.some((rv) => rv.id === currentVersion.id)) roundVersions.push({ id: currentVersion.id, overall: l1.overall ?? -1 });
 
@@ -313,7 +326,7 @@ export async function runChapterPipeline(
       const rwSlots =
         mode === 'targeted'
           ? buildRewriteSlots(
-              { original: currentVersion.content, findings: l1.findings, factBaselineText: continuityText, mode, taskInstruction, hardRules },
+              { original: currentVersion.content, findings: l1.findings, factBaselineText: continuityText, mode, taskInstruction, hardRules, styleRules: styleRulesText || undefined },
               config.budgets.rewrite,
             )
           : buildRewriteSlots(
@@ -328,6 +341,9 @@ export async function runChapterPipeline(
                 blueprint: blueprintText(blueprint),
                 continuity: continuityText,
                 prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
+                styleRules: styleRulesText || undefined,
+                styleDims: styleDimsText || undefined,
+                fewShot: fewShotBlock,
                 draftBudgets: config.budgets.draft,
               },
               config.budgets.rewrite,
