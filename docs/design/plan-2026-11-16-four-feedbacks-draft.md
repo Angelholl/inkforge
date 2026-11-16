@@ -1,5 +1,7 @@
 # 实现计划草案：四条反馈收口（2026-11-16，待评议+owner 拍板）
 
+> **已被取代**：decision-critic 评议四条 HIGH_RISK 异议全部采纳，定稿见 plan-2026-11-16-four-feedbacks.md（v2）。本文留档评议前原案。
+
 > 事实基础：research-2026-11-16-ui-versions.md（R1）、research-2026-11-16-distill-qc.md（R2）。
 > owner 口径（2026-11-16 已确认）：①按钮全量归一；②蒸馏对标七项能力矩阵（MirrorNovel 行为层，third-party-references 11-16 行）；③章节版本+档案版本两者都要删；④评分要解释+可调。
 > UI 第一参考=SubTrans（owner 指定），Button 规范由设计专家另行产出（spec-button-subtrans-2026-11-16.md），不在本草案内。
