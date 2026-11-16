@@ -1,0 +1,131 @@
+[
+  {
+    "n": "A1 版本链 3 枚 chip 且每枚配一枚删除钮",
+    "p": true,
+    "e": {
+      "chips": 3,
+      "dels": 3
+    }
+  },
+  {
+    "n": "A2 current 行删除钮 disabled、非 current 两枚可点",
+    "p": true,
+    "e": [
+      {
+        "chip": "revise",
+        "dis": true
+      },
+      {
+        "chip": "revise",
+        "dis": false
+      },
+      {
+        "chip": "draft ",
+        "dis": false
+      }
+    ]
+  },
+  {
+    "n": "A3 删除钮=quiet·danger·sm 32px 红字非实底",
+    "p": true,
+    "e": {
+      "h": 32,
+      "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl font-medium tr"
+    }
+  },
+  {
+    "n": "A4 列表响应=信封且列表项无 content 键",
+    "p": true,
+    "e": {
+      "status": 200,
+      "keys": [
+        "currentVersionId",
+        "versions"
+      ]
+    }
+  },
+  {
+    "n": "A5 L2 确认簇出现（警示文案 + 确认删除实底红 + 取消 secondary）",
+    "p": true,
+    "e": {
+      "warn": true,
+      "cf": {
+        "h": 32
+      },
+      "cc": {
+        "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl font"
+      }
+    }
+  },
+  {
+    "n": "A6 点确认删除 → 发 DELETE 且 200 且行消失",
+    "p": true,
+    "e": {
+      "status": 200,
+      "url": "/api/versions/9b0aac4a-56b0-4566-87d5-4f0289b09bc3",
+      "chips": 2
+    }
+  },
+  {
+    "n": "A7 删除后高亮回退锚定服务端 current（软底 chip=revised）",
+    "p": true,
+    "e": [
+      "revised · 50"
+    ]
+  },
+  {
+    "n": "A8 正文仍完整渲染（经 getVersion 单取，列表已瘦身）",
+    "p": true,
+    "e": {
+      "len": 500
+    }
+  },
+  {
+    "n": "B1 Diff 页显示「上一版已删或不存在，无法对比」",
+    "p": true,
+    "e": {
+      "msg": true
+    }
+  },
+  {
+    "n": "C1 报表增「产物」列且被删版本标 Badge「版本已删」",
+    "p": true,
+    "e": {
+      "ths": [
+        "章",
+        "步",
+        "轮",
+        "耗时ms",
+        "输出tok",
+        "产物"
+      ],
+      "badges": 2,
+      "flaggedDraft": 1
+    }
+  },
+  {
+    "n": "C2 存活版本所在步该列为空（rewrite 步未被误标）",
+    "p": true,
+    "e": {
+      "rewriteFlagged": 0,
+      "rows": [
+        "draft#1:D",
+        "qc#1:D",
+        "rewrite#2:-",
+        "qc#2:-",
+        "summarize#1:-",
+        "finalize#1:-"
+      ]
+    }
+  },
+  {
+    "n": "D1 全程无 console/page error",
+    "p": true,
+    "e": []
+  },
+  {
+    "n": "D2 全程无非预期 4xx/5xx",
+    "p": true,
+    "e": []
+  }
+]
