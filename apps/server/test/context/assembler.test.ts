@@ -7,6 +7,7 @@ const BUDGETS = {
   worldview: 1000,
   characters: 800,
   styleRules: 1000,
+  styleDims: 600,
   blueprint: 1000,
   continuity: 2500,
   prevTail: 1500,
@@ -91,5 +92,33 @@ describe('槽序与 profile', () => {
       'prevTail',
       'task',
     ]);
+  });
+
+  it('styleDims 槽位于 characters 之后 styleRules 之前，stable 进 system 不进 user', () => {
+    const dimsText = '【文风画像】\n· 节奏：节奏偏缓的画像描述';
+    const slots = draftSlots(
+      { ...INPUT, characters: '【人物卡】张三', styleDims: dimsText, styleRules: '风格规则文本' },
+      BUDGETS,
+    );
+    expect(slots.map((s) => s.name)).toEqual([
+      'hardRules',
+      'worldview',
+      'characters',
+      'styleDims',
+      'styleRules',
+      'blueprint',
+      'continuity',
+      'prevTail',
+      'task',
+    ]);
+    const st = slots.find((s) => s.name === 'styleDims')!;
+    expect(st.stable).toBe(true);
+    expect(st.keep).toBe('head');
+    expect(st.budgetChars).toBe(600);
+    const a = assembleContext(slots, 100000);
+    expect(a.system).toContain(dimsText);
+    expect(a.user).not.toContain(dimsText);
+    expect(a.system.indexOf('【人物卡】张三')).toBeLessThan(a.system.indexOf(dimsText));
+    expect(a.system.indexOf(dimsText)).toBeLessThan(a.system.indexOf('风格规则文本'));
   });
 });

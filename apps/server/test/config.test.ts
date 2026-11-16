@@ -27,6 +27,7 @@ describe('loadConfig', () => {
       worldview: 1000,
       characters: 800,
       styleRules: 1000,
+      styleDims: 600,
       blueprint: 1000,
       continuity: 2500,
       prevTail: 1500,
@@ -38,6 +39,7 @@ describe('loadConfig', () => {
       worldview: 200,
       characters: 0,
       styleRules: 0,
+      styleDims: 0,
       blueprint: 500,
       continuity: 1000,
       prevTail: 800,
@@ -48,6 +50,7 @@ describe('loadConfig', () => {
     expect(c.budgets.qc8k).toEqual({ hardRules: 300, draft: 3000, blueprint: 300, continuity: 200 });
     expect(c.budgets.rewrite).toEqual({
       hardRules: 500,
+      styleRules: 400,
       original: 6000,
       findings: 800,
       factBaseline: 1000,

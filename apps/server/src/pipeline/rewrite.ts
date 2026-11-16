@@ -24,6 +24,7 @@ export interface RewriteSlotsInput {
   // full 模式复用 draft 装配素材（槽名集与 draftSlots 一致）
   worldview?: string;
   styleRules?: string;
+  styleDims?: string;
   blueprint?: string;
   continuity?: string;
   prevTail?: string;
@@ -39,6 +40,7 @@ export function buildRewriteSlots(input: RewriteSlotsInput, budgets: AppConfig['
         hardRules: input.hardRules ?? '',
         worldview: input.worldview ?? '',
         styleRules: input.styleRules,
+        styleDims: input.styleDims,
         blueprint: input.blueprint ?? '',
         continuity: input.continuity ?? '',
         prevTail: input.prevTail ?? '',
@@ -55,10 +57,16 @@ export function buildRewriteSlots(input: RewriteSlotsInput, budgets: AppConfig['
       : '（无 blocker/major）';
   const slots: ContextSlot[] = [
     { name: 'hardRules', content: input.hardRules ?? '', budgetChars: budgets.hardRules, stable: true, keep: 'head' },
+  ];
+  // B1：targeted 重写同样注入风格精简槽（有值才插，紧随 hardRules，stable 进 system）
+  if (input.styleRules && input.styleRules.length > 0) {
+    slots.push({ name: 'styleRules', content: input.styleRules, budgetChars: budgets.styleRules, stable: true, keep: 'head' });
+  }
+  slots.push(
     { name: 'original', content: input.original, budgetChars: budgets.original, stable: false, keep: 'head' },
     { name: 'findings', content: findingsText, budgetChars: budgets.findings, stable: false, keep: 'head' },
     { name: 'factBaseline', content: input.factBaselineText, budgetChars: budgets.factBaseline, stable: false, keep: 'head' },
     { name: 'task', content: input.taskInstruction, budgetChars: budgets.task, stable: false, keep: 'head' },
-  ];
+  );
   return slots;
 }

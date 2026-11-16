@@ -19,6 +19,7 @@ export interface DraftBudgets {
   worldview: number;
   characters: number;
   styleRules: number;
+  styleDims: number;
   blueprint: number;
   continuity: number;
   prevTail: number;
@@ -35,6 +36,7 @@ export interface QcBudgets {
 
 export interface RewriteBudgets {
   hardRules: number;
+  styleRules: number;
   original: number;
   findings: number;
   factBaseline: number;
@@ -99,6 +101,7 @@ const BUDGETS_DRAFT: DraftBudgets = {
   worldview: 1000,
   characters: 800,
   styleRules: 1000,
+  styleDims: 600,
   blueprint: 1000,
   continuity: 2500,
   prevTail: 1500,
@@ -111,6 +114,7 @@ const BUDGETS_DRAFT_8K: DraftBudgets = {
   worldview: 200,
   characters: 0,
   styleRules: 0,
+  styleDims: 0,
   blueprint: 500,
   continuity: 1000,
   prevTail: 800,
@@ -122,6 +126,7 @@ const BUDGETS_QC: QcBudgets = { hardRules: 400, draft: 6000, blueprint: 500, con
 const BUDGETS_QC_8K: QcBudgets = { hardRules: 300, draft: 3000, blueprint: 300, continuity: 200 };
 const BUDGETS_REWRITE: RewriteBudgets = {
   hardRules: 500,
+  styleRules: 400,
   original: 6000,
   findings: 800,
   factBaseline: 1000,

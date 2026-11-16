@@ -87,4 +87,47 @@ describe('buildRewriteSlots', () => {
     expect(slots.map((s) => s.name)).toEqual(['hardRules', 'worldview', 'blueprint', 'continuity', 'prevTail', 'task']);
     expect(slots.find((s) => s.name === 'task')!.content).toBe('按硬规则整章重写');
   });
+
+  it('targeted 传入 styleRules 时槽紧随 hardRules 且 stable（B1 精简槽）', () => {
+    const slots = buildRewriteSlots(
+      {
+        original: '原稿正文',
+        findings: [f('major')],
+        factBaselineText: '事实基线',
+        mode: 'targeted',
+        taskInstruction: '仅修复所列问题',
+        hardRules: '硬规则',
+        styleRules: '节奏偏缓，少用感叹。',
+      },
+      config.budgets.rewrite,
+    );
+    expect(slots.map((s) => s.name)).toEqual(['hardRules', 'styleRules', 'original', 'findings', 'factBaseline', 'task']);
+    const st = slots.find((s) => s.name === 'styleRules')!;
+    expect(st.stable).toBe(true);
+    expect(st.keep).toBe('head');
+    expect(st.budgetChars).toBe(400);
+    expect(st.content).toBe('节奏偏缓，少用感叹。');
+  });
+
+  it('full 传入 styleDims 时经 draftSlots 产出 styleDims 槽', () => {
+    const slots = buildRewriteSlots(
+      {
+        original: '原稿',
+        findings: [],
+        factBaselineText: '',
+        mode: 'full',
+        taskInstruction: '整章重写',
+        hardRules: '硬规则',
+        worldview: '世界观',
+        styleDims: '【文风画像】\n· 节奏：测试画像',
+        blueprint: '蓝图',
+        continuity: '连续性',
+        prevTail: '上一章末尾',
+        draftBudgets: config.budgets.draft,
+      },
+      config.budgets.rewrite,
+    );
+    expect(slots.map((s) => s.name)).toEqual(['hardRules', 'worldview', 'styleDims', 'blueprint', 'continuity', 'prevTail', 'task']);
+    expect(slots.find((s) => s.name === 'styleDims')!.stable).toBe(true);
+  });
 });
