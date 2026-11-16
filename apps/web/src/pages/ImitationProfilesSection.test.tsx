@@ -74,4 +74,54 @@ describe('ImitationProfilesSection（D4-T5）', () => {
     expect(del!.url.endsWith('/api/imitation-profiles/ip1')).toBe(true);
     await waitFor(() => expect(screen.queryByText('拆解档案甲')).toBeNull());
   });
+
+  it('前置校验：空名点拆解 → 提示填名且不发 analyze 请求（回归 DEC-2026-1117-03）', async () => {
+    vi.stubGlobal('fetch', stubFetch());
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('拆解档案甲')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('仿写样本'), { target: { value: 'x'.repeat(200) } });
+    fireEvent.click(screen.getByRole('button', { name: '拆解分析' }));
+    expect(await screen.findByText('请先填写仿写档案名称')).toBeTruthy();
+    expect(calls.some((c) => String(c.url).includes('/analyze'))).toBe(false);
+  });
+
+  it('前置校验：正文去空白不足 200 字 → 拦截提示且不发请求', async () => {
+    vi.stubGlobal('fetch', stubFetch());
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('拆解档案甲')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('仿写档案名称'), { target: { value: '新档案' } });
+    fireEvent.change(screen.getByLabelText('仿写样本'), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: '拆解分析' }));
+    expect(screen.getByText(/参考正文去空白后不足 200 字（当前 3 字）/)).toBeTruthy();
+    expect(calls.some((c) => String(c.url).includes('/analyze'))).toBe(false);
+  });
+
+  it('章数钳制：输入非法值再拆解 → 提交时回退 12 章发送（string 态提交钳制）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/api/imitation-profiles/analyze'))
+          return jsonResponse({ draft: { structure: [], style: { rulesText: '' }, blueprint: [] } });
+        if (u.endsWith('/api/imitation-profiles') && (!init?.method || init.method === 'GET')) return jsonResponse(rows);
+        if (u.endsWith('/api/books')) return jsonResponse([]);
+        return jsonResponse({});
+      }),
+    );
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('拆解档案甲')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('仿写档案名称'), { target: { value: '钳制测' } });
+    fireEvent.change(screen.getByLabelText('仿写样本'), { target: { value: 'x'.repeat(200) } });
+    fireEvent.change(screen.getByLabelText('仿写反推章数'), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: '拆解分析' }));
+    await waitFor(() => expect(calls.some((c) => String(c.url).includes('/analyze'))).toBe(true));
+    const analyzeCall = calls.find((c) => String(c.url).includes('/analyze'))!;
+    const body = JSON.parse(String(analyzeCall.init?.body));
+    expect(body.chapterCount).toBe(12);
+    expect(body.name).toBe('钳制测');
+  });
 });

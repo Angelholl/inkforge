@@ -345,3 +345,11 @@
 **处置（沿用 1117-01 已拍板样式，无新拍板）：** 蒸馏面板文件选择对齐 NewBookPage——hidden input+虚线底框 label（虚线框、hover 描边、文件名「xx.txt · 已按 GB18030 解码（N 字）」回显）+decodeTextFile 编码探测（GBK 样本不再乱码）。回归测试先红后绿：GBK 字节→虚线框在场+正确解码回显（镜像 NewBookPage 反馈③用例）。
 
 **验证链：** typecheck 全绿；定向 StyleProfilesSection 16/16 + NewBookPage 5/5；全量 server 269/269 + web 78/78 + shared 2/2（基线 349 只增不减）；lint 零输出；build 冒烟 386.41kB 通过；秘密正则零命中+pnpm audit --prod 零漏洞。GUI 未验证（owner 真实测试）。教训：反馈修复按 grep 全库点位清单逐处销号，不许只修报告里截图那一处（本次 ①③ 各漏一处）。
+
+## DEC-2026-1117-03 [OWNER] 全库体检拍板三卡——章题识别扩展/mock 文件通道收尾/仿写校验（2026-11-17）
+
+**背景：** owner 令全库检查。主模型三层体检（同类点位全库销号+近四提交 diff 审查+核心文件抽查）结论：无新增运行 bug；P2 一处拍板偏差（mock「彻底删除」只删 UI+PUT 链路，settings.ts:14 schema 仍认 INKFORGE_MOCK 且 config.ts:143 文件键覆盖环境变量，本机 config.json 实测残留该键值 '0'——通道在、现值安全）；P3 三项边缘观察。owner 拍板：①拆章识别「（一）/第一章等」修复+测试 ②P2 修复立项开工 ③P3-1 仿写校验随立项做；P3-2（NewBookIdeaPage 收编详情页）方向未拍板仍悬置，P3-3（distill_jobs 行积累）纯观察不动。
+
+**三卡处置（计划真值 docs/plans/2026-11-17-chapter-title-and-mock-cleanup.md，主模型亲执）：** A 章题正则三分支——第X章节回（容忍「第 1 章」空格排版）|数字顿号「一、雪夜」（排顿号复现防「一、二、三」误切）|全/半角括号「（一）雪夜」；显式不支持半角点「1. 雪夜」（误伤「1.5 万」，样本再现再议）；防误判 18 组实证先行。B settingsSchema 删 INKFORGE_MOCK——zod strip 使 config.json 残留键成死数据、writeSettingsFile 下次保存顺带洗掉；env 通道保留（config.ts 不动）。C 仿写表单前置校验（空名/<200 字，文案对齐蒸馏面板）+反推章数 string 态提交钳 [1,50]、非法回退 12。
+
+**验证链：** typecheck 全绿；定向 NewBookPage 9/9 + config 11/11 + ImitationProfilesSection 5/5；全量 server 272/272 + web 85/85 + shared 2/2（基线 359 只增不减）；lint 零输出；build 冒烟 386.79kB；秘密扫描命中均为测试夹具占位值零新增真实凭据+audit 零漏洞。GUI 未验证（owner 真实测试）。

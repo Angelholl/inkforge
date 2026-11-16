@@ -150,4 +150,36 @@ describe('NewBookPage', () => {
     expect(out).toHaveLength(1);
     expect(out[0].content).toContain('没有章题');
   });
+
+  it('splitChapters：括号章题「（一）/（二）」拆章（回归 owner 反馈：括号形态无法识别）', () => {
+    const out = splitChapters('（一）雪夜\n夜里落了雪。\n\n（二）天明\n天亮出了太阳。');
+    expect(out).toHaveLength(2);
+    expect(out[0].title).toBe('（一）雪夜');
+    expect(out[1].title).toBe('（二）天明');
+    expect(out[0].content).toContain('夜里落了雪');
+    expect(out[1].content).toContain('天亮出了太阳');
+  });
+
+  it('splitChapters：顿号章题「一、/十二、」拆章', () => {
+    const out = splitChapters('一、雪夜\n正文甲。\n\n十二、天明\n正文乙。');
+    expect(out).toHaveLength(2);
+    expect(out[0].title).toBe('一、雪夜');
+    expect(out[1].title).toBe('十二、天明');
+  });
+
+  it('splitChapters：空格排版「第 1 章」识别', () => {
+    const out = splitChapters('第 1 章 雪夜\n正文一。\n\n第 2 章 天明\n正文二。');
+    expect(out).toHaveLength(2);
+    expect(out[0].title).toBe('第 1 章 雪夜');
+    expect(out[1].title).toBe('第 2 章 天明');
+  });
+
+  it('splitChapters：防误判——顿号复现行/（完）/小数行不当章题切分', () => {
+    const out = splitChapters('第一章 雪夜\n他数着：一、二、三，报数。\n（完）\n全程 1.5 万字。');
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe('第一章 雪夜');
+    expect(out[0].content).toContain('一、二、三');
+    expect(out[0].content).toContain('（完）');
+    expect(out[0].content).toContain('1.5 万');
+  });
 });

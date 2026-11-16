@@ -12,7 +12,8 @@ export default function ImitationProfilesSection() {
   const books = Array.isArray(booksData) ? booksData : [];
   const [name, setName] = useState('');
   const [text, setText] = useState('');
-  const [chapterCount, setChapterCount] = useState(12);
+  // 章数用 string 态（对齐 StyleProfilesSection 高级项模式）：输入过程不干预，提交时钳 [1,50]、非法回退 12
+  const [chapterCount, setChapterCount] = useState('12');
   const [draft, setDraft] = useState<ImitationDraftDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -22,9 +23,20 @@ export default function ImitationProfilesSection() {
 
   const analyze = async () => {
     setMsg('');
+    // 前置校验（owner 立项 DEC-2026-1117-03：对齐蒸馏表单口径，空名/短文不再直打服务端 400）
+    if (name.trim() === '') {
+      setMsg('请先填写仿写档案名称');
+      return;
+    }
+    const stripped = text.replace(/\s/g, '').length;
+    if (stripped < 200) {
+      setMsg(`参考正文去空白后不足 200 字（当前 ${stripped} 字），请粘贴或导入更多正文`);
+      return;
+    }
     setBusy(true);
     try {
-      const r = await api.analyzeImitation({ name: name.trim(), text, chapterCount });
+      const count = Math.min(50, Math.max(1, Math.round(Number(chapterCount)) || 12));
+      const r = await api.analyzeImitation({ name: name.trim(), text, chapterCount: count });
       setDraft(r.draft);
       setMsg('拆解完成（草稿未入库），确认后点「确认入库」');
     } catch (e) {
@@ -159,7 +171,7 @@ export default function ImitationProfilesSection() {
               aria-label="仿写反推章数"
               className="ml-2 w-20 rounded border px-2 py-1"
               value={chapterCount}
-              onChange={(e) => setChapterCount(Number(e.target.value))}
+              onChange={(e) => setChapterCount(e.target.value)}
             />
           </label>
           <Button variant="primary" size="md" disabled={busy} onClick={() => void analyze()}>

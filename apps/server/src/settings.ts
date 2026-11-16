@@ -11,7 +11,8 @@ export const settingsSchema = z.object({
   INKFORGE_CLOUD_BASE_URL: z.string().optional(),
   INKFORGE_CLOUD_API_KEY: z.string().optional(),
   INKFORGE_CLOUD_MODEL: z.string().optional(),
-  INKFORGE_MOCK: z.enum(['0', '1']).optional(),
+  // INKFORGE_MOCK 已从文件通道移除（DEC-2026-1117-03）：mock 仅认环境变量（owner 拍板「彻底删除」收尾）。
+  // zod 默认 strip 未知键：config.json 里旧开关写入的残留键被忽略，下次 writeSettingsFile 顺带洗掉。
 });
 
 export function configFilePath(): string {

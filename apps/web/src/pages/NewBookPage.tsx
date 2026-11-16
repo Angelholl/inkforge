@@ -3,8 +3,14 @@ import { useNavigate } from 'react-router';
 import { api } from '../api/client';
 import { Button } from '../components/ui';
 
-// 章题行：第X章/节/回（汉字或数字），其后同行不带句号换行
-const CHAPTER_LINE_RE = /^第[0-9一二三四五六七八九十百零两]+[章节回][^。\n]*$/m;
+// 章题行三分支（owner 反馈：（一）/一、等形态拆章无法识别）：
+// ① 第X章/节/回（容忍「第 1 章」空格排版）；② 数字顿号「一、雪夜」（排顿号复现，防「一、二、三」误切）；
+// ③ 全/半角括号「（一）雪夜」。防误判约束沿旧例：章题行内不得含句号；「1.5 万」「（完）」天然不命中。
+// 显式不支持半角点「1. 雪夜」（会误伤「1.5 万」类数字，样本再现再议）。
+const CH_NUM = '[0-9〇零一二三四五六七八九十百千两]';
+const CHAPTER_LINE_RE = new RegExp(
+  `^(?:第\\s*${CH_NUM}+\\s*[章节回]\\s*[^。\\n]*|${CH_NUM}+\\s*、\\s*[^、。\\n]*|[（(]\\s*${CH_NUM}+\\s*[）)]\\s*[^。\\n]*)$`,
+);
 
 export interface ParsedChapter {
   title: string;

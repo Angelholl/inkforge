@@ -1,11 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig, pickBudgetProfile } from '../src/config';
+import { readSettingsFile } from '../src/settings';
 
 const LEGAL_ENV = {
   STRATA_BASE_URL: 'http://127.0.0.1:47831/v1',
   STRATA_API_KEY: 'strata',
   STRATA_MODEL: 'iq3_xxs',
 };
+
+/** 向测试封闭的设置文件（setup.env.ts 指向 tmpdir）写入 JSON。 */
+function writeCfg(obj: Record<string, string>): void {
+  fs.writeFileSync(process.env.INKFORGE_CONFIG_FILE!, JSON.stringify(obj), 'utf8');
+}
 
 describe('loadConfig', () => {
   it('最小合法 env → 默认值与钉值全表', () => {
@@ -101,6 +108,33 @@ describe('loadConfig', () => {
   it('cloud 缺任一 env → cloud provider 不出现', () => {
     const c = loadConfig({ ...LEGAL_ENV, INKFORGE_CLOUD_BASE_URL: 'https://x', INKFORGE_CLOUD_API_KEY: 'k' });
     expect(c.providers.cloud).toBeUndefined();
+  });
+});
+
+describe('设置文件通道封闭（回归 DEC-2026-1117-02 P2：mock 仅认环境变量）', () => {
+  afterEach(() => {
+    try {
+      fs.unlinkSync(process.env.INKFORGE_CONFIG_FILE!);
+    } catch {
+      /* 已不存在 */
+    }
+  });
+
+  it('config.json 含 INKFORGE_MOCK → readSettingsFile strip 该键（旧设置页开关残留键成死数据）', () => {
+    writeCfg({ STRATA_BASE_URL: 'http://x', STRATA_API_KEY: 'k', STRATA_MODEL: 'm', INKFORGE_MOCK: '1' });
+    expect(readSettingsFile()).not.toHaveProperty('INKFORGE_MOCK');
+  });
+
+  it('config.json 含 INKFORGE_MOCK=1 → loadConfig mock 仍 false（文件通道无法启用 mock）', () => {
+    writeCfg({ STRATA_BASE_URL: 'http://x', STRATA_API_KEY: 'k', STRATA_MODEL: 'm', INKFORGE_MOCK: '1' });
+    expect(loadConfig(LEGAL_ENV).mock).toBe(false);
+  });
+
+  it('config.json 的合法键仍生效：STRATA_API_KEY 文件值覆盖 env', () => {
+    writeCfg({ STRATA_BASE_URL: 'http://file', STRATA_API_KEY: 'from-file', STRATA_MODEL: 'm-file' });
+    const c = loadConfig(LEGAL_ENV);
+    expect(c.providers.local.apiKey).toBe('from-file');
+    expect(c.providers.local.model).toBe('m-file');
   });
 });
 
