@@ -327,3 +327,13 @@
 **规格勘正集（执行中钉死，owner 可驳回）：** ①蒸馏 job result 附 `sourceText`（shared DistillStyleDraftDto 可选字段）——重蒸草稿须有整篇原文才能走「确认入库」，否则重蒸闭环断半路；入库侧 `ON CONFLICT(source_hash) DO NOTHING` 保证同 hash 只留一份原文。②DELETE 档案 409 文案改中文「该风格档案已被书绑定，请先解绑再删除」（仓库 409 文案惯例，计划原钉 'profile bound'）。③档案删除/绑定反查走路由内联 SQL（`styles.ts` 不存在，仓库档案投影本就内联于 routes.ts）。④每页一枚「质量轮数」select 统管本页全部生成入口（BookDetailPage 三处、NewBookPage 一处），UI 上限 3 轮。⑤迁移卡面模板固 §1.1 段：user_version 硬编码 7 处+旧库回滚块 DROP（0008 两表，style_sources 带 UNIQUE）。⑥全文 Qc 明细面板按轮 gate/l1 findings/L0 未过项渲染；质检明细仅新 run 版本携带。
 
 **执行留痕：** 打点 C-20261116-2352/2353 在先（LEDGER 追加 L-20261116-02..06 + R-none）；本条目与 65b0f85（T11A）后单独 docs 提交归档；push 未做——本地 ahead origin 约 37 提交，push 前须 code-review（≥3 文件/≥100 行规则）+ owner 点头（沿「任务结束统一 push 需 owner 命」口径）。
+
+## DEC-2026-1117-01 [OWNER] owner 实测七反馈修复拍板——设定统一落点/人物下线专用控件/mock 开关删除（2026-11-17）
+
+**背景：** owner 真实测试 0.2（4b84222 后）实测反馈七条。根因调查（主模型亲勘，systematic-debugging 四阶段）：①文件选择原生 input 零样式（NewBookPage:167）；②导入后直落续写、缺剧情/字数/人物设置（向导第三步=详情页功能子集，targetChars 硬编码 3000 于 NewBookPage:132）；③TXT 导入乱码（readAsText 默认 UTF-8，GBK 全篇 U+FFFD）；④初始「AI 建议蓝图」与书架重入两套设定面板并存（同②根）；⑤蒸馏采样段数/温度裸参数无说明无默认（UI 空≠服务端默认 20/0.3）；⑥设置页 mock 开关无解释（factory.ts mock=假 LLM 全接管）；⑦蒸馏 400 报错为 zod issue 原始 JSON（档案名空串直发+parseBody 未人话化）。
+
+**owner 亲决（AskUserQuestion 三问）：** ①②④设定统一落点=**直进书详情页**——导入成功即 navigate 详情页，向导第三步撤销，AI 建议蓝图/发起续写/字数（targetChars 可编辑）补进详情页蓝图编辑区，设定面板从此一套；「人物下线」=**专用下线控件**（服务端 0009 迁移 characters.offline_from_chapter：NULL=在场、N=第 N 章起下线；写手人物卡槽按章过滤（listActiveCharacters 下线当章即不在场），连续性快照增 [已下线] 防复活行；恢复在场=置 null）；mock 开关=**彻底删除**（设置页开关+GET 回显+PUT 链路全删，mock provider 保留供开发/测试环境变量 INKFORGE_MOCK 启用；owner 配置核查 INKFORGE_MOCK="0" 无遗留风险）。
+
+**主模型随案钉细节（owner 可驳回）：** 蒸馏表单前置校验（空名/样本 <200 字拦截）+采样参数预填服务端默认（20/0.3）+一行人话说明；parseBody 400 人话化（「请求参数不合法：path: message」分号连接，无测试锚定文案，仅断言 400 状态码的既有用例不受影响）；新导向导文案「①建书→②导入原文→③到书详情页设定并发起续写」。
+
+**验证链：** typecheck 全绿；定向（server 六文件 36/36、web 四文件 35/35）；全量 server 269/269 + web 77/77 + shared 2/2（基线 348 只增不减）；lint 零输出；build 冒烟 385.77kB 通过；安全深扫秘密正则零命中+pnpm audit --prod 零漏洞。GUI 未验证（owner 真实测试）。中文码点序教训：JS sort 按 UTF-16 码元（'乙'<'甲'），同毫秒 created_at 顺序无契约——断言用 Set 比对。
