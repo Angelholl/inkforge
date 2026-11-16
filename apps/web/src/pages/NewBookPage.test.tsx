@@ -1,6 +1,6 @@
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NewBookPage, { splitChapters } from './NewBookPage';
 
@@ -64,6 +64,54 @@ describe('NewBookPage', () => {
     expect(delBtn.className).toContain('h-8');
     fireEvent.click(screen.getAllByRole('button', { name: '删除' })[1]);
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('质量轮数 select：发起续写时把 maxRounds 透传给 POST /api/runs', async () => {
+    const calls: Array<{ url: string; method?: string; body?: string }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, method: init?.method, body: init?.body ? String(init.body) : undefined });
+        if (u.endsWith('/api/books')) {
+          return new Response(JSON.stringify({ id: 'b1', title: '试炼', chapters: [], runs: [] }), { status: 201 });
+        }
+        if (u.endsWith('/import-original')) {
+          return new Response(JSON.stringify({ lastChapterNo: 3, importedChapterNos: [1, 2, 3] }), { status: 200 });
+        }
+        if (u.endsWith('/api/runs')) return new Response(JSON.stringify({ runId: 'r1' }), { status: 200 });
+        return new Response('{}', { status: 200 });
+      }),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/new']}>
+          <Routes>
+            <Route path="*" element={<NewBookPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '试炼' } });
+    fireEvent.click(screen.getByRole('button', { name: '建书并进入导入' }));
+    await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+    fireEvent.change(screen.getByPlaceholderText(/粘贴全文/), { target: { value: SAMPLE } });
+    fireEvent.click(screen.getByRole('button', { name: '拆章预览' }));
+    fireEvent.click(await screen.findByRole('button', { name: /导入 3 章/ }));
+    await waitFor(() => screen.getByRole('button', { name: /发起续写/ }));
+
+    const sel = (await screen.findByLabelText('质量轮数')) as HTMLSelectElement;
+    expect(sel.value).toBe('2');
+    fireEvent.change(sel, { target: { value: '1' } });
+    fireEvent.change(screen.getByPlaceholderText(/蓝图 JSON/), {
+      target: { value: JSON.stringify({ goal: '入城遇阻', beats: ['守卫盘查'] }) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /发起续写/ }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/runs'))).toBe(true));
+    const runCall = calls.find((c) => c.method === 'POST' && c.url.endsWith('/api/runs'));
+    expect(JSON.parse(String(runCall?.body))).toMatchObject({ mode: 'continue', maxRounds: 1 });
   });
 
   it('splitChapters：零章题命中 → 整篇单章', () => {

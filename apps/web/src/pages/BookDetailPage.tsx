@@ -57,6 +57,8 @@ export default function BookDetailPage() {
   });
   const [blueprintText, setBlueprintText] = useState('');
   const [chapterNo, setChapterNo] = useState(1);
+  // B3：本页一枚 select 统管本页三个生成入口（单章/整书/行内），默认 2 = 服务端默认
+  const [maxRounds, setMaxRounds] = useState(2);
   const [msg, setMsg] = useState('');
   const [worldText, setWorldText] = useState('');
   const [outlineText, setOutlineText] = useState('');
@@ -100,12 +102,12 @@ export default function BookDetailPage() {
   };
 
   const generate = async () => {
-    const r = await api.generateChapter(bookId, chapterNo);
+    const r = await api.generateChapter(bookId, chapterNo, maxRounds);
     setMsg(`已入队 run ${r.runId}`);
   };
 
   const generateAll = async () => {
-    const r = await api.generateAll(bookId);
+    const r = await api.generateAll(bookId, maxRounds);
     setMsg(`整书已入队 run ${r.runId}`);
   };
 
@@ -212,6 +214,19 @@ export default function BookDetailPage() {
         <Button variant="primary" onClick={generateAll}>
           整书生成
         </Button>
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          质量轮数
+          <select
+            aria-label="质量轮数"
+            className="h-ctl rounded-ctl border border-line bg-surface px-2 text-sm"
+            value={maxRounds}
+            onChange={(e) => setMaxRounds(Number(e.target.value))}
+          >
+            <option value={1}>1 轮</option>
+            <option value={2}>2 轮</option>
+            <option value={3}>3 轮</option>
+          </select>
+        </label>
         <Button variant="secondary" onClick={() => void refetch()}>
           刷新
         </Button>
@@ -388,7 +403,7 @@ export default function BookDetailPage() {
                 tone="primary"
                 size="sm"
                 className="ml-auto"
-                onClick={() => void api.generateChapter(bookId, c.chapterNo).then(() => setMsg(`第${c.chapterNo}章已入队`))}
+                onClick={() => void api.generateChapter(bookId, c.chapterNo, maxRounds).then(() => setMsg(`第${c.chapterNo}章已入队`))}
               >
                 生成
               </Button>

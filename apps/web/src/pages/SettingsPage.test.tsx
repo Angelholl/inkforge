@@ -20,8 +20,12 @@ function jsonResponse(data: unknown, status = 200) {
   };
 }
 
+/** 桩按「URL + method」双条件分路：质量分区走 /api/settings/quality，provider 表单仍按原形状回。 */
 function stubFetch() {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const quality = url.endsWith('/api/settings/quality');
+    if (quality && init?.method === 'PUT') return jsonResponse({ saved: true, restartRequired: false });
+    if (quality) return jsonResponse({ scoreThreshold: 8, isDefault: true });
     if (init?.method === 'PUT') return jsonResponse({ saved: true, restartRequired: true });
     return jsonResponse(settingsResponse);
   });
@@ -105,6 +109,11 @@ describe('SettingsPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/api/settings/quality')) {
+          return jsonResponse(
+            init?.method === 'PUT' ? { saved: true, restartRequired: false } : { scoreThreshold: 8, isDefault: true },
+          );
+        }
         if (init?.method === 'PUT') {
           await putPromise;
           return jsonResponse({ saved: true, restartRequired: true });
@@ -129,5 +138,27 @@ describe('SettingsPage', () => {
 
     resolvePut();
     await waitFor(() => expect(screen.getByText('已保存，重启应用后生效')).toBeTruthy());
+  });
+
+  it('质量分区：读回阈值 8，改 9 保存即 PUT /api/settings/quality 且提示不含「重启」', async () => {
+    const fetchMock = stubFetch();
+    renderPage();
+
+    const input = await waitFor(() => {
+      const el = screen.getByLabelText('入库分阈值 OVERALL（1-10，默认 8.0）') as HTMLInputElement;
+      expect(el.value).toBe('8');
+      return el;
+    });
+    fireEvent.change(input, { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存质量设置' }));
+
+    const okMsg = await waitFor(() => screen.getByText(/已保存：每个 run 的章节管线开始时读取新阈值/));
+    expect(okMsg.textContent).not.toContain('重启');
+    const putCall = fetchMock.mock.calls.find(
+      (call) => call[1]?.method === 'PUT' && String(call[0]).endsWith('/api/settings/quality'),
+    );
+    expect(putCall).toBeTruthy();
+    expect(JSON.parse(String(putCall?.[1]?.body))).toEqual({ scoreThreshold: 9 });
+    expect(screen.queryByText(/重启/)).toBeNull();
   });
 });

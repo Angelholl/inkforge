@@ -36,6 +36,8 @@ import type {
   CharacterDto,
   CreateCharacterBody,
   UpdateCharacterBody,
+  SettingsQualityDto,
+  VersionQcDto,
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
@@ -89,7 +91,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ maxRounds }),
     }),
-  generateAll: (bookId: string) => req<{ runId: string }>(`/api/books/${bookId}/generate-all`, { method: 'POST', body: '{}' }),
+  generateAll: (bookId: string, maxRounds?: number) =>
+    req<{ runId: string }>(`/api/books/${bookId}/generate-all`, { method: 'POST', body: JSON.stringify({ maxRounds }) }),
   polishBook: (bookId: string, chapterFrom: number, chapterTo: number) =>
     req<{ runId: string }>(`/api/books/${bookId}/polish`, {
       method: 'POST',
@@ -163,6 +166,13 @@ export const api = {
   adoptPartial: (runId: string, chapterNo: number) =>
     req<VersionDto>(`/api/runs/${runId}/chapters/${chapterNo}/partial/adopt`, { method: 'POST', body: '{}' }),
   getReport: (runId: string) => req<ReportDto>(`/api/runs/${runId}/report`),
+  getQuality: () => req<SettingsQualityDto>('/api/settings/quality'),
+  putQuality: (scoreThreshold: number) =>
+    req<{ saved: boolean; restartRequired: boolean }>('/api/settings/quality', {
+      method: 'PUT',
+      body: JSON.stringify({ scoreThreshold }),
+    }),
+  versionQc: (versionId: string) => req<VersionQcDto>(`/api/versions/${versionId}/qc`),
   listStyleProfiles: () => req<StyleProfileDto[]>('/api/style-profiles'),
   listStyleProfileVersions: (id: string) =>
     req<Array<{ id: string; name: string; version: number; createdAt: string; selfScore?: number }>>(`/api/style-profiles/${id}/versions`),

@@ -44,6 +44,8 @@ export default function NewBookPage() {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedChapter[]>([]);
   const [blueprintJson, setBlueprintJson] = useState('');
+  // B3：发起续写时透传给 run（服务端默认 2）
+  const [maxRounds, setMaxRounds] = useState(2);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -128,7 +130,7 @@ export default function NewBookPage() {
     setBusy(true);
     try {
       await api.putBlueprint(bookId, chapterNo, { title: `第${chapterNo}章`, blueprint, targetChars: 3000 });
-      const r = await api.createRun({ bookId, fromChapter: chapterNo, toChapter: chapterNo, mode: 'continue' });
+      const r = await api.createRun({ bookId, fromChapter: chapterNo, toChapter: chapterNo, mode: 'continue', maxRounds });
       navigate(`/runs/${r.runId}`);
     } catch (e) {
       setError(String(e));
@@ -231,6 +233,19 @@ export default function NewBookPage() {
             value={blueprintJson}
             onChange={(e) => setBlueprintJson(e.target.value)}
           />
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            质量轮数
+            <select
+              aria-label="质量轮数"
+              className="h-ctl rounded-ctl border border-line bg-surface px-2 text-sm"
+              value={maxRounds}
+              onChange={(e) => setMaxRounds(Number(e.target.value))}
+            >
+              <option value={1}>1 轮</option>
+              <option value={2}>2 轮</option>
+              <option value={3}>3 轮</option>
+            </select>
+          </label>
           <Button variant="primary" disabled={busy} onClick={startContinue}>
             发起续写（第 {wiz.step === 3 ? wiz.nextChapterNo : 0} 章）
           </Button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API_BASE } from '../api/client';
+import { api, API_BASE, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
 
 type SettingsResponse = {
@@ -19,6 +19,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [scoreThreshold, setScoreThreshold] = useState('8');
+  const [qualityMsg, setQualityMsg] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +38,21 @@ export default function SettingsPage() {
       })
       .catch(() => {
         if (!cancelled) setConnError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getQuality()
+      .then((q) => {
+        if (!cancelled) setScoreThreshold(String(q.scoreThreshold));
+      })
+      .catch(() => {
+        /* 服务未连：保持默认显示，保存时再报错 */
       });
     return () => {
       cancelled = true;
@@ -65,6 +82,21 @@ export default function SettingsPage() {
       setError('保存失败，请确认服务已连接后重试');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveQuality = async (): Promise<void> => {
+    setQualityMsg('');
+    const v = Number(scoreThreshold);
+    if (!Number.isFinite(v) || v < 1 || v > 10) {
+      setQualityMsg('阈值须为 1-10 之间的数字');
+      return;
+    }
+    try {
+      await api.putQuality(v);
+      setQualityMsg('已保存：每个 run 的章节管线开始时读取新阈值；进行中的 run 不受影响。');
+    } catch (e) {
+      setQualityMsg(apiErrorText(e));
     }
   };
 
@@ -126,6 +158,34 @@ export default function SettingsPage() {
           保存
         </Button>
       </form>
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold">质量</h2>
+        <div className="mt-3 space-y-3">
+          <div>
+            <label htmlFor="settings-score-threshold" className="block text-sm font-medium">
+              入库分阈值 OVERALL（1-10，默认 8.0）
+            </label>
+            <input
+              id="settings-score-threshold"
+              type="number"
+              min={1}
+              max={10}
+              step={0.5}
+              className="mt-1 w-full rounded border px-3 py-2"
+              value={scoreThreshold}
+              onChange={(e) => setScoreThreshold(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-muted">
+            保存即时生效：每个 run 的章节管线开始时读取；进行中的 run 不受影响。低于阈值触发重写（轮数未满时）；上一轮增益
+            &lt;5% 即停（同分即停）。
+          </p>
+          <Button type="button" variant="primary" onClick={() => void saveQuality()}>
+            保存质量设置
+          </Button>
+        </div>
+        {qualityMsg && <p className="mt-2 text-sm text-ok">{qualityMsg}</p>}
+      </section>
       {message && <p className="mt-4 text-sm text-ok">{message}</p>}
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 

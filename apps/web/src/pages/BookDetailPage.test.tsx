@@ -195,4 +195,35 @@ describe('BookDetailPage', () => {
     );
     await waitFor(() => expect(screen.queryByText('张三')).toBeNull());
   });
+
+  it('质量轮数 select：默认 2；改 1 后整书生成 body 带 maxRounds:1，改 3 后行内生成带 maxRounds:3', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const sel = (await screen.findByLabelText('质量轮数')) as HTMLSelectElement;
+    expect(sel.value).toBe('2');
+
+    fireEvent.change(sel, { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: '整书生成' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.endsWith('/api/books/b1/generate-all') && c.init?.method === 'POST')).toBe(true),
+    );
+    const allCall = calls.find((c) => c.url.endsWith('/api/books/b1/generate-all'));
+    expect(JSON.parse(String((allCall!.init as RequestInit).body))).toEqual({ maxRounds: 1 });
+
+    fireEvent.change(sel, { target: { value: '3' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '生成' })[0]);
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.endsWith('/api/books/b1/chapters/1/generate') && c.init?.method === 'POST')).toBe(true),
+    );
+    const oneCall = calls.find((c) => c.url.endsWith('/api/books/b1/chapters/1/generate'));
+    expect(JSON.parse(String((oneCall!.init as RequestInit).body))).toEqual({ maxRounds: 3 });
+  });
 });

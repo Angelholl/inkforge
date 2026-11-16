@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
+import { VersionQcPanel } from '../components/VersionQcPanel';
 import { SelectionRewrite } from './SelectionRewrite';
 import type { VersionListItemDto } from '@inkforge/shared';
 
@@ -76,6 +77,9 @@ export default function ChapterReaderPage() {
 
       <section className="mt-4">
         <h2 className="font-semibold">版本链（新 → 旧）</h2>
+        <p className="mt-1 text-xs text-muted">
+          {'图例：版本 chip 依次为 类型 · 字数 · 时间 · OVERALL 分；达标线默认 8.0 分（可在「设置 → 质量」调整）；同分即停——本轮较上一轮增益 <5% 视为无改善，停止重写并转人工。'}
+        </p>
         <ul className="mt-2 flex flex-wrap items-center gap-2">
           {list.map((v) => {
             const isCurrent = v.id === currentVersionId;
@@ -124,6 +128,7 @@ export default function ChapterReaderPage() {
       <article className="mt-2 whitespace-pre-wrap rounded border bg-white p-6 text-sm leading-7">
         {currentFull?.content ?? '（本章尚无版本）'}
       </article>
+      {current && <VersionQcPanel versionId={current.id} />}
     </main>
   );
 }

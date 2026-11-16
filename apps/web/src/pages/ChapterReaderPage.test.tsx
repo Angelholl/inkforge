@@ -47,7 +47,8 @@ function mockFetch(opts: { deleteResp?: (id: string) => StubResp } = {}) {
       }
       return resp;
     }
-    // 顺序敏感：/api/versions/:id 也含 '/versions'，必须先判单取
+    // 顺序敏感：/api/versions/:id/qc 同时含 '/qc'、'/api/versions/' 与 '/versions'，必须先判 /qc
+    if (url.endsWith('/qc')) return stubResp({ attempts: [] });
     if (url.includes('/api/versions/')) return stubResp(FULL(url.split('/').pop() as string));
     if (url.includes('/versions')) return stubResp({ currentVersionId: 'v-current', versions: items });
     return stubResp({ ok: true });
