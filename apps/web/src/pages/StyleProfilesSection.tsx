@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAnalysisDto, type StyleProfileDto } from '@inkforge/shared';
 import ImitationProfilesSection from './ImitationProfilesSection';
 import BookSamplePicker from './BookSamplePicker';
@@ -118,13 +119,13 @@ export default function StyleProfilesSection() {
             <li key={p.id} className="rounded border px-4 py-3">
               <div className="font-medium">{p.name}</div>
               <div className="mt-1 flex items-center gap-3 text-xs text-muted">
-                <span>
+                <span className="min-w-0">
                   v{p.version} · {new Date(p.createdAt).toLocaleString()} · 句长中位数 {p.metrics.medianSentenceLen ?? '—'}
                   {typeof p.metrics.selfScore === 'number' ? ` · 自评 ${p.metrics.selfScore}/5` : ''}
                 </span>
-                <button className="ml-auto text-primary-strong" onClick={() => void toggleVersions(p.id)}>
+                <Button variant="quiet" tone="primary" size="sm" className="ml-auto" onClick={() => void toggleVersions(p.id)}>
                   {openVersions === p.id ? '收起版本' : '版本'}
-                </button>
+                </Button>
               </div>
               {openVersions === p.id && (
                 <ul className="mt-2 ml-4 space-y-1 border-l pl-3 text-xs text-muted">
@@ -174,9 +175,9 @@ export default function StyleProfilesSection() {
               <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样温度（0-1，留空默认）"
                 min={0} max={1} step="0.1" placeholder="采样温度（0-1）" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
             </div>
-            <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void distill()}>
+            <Button variant="primary" size="md" disabled={busy} onClick={() => void distill()}>
               蒸馏
-            </button>
+            </Button>
           </div>
         ) : (
           draft && (
@@ -231,12 +232,12 @@ export default function StyleProfilesSection() {
                 />
               </div>
               <div className="flex gap-2">
-                <button className="rounded bg-primary px-4 py-1.5 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void create()}>
+                <Button variant="primary" size="sm" disabled={busy} onClick={() => void create()}>
                   确认入库
-                </button>
-                <button className="rounded bg-bg px-4 py-1.5 text-sm" disabled={busy} onClick={discard}>
+                </Button>
+                <Button variant="secondary" size="sm" disabled={busy} onClick={discard}>
                   放弃
-                </button>
+                </Button>
               </div>
             </div>
           )

@@ -96,4 +96,38 @@ describe('SettingsPage', () => {
     expect(screen.queryByText('风格档案')).toBeNull();
     expect(screen.queryByPlaceholderText('档案名称')).toBeNull();
   });
+
+  it('saving 期间保存钮 aria-busy="true"、disabled，可见文本仍为「保存」', async () => {
+    let resolvePut!: () => void;
+    const putPromise = new Promise<void>((resolve) => {
+      resolvePut = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          await putPromise;
+          return jsonResponse({ saved: true, restartRequired: true });
+        }
+        return jsonResponse(settingsResponse);
+      }),
+    );
+    renderPage();
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('本地端点地址') as HTMLInputElement).value).toBe('https://api.example.com/v1'),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    const btn = await waitFor(() => {
+      const b = screen.getByRole('button', { name: '保存' }) as HTMLButtonElement;
+      expect(b.getAttribute('aria-busy')).toBe('true');
+      return b;
+    });
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toBe('保存');
+
+    resolvePut();
+    await waitFor(() => expect(screen.getByText('已保存，重启应用后生效')).toBeTruthy());
+  });
 });

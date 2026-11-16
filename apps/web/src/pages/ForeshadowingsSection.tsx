@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 import type { ForeshadowingDto } from '@inkforge/shared';
 
 /** 伏笔分区（三小件 C2）：列表（埋设章/状态/回收章）+ 新增 + 标记回收（须带回收章）+ 删除。 */
@@ -12,6 +13,8 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
   const [resolveCh, setResolveCh] = useState<Record<string, number>>({});
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  // L2 两步确认：记录待确认删除的伏笔；取消/成功后收簇
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   const add = async (): Promise<void> => {
     if (!description.trim()) {
@@ -53,6 +56,7 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
     setBusy(true);
     try {
       await api.deleteForeshadowing(bookId, f.id);
+      setConfirmingDeleteId(null);
       setMsg(`伏笔「${f.description}」已删除`);
       void refetch();
     } catch (e) {
@@ -87,14 +91,26 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
                   value={resolveCh[f.id] ?? ''}
                   onChange={(e) => setResolveCh({ ...resolveCh, [f.id]: Number(e.target.value) })}
                 />
-                <button className="text-primary-strong" disabled={busy} onClick={() => void resolve(f)}>
+                <Button variant="quiet" tone="primary" size="sm" disabled={busy} onClick={() => void resolve(f)}>
                   标记回收
-                </button>
+                </Button>
               </>
             )}
-            <button className="ml-auto text-danger" disabled={busy} onClick={() => void remove(f)}>
-              删除
-            </button>
+            {confirmingDeleteId === f.id ? (
+              <>
+                <span className="text-danger text-xs">该伏笔记录将删除，不可恢复。</span>
+                <Button variant="danger" solid size="sm" disabled={busy} onClick={() => void remove(f)}>
+                  确认删除
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
+                  取消
+                </Button>
+              </>
+            ) : (
+              <Button variant="quiet" tone="danger" size="sm" className="ml-auto" disabled={busy} onClick={() => setConfirmingDeleteId(f.id)}>
+                删除
+              </Button>
+            )}
           </li>
         ))}
         {rows.length === 0 && <li className="text-sm text-muted">暂无伏笔登记。</li>}
@@ -118,9 +134,9 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
             onChange={(e) => setPlantedCh(Number(e.target.value))}
           />
         </label>
-        <button className="rounded bg-bg px-3 py-1" disabled={busy} onClick={() => void add()}>
+        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void add()}>
           登记伏笔
-        </button>
+        </Button>
       </div>
       {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
     </section>

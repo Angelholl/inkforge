@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { API_BASE } from '../api/client';
+import { Button } from '../components/ui';
 
 type SettingsResponse = {
   strataBaseUrl?: string;
@@ -121,9 +122,9 @@ export default function SettingsPage() {
           <input id="settings-mock" type="checkbox" checked={mock} onChange={(e) => setMock(e.target.checked)} />
           启用 mock 模式
         </label>
-        <button type="submit" disabled={saving} className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50">
-          {saving ? '保存中…' : '保存'}
-        </button>
+        <Button type="submit" variant="primary" loading={saving}>
+          保存
+        </Button>
       </form>
       {message && <p className="mt-4 text-sm text-ok">{message}</p>}
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}

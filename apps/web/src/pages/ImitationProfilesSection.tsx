@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 import type { ImitationDraftDto } from '@inkforge/shared';
 
 /** 拆解仿写档案分区（Pagekin 式）：analyze→预览→确认入库→列表→绑定书。draft 不入库，确认才落档案。 */
@@ -16,6 +17,8 @@ export default function ImitationProfilesSection() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [bindBook, setBindBook] = useState<Record<string, string>>({}); // profileId → bookId 选择
+  // L2 两步确认：记录待确认删除的仿写档案；取消/成功后收簇
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   const analyze = async () => {
     setMsg('');
@@ -52,6 +55,7 @@ export default function ImitationProfilesSection() {
     setBusy(true);
     try {
       await api.deleteImitationProfile(id);
+      setConfirmingDeleteId(null);
       setMsg(`仿写档案「${label}」已删除（相关书绑定已清空）`);
       void refetch();
     } catch (e) {
@@ -93,10 +97,22 @@ export default function ImitationProfilesSection() {
               <div className="flex items-center gap-3">
                 <span className="font-medium">{p.name}</span>
                 <span className="text-xs text-muted">v{p.version}</span>
-                <span className="text-xs text-faint">{p.sourcePath}</span>
-                <button className="ml-auto text-sm text-danger" disabled={busy} onClick={() => void remove(p.id, p.name)}>
-                  删除
-                </button>
+                <span className="min-w-0 break-all text-xs text-faint">{p.sourcePath}</span>
+                {confirmingDeleteId === p.id ? (
+                  <>
+                    <span className="text-danger text-xs">该拆解档案将删除，已绑定书将自动解绑，不可恢复。</span>
+                    <Button variant="danger" solid size="sm" disabled={busy} onClick={() => void remove(p.id, p.name)}>
+                      确认删除
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
+                      取消
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="quiet" tone="danger" size="sm" className="ml-auto" disabled={busy} onClick={() => setConfirmingDeleteId(p.id)}>
+                    删除
+                  </Button>
+                )}
               </div>
               <div className="mt-2 flex items-center gap-2 text-sm">
                 <select
@@ -112,9 +128,9 @@ export default function ImitationProfilesSection() {
                     </option>
                   ))}
                 </select>
-                <button className="rounded bg-bg px-3 py-1 text-sm" disabled={busy} onClick={() => void bind(p.id)}>
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void bind(p.id)}>
                   绑定
-                </button>
+                </Button>
               </div>
             </li>
           ))}
@@ -146,9 +162,9 @@ export default function ImitationProfilesSection() {
               onChange={(e) => setChapterCount(Number(e.target.value))}
             />
           </label>
-          <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={() => void analyze()}>
+          <Button variant="primary" size="md" disabled={busy} onClick={() => void analyze()}>
             拆解分析
-          </button>
+          </Button>
         </div>
 
         {draft && (
@@ -176,11 +192,12 @@ export default function ImitationProfilesSection() {
               {draft.blueprint.length > 5 && <div className="text-xs text-faint">…其余 {draft.blueprint.length - 5} 章略</div>}
             </div>
             <div className="mt-3 flex gap-2">
-              <button className="rounded bg-primary px-4 py-1.5 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void save()}>
+              <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
                 确认入库
-              </button>
-              <button
-                className="rounded bg-bg px-4 py-1.5 text-sm"
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={busy}
                 onClick={() => {
                   setDraft(null);
@@ -188,7 +205,7 @@ export default function ImitationProfilesSection() {
                 }}
               >
                 放弃
-              </button>
+              </Button>
             </div>
           </div>
         )}

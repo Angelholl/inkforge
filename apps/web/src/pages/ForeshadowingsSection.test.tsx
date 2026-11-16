@@ -78,8 +78,54 @@ describe('ForeshadowingsSection（C2）', () => {
       expect(JSON.parse(String(put!.init!.body))).toEqual({ status: 'resolved', resolvedCh: 7 });
     });
 
-    // 删除
+    // 删除（L2 两步确认：删除→确认删除→DELETE）
     fireEvent.click(screen.getAllByRole('button', { name: '删除' })[1]);
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
     await waitFor(() => expect(calls.some((c) => c.init?.method === 'DELETE')).toBe(true));
+  });
+
+  it('删除升 L2：点取消收簇且未发 DELETE', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/foreshadowings') && (!init?.method || init.method === 'GET')) return jsonResponse(rows);
+        if (u.includes('/foreshadowings/') && init?.method === 'DELETE') return jsonResponse({ ok: true });
+        return jsonResponse({});
+      }),
+    );
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('铜牌的来历')).toBeTruthy());
+    expect(screen.queryByText('该伏笔记录将删除，不可恢复。')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]);
+    expect(screen.getByText('该伏笔记录将删除，不可恢复。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(screen.queryByText('该伏笔记录将删除，不可恢复。')).toBeNull();
+    expect(calls.some((c) => c.init?.method === 'DELETE')).toBe(false);
+  });
+
+  it('删除升 L2：点确认删除发出 DELETE 且行消失', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/foreshadowings') && (!init?.method || init.method === 'GET')) return jsonResponse(rows);
+        if (u.includes('/foreshadowings/') && init?.method === 'DELETE') {
+          rows = rows.filter((r) => (r as typeof ROW).id !== 'f1');
+          return jsonResponse({ ok: true });
+        }
+        return jsonResponse({});
+      }),
+    );
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('铜牌的来历')).toBeTruthy());
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+    await waitFor(() => expect(calls.some((c) => c.init?.method === 'DELETE')).toBe(true));
+    await waitFor(() => expect(screen.queryByText('铜牌的来历')).toBeNull());
   });
 });
