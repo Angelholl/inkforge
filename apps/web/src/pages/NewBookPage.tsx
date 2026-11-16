@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/client';
 import type { ChapterBlueprint } from '@inkforge/shared';
+import { Button } from '../components/ui';
 
 // 章题行：第X章/节/回（汉字或数字），其后同行不带句号换行
 const CHAPTER_LINE_RE = /^第[0-9一二三四五六七八九十百零两]+[章节回][^。\n]*$/m;
@@ -146,9 +147,9 @@ export default function NewBookPage() {
         <div className="mt-6 space-y-3">
           <input className="w-full rounded border px-3 py-2" placeholder="书名" value={title} onChange={(e) => setTitle(e.target.value)} />
           <textarea className="w-full rounded border px-3 py-2" placeholder="简介（可选）" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-          <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={createBook}>
+          <Button variant="primary" disabled={busy} onClick={createBook}>
             建书并进入导入
-          </button>
+          </Button>
         </div>
       )}
 
@@ -173,12 +174,12 @@ export default function NewBookPage() {
             }}
           />
           <div className="flex gap-2">
-            <button className="rounded border px-4 py-2" onClick={preview}>
+            <Button variant="secondary" onClick={preview}>
               拆章预览
-            </button>
-            <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy || parsed.length === 0} onClick={importOriginal}>
+            </Button>
+            <Button variant="primary" disabled={busy || parsed.length === 0} onClick={importOriginal}>
               导入 {parsed.length} 章
-            </button>
+            </Button>
           </div>
           {parsed.length > 0 && (
             <ul className="space-y-2" aria-label="拆章预览">
@@ -191,9 +192,9 @@ export default function NewBookPage() {
                       onChange={(e) => setParsed(parsed.map((p, k) => (k === i ? { ...p, title: e.target.value } : p)))}
                     />
                     <span className="text-faint">{c.content.length} 字</span>
-                    <button className="text-danger" onClick={() => removeChapter(i)}>
+                    <Button variant="quiet" tone="danger" size="sm" onClick={() => removeChapter(i)}>
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -212,16 +213,16 @@ export default function NewBookPage() {
             <div className="mt-1 flex flex-wrap gap-2">
               {wiz.step === 3 &&
                 Array.from({ length: wiz.nextChapterNo - 1 }, (_, k) => k + 1).map((n) => (
-                  <button key={n} className="rounded border px-2 py-1 text-sm disabled:opacity-50" disabled={busy} onClick={() => summarize(n)}>
+                  <Button key={n} variant="secondary" size="sm" disabled={busy} onClick={() => summarize(n)}>
                     补摘要·第 {n} 章
-                  </button>
+                  </Button>
                 ))}
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="rounded border px-4 py-2 disabled:opacity-50" disabled={busy} onClick={suggestBlueprint}>
+            <Button variant="secondary" disabled={busy} onClick={suggestBlueprint}>
               AI 建议蓝图
-            </button>
+            </Button>
           </div>
           <textarea
             className="w-full rounded border px-3 py-2 font-mono text-sm"
@@ -230,9 +231,9 @@ export default function NewBookPage() {
             value={blueprintJson}
             onChange={(e) => setBlueprintJson(e.target.value)}
           />
-          <button className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50" disabled={busy} onClick={startContinue}>
+          <Button variant="primary" disabled={busy} onClick={startContinue}>
             发起续写（第 {wiz.step === 3 ? wiz.nextChapterNo : 0} 章）
-          </button>
+          </Button>
         </div>
       )}
     </main>

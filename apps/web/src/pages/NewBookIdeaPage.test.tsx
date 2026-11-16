@@ -92,7 +92,13 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
       screen.getByPlaceholderText(/全书剧情大纲/) as HTMLTextAreaElement,
       '第一卷：草原崛起；第二卷：夺回王城',
     );
-    fireEvent.click(screen.getByRole('button', { name: '添加人物' }));
+    const addBtn = screen.getByRole('button', { name: '添加人物' }) as HTMLButtonElement;
+    expect(addBtn.className).toContain('border-line');
+    expect(addBtn.className).toContain('h-8');
+    fireEvent.click(addBtn);
+    const removeBtn = screen.getByRole('button', { name: '移除' }) as HTMLButtonElement;
+    expect(removeBtn.className).toContain('text-danger');
+    expect(removeBtn.className).toContain('h-8');
     setInput(screen.getByLabelText('人物卡姓名1') as HTMLInputElement, '张三');
     setInput(screen.getByLabelText('人物卡设定1') as HTMLTextAreaElement, '主角，坚韧');
     fireEvent.click(screen.getByRole('button', { name: '建书并生成蓝图' }));
@@ -117,8 +123,17 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
     fireEvent.click(screen.getByRole('button', { name: '建书并生成蓝图' }));
     await waitFor(() => expect(screen.getByText(/少年踏上旅途/)).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: /保存蓝图并继续/ }));
+    const editBtn = screen.getAllByRole('button', { name: '编辑' })[0] as HTMLButtonElement;
+    expect(editBtn.className).toContain('text-primary-strong');
+    expect(editBtn.className).toContain('h-8');
+    const saveBtn = screen.getByRole('button', { name: /保存蓝图并继续/ }) as HTMLButtonElement;
+    expect(saveBtn.className).toContain('bg-primary');
+    expect(saveBtn.className).toContain('h-ctl');
+    fireEvent.click(saveBtn);
     await waitFor(() => expect(screen.getByRole('button', { name: /发起生成/ })).toBeTruthy());
+    const launchBtn = screen.getByRole('button', { name: /发起生成/ }) as HTMLButtonElement;
+    expect(launchBtn.className).toContain('bg-primary');
+    expect(launchBtn.className).toContain('h-ctl');
 
     const puts = calls.filter((c) => /\/blueprint$/.test(c.url));
     expect(puts).toHaveLength(2);

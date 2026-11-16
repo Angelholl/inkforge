@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/client';
 import type { OutlineItemDto } from '@inkforge/shared';
+import { Button } from '../components/ui';
 
 type Step = 'setup' | 'review' | 'launch';
 
@@ -141,13 +142,13 @@ export default function NewBookIdeaPage() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">人物卡</span>
-              <button
-                type="button"
-                className="rounded bg-bg px-2 py-1 text-sm"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => setCards((prev) => [...prev, { name: '', setting: '' }])}
               >
                 添加人物
-              </button>
+              </Button>
             </div>
             {cards.map((c, i) => (
               <div key={i} className="rounded border px-3 py-2">
@@ -161,13 +162,15 @@ export default function NewBookIdeaPage() {
                       setCards((prev) => prev.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))
                     }
                   />
-                  <button
-                    type="button"
-                    className="ml-auto text-sm text-danger"
+                  <Button
+                    variant="quiet"
+                    tone="danger"
+                    size="sm"
+                    className="ml-auto"
                     onClick={() => setCards((prev) => prev.filter((_, k) => k !== i))}
                   >
                     移除
-                  </button>
+                  </Button>
                 </div>
                 <textarea
                   className="mt-1 w-full rounded border px-2 py-1 text-sm"
@@ -196,13 +199,13 @@ export default function NewBookIdeaPage() {
               onChange={(e) => setChapterCount(Number(e.target.value) || 1)}
             />
           </div>
-          <button
-            className="rounded bg-primary px-4 py-2 text-white disabled:opacity-50"
+          <Button
+            variant="primary"
             disabled={busy}
             onClick={() => void start()}
           >
             建书并生成蓝图
-          </button>
+          </Button>
           {busy && <p className="text-sm text-muted">蓝图勾画中…约需数分钟</p>}
         </div>
       )}
@@ -220,13 +223,16 @@ export default function NewBookIdeaPage() {
                     onChange={() => toggle(it.chapterNo)}
                   />
                   <span className="font-medium">第{it.chapterNo}章</span>
-                  <span className="text-sm">{it.blueprint.goal}</span>
-                  <button
-                    className="ml-auto text-sm text-primary-strong"
+                  <span className="min-w-0 truncate text-sm">{it.blueprint.goal}</span>
+                  <Button
+                    variant="quiet"
+                    tone="primary"
+                    size="sm"
+                    className="ml-auto"
                     onClick={() => setEditing(editing === it.chapterNo ? null : it.chapterNo)}
                   >
                     {editing === it.chapterNo ? '收起' : '编辑'}
-                  </button>
+                  </Button>
                 </div>
                 <ul className="mt-1 list-disc pl-6 text-sm text-muted">
                   {it.blueprint.beats.map((b, i) => (
@@ -244,13 +250,14 @@ export default function NewBookIdeaPage() {
               </div>
             ))}
           </div>
-          <button
-            className="mt-4 rounded bg-primary px-4 py-2 text-white disabled:opacity-50"
+          <Button
+            variant="primary"
+            className="mt-4"
             disabled={busy || adopted.size === 0}
             onClick={() => void saveAndContinue()}
           >
             保存蓝图并继续（{adopted.size}/{items.length} 章）
-          </button>
+          </Button>
         </div>
       )}
 
@@ -259,13 +266,14 @@ export default function NewBookIdeaPage() {
           <p className="text-sm text-ink">
             将从第 1 章生成到第 {items.length > 0 ? items[items.length - 1].chapterNo : chapterCount} 章。生成前可到书详情页绑定风格档案（生成模式注入）。
           </p>
-          <button
-            className="mt-3 rounded bg-primary px-4 py-2 text-white disabled:opacity-50"
+          <Button
+            variant="primary"
+            className="mt-3"
             disabled={busy}
             onClick={() => void launch()}
           >
             发起生成（1..{items.length > 0 ? items[items.length - 1].chapterNo : chapterCount}）
-          </button>
+          </Button>
         </div>
       )}
     </main>

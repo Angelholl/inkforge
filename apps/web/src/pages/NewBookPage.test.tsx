@@ -41,15 +41,27 @@ describe('NewBookPage', () => {
 
     // step1 → 建书
     fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '试炼' } });
-    fireEvent.click(screen.getByRole('button', { name: '建书并进入导入' }));
+    const createBtn = screen.getByRole('button', { name: '建书并进入导入' }) as HTMLButtonElement;
+    expect(createBtn.className).toContain('bg-primary');
+    expect(createBtn.className).toContain('h-ctl');
+    fireEvent.click(createBtn);
     await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
 
     // step2 → 粘贴 + 拆章预览
     fireEvent.change(screen.getByPlaceholderText(/粘贴全文/), { target: { value: SAMPLE } });
-    fireEvent.click(screen.getByRole('button', { name: '拆章预览' }));
+    const previewBtn = screen.getByRole('button', { name: '拆章预览' }) as HTMLButtonElement;
+    expect(previewBtn.className).toContain('border-line');
+    expect(previewBtn.className).toContain('h-ctl');
+    const importBtn = screen.getByRole('button', { name: /导入 0 章/ }) as HTMLButtonElement;
+    expect(importBtn.className).toContain('bg-primary');
+    expect(importBtn.className).toContain('disabled:opacity-45');
+    fireEvent.click(previewBtn);
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
 
     // 删除一条 → 2 条
+    const delBtn = screen.getAllByRole('button', { name: '删除' })[0] as HTMLButtonElement;
+    expect(delBtn.className).toContain('text-danger');
+    expect(delBtn.className).toContain('h-8');
     fireEvent.click(screen.getAllByRole('button', { name: '删除' })[1]);
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
   });
