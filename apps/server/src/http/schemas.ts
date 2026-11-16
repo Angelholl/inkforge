@@ -181,3 +181,6 @@ export const foreshadowingUpdateSchema = z
   .refine((d) => d.status !== 'resolved' || d.resolvedCh !== undefined, {
     message: 'resolved 状态必须带 resolvedCh',
   });
+
+/** 逐书文风示例开关（B4 裁决④）。 */
+export const styleFewshotPutSchema = z.object({ on: z.boolean() });

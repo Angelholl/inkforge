@@ -10,6 +10,8 @@ export interface Book {
   /** persona 快照（bindStyle 时复制档案 rules/samples，后续改档案不影响已绑定书） */
   styleSnapshotJson: string | null;
   imitationProfileId: string | null;
+  /** 文风示例注入开关（B4 裁决④）：仅控注入，抄用检测不受影响 */
+  styleFewshotOn: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,12 +29,13 @@ interface BookRow {
   style_profile_id: string | null;
   style_snapshot_json: string | null;
   imitation_profile_id: string | null;
+  style_fewshot_on: number;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
@@ -48,6 +51,7 @@ export function createBook(
     styleProfileId: null,
     styleSnapshotJson: null,
     imitationProfileId: null,
+    styleFewshotOn: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -101,7 +105,8 @@ export function setBookStyleProfile(
   snapshot?: { profileId: string; version: number; rulesJson: string; samplesJson: string } | null,
 ): void {
   const snapshotJson = profileId && snapshot ? JSON.stringify({ ...snapshot, boundAt: new Date().toISOString() }) : null;
-  db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, updated_at = ? WHERE id = ?').run(
+  // B4 裁决④：绑定与解绑都把文风示例开关归零（新绑定默认关）
+  db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, style_fewshot_on = 0, updated_at = ? WHERE id = ?').run(
     profileId,
     snapshotJson,
     new Date().toISOString(),
@@ -227,4 +232,13 @@ export function deleteCharacter(db: Database, bookId: string, characterId: strin
   });
   tx();
   return true;
+}
+
+/** 逐书文风示例开关（B4 裁决④）：只控注入，抄用检测恒取绑定样本。 */
+export function setBookFewshot(db: Database, bookId: string, on: boolean): void {
+  db.prepare('UPDATE books SET style_fewshot_on = ?, updated_at = ? WHERE id = ?').run(
+    on ? 1 : 0,
+    new Date().toISOString(),
+    bookId,
+  );
 }

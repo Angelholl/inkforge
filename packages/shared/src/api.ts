@@ -13,6 +13,8 @@ export interface BookDto {
   styleProfileId?: string;
   styleSnapshotJson?: string | null;
   imitationProfileId?: string | null;
+  /** 文风示例注入开关（B4 裁决④）：仅控注入 */
+  styleFewshotOn: boolean;
   createdAt: string;
   updatedAt: string;
 }

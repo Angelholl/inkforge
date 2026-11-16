@@ -142,3 +142,89 @@ describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
     expect(short.statusCode).toBe(400);
   });
 });
+
+describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1116-01）', () => {
+  async function newProfile(name: string): Promise<string> {
+    const draft = await distill(name);
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/style-profiles',
+      payload: { name, text: SAMPLE_TEXT, analysis: draft.analysis, samples: draft.samples },
+    });
+    expect(r.statusCode).toBe(201);
+    return (r.json() as { profileId: string }).profileId;
+  }
+
+  async function newBook(title: string): Promise<{ id: string; title: string }> {
+    const r = await app.inject({ method: 'POST', url: '/api/books', payload: { title } });
+    expect(r.statusCode).toBe(201);
+    return r.json() as { id: string; title: string };
+  }
+
+  const profileRow = (id: string): number => (db.prepare('SELECT COUNT(*) AS n FROM style_profiles WHERE id = ?').get(id) as { n: number }).n;
+
+  it('DELETE 未绑定档案 → 200 且行消失', async () => {
+    const pid = await newProfile('删得掉的');
+    expect(profileRow(pid)).toBe(1);
+    const r = await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ ok: true });
+    expect(profileRow(pid)).toBe(0);
+  });
+
+  it('DELETE 被绑定档案 → 409 且回绑定书列表，档案行不删；解绑后才可删', async () => {
+    const pid = await newProfile('删不掉的');
+    const book = await newBook('绑定这本书');
+    const bind = await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: pid } });
+    expect(bind.statusCode).toBe(200);
+
+    const r = await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` });
+    expect(r.statusCode).toBe(409);
+    const body = r.json() as { error: string; books: Array<{ id: string; title: string }> };
+    expect(body.error).toContain('已被书绑定');
+    expect(body.books.some((b) => b.id === book.id && b.title === '绑定这本书')).toBe(true);
+    expect(profileRow(pid)).toBe(1); // 拒删：行仍在，绝不静默解绑
+
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
+    const r2 = await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` });
+    expect(r2.statusCode).toBe(200);
+    expect(profileRow(pid)).toBe(0);
+  });
+
+  it('DELETE 不存在的档案 → 404', async () => {
+    const r = await app.inject({ method: 'DELETE', url: '/api/style-profiles/no-such-profile' });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('PUT style-fewshot：默认关 → 开 → 绑定/解绑都归零；非法 body 400、未知书 404', async () => {
+    const pid = await newProfile('开关试验档');
+    const book = await newBook('开关试验书');
+    // GET /api/books/:bookId 走 {...book} 展开 → 新字段自动透出
+    const g0 = await app.inject({ method: 'GET', url: `/api/books/${book.id}` });
+    expect((g0.json() as { styleFewshotOn: boolean }).styleFewshotOn).toBe(false); // 迁移 DEFAULT 0
+    const on = await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style-fewshot`, payload: { on: true } });
+    expect(on.statusCode).toBe(200);
+    expect(on.json()).toEqual({ ok: true, styleFewshotOn: true });
+    const g1 = await app.inject({ method: 'GET', url: `/api/books/${book.id}` });
+    expect((g1.json() as { styleFewshotOn: boolean }).styleFewshotOn).toBe(true);
+
+    // 绑定归零
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: pid } });
+    const g2 = await app.inject({ method: 'GET', url: `/api/books/${book.id}` });
+    expect((g2.json() as { styleFewshotOn: boolean }).styleFewshotOn).toBe(false);
+
+    // 解绑同样归零
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style-fewshot`, payload: { on: true } });
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
+    const g3 = await app.inject({ method: 'GET', url: `/api/books/${book.id}` });
+    expect((g3.json() as { styleFewshotOn: boolean }).styleFewshotOn).toBe(false);
+
+    const bad = await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style-fewshot`, payload: { on: 'yes' } });
+    expect(bad.statusCode).toBe(400);
+    const miss = await app.inject({ method: 'PUT', url: '/api/books/no-such-book/style-fewshot', payload: { on: true } });
+    expect(miss.statusCode).toBe(404);
+
+    const cleanup = await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` });
+    expect(cleanup.statusCode).toBe(200); // 解绑后档案可删，不给后面的用例留脏引用
+  });
+});

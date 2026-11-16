@@ -184,7 +184,7 @@ void appendChapterVersion;
 void setCurrentVersion;
 
 describe('B1 风格注入接线（T7B）', () => {
-  function boundProfileBook(tag: string): string {
+  function boundProfileBook(tag: string, sampleText = '范例片段：他推开门，雨停了。'): string {
     const id = createBook(db, { title: `注入接线测试书 ${tag}`, description: '这是一个修真世界的注入测试设定。' }).id;
     db.prepare(
       "INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
@@ -208,7 +208,7 @@ describe('B1 风格注入接线（T7B）', () => {
       `injhash-${tag}`,
       1,
       JSON.stringify({ rulesText: '短句为主，克制抒情。', dims, axes }),
-      JSON.stringify([{ id: 's1', text: '范例片段：他推开门，雨停了。' }]),
+      JSON.stringify([{ id: 's1', text: sampleText }]),
       JSON.stringify({}),
       new Date().toISOString(),
     );
@@ -241,6 +241,8 @@ describe('B1 风格注入接线（T7B）', () => {
 
   it('绑定档案：draft system 含七维画像与六轴低带映射句；fewShot 不再产出空【文风规则】头', async () => {
     const bid = boundProfileBook('a');
+    // B4 裁决④把开关默认改成「关」，本例验的是注入功能的正向路径 → 显式开启该开关
+    db.prepare('UPDATE books SET style_fewshot_on = 1 WHERE id = ?').run(bid);
     const runId = runFor(bid);
     const cap = capturing(createDefaultMockProvider());
     const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
@@ -279,6 +281,39 @@ COMMENT: 节奏拖沓，需压缩。`;
     expect(rw.system).toContain('短句为主，克制抒情。');
     expect(rw.system).not.toContain('【文风画像】');
   }, 30000);
+
+  it('文风示例开关默认关：draft user 不含【范例片段】，但抄用检测仍以绑定样本为参考（plagiarism_ngram 仍判抄）', async () => {
+    // 样本文本必须 ≥15 连续字（hasLongCopy 的窗口长度），否则「恒开的抄用检测」无从证明
+    const bid = boundProfileBook('fewoff', '范例长样本：少年推开木门，庭院的积水映着冷月，他没有回头。');
+    // 不动 style_fewshot_on：迁移 DEFAULT 0 = 默认关（B4 裁决④）
+    // `on` 是 SQL 保留字，别名不得用它
+    expect((db.prepare('SELECT style_fewshot_on AS fs FROM books WHERE id = ?').get(bid) as { fs: number }).fs).toBe(0);
+    const runId = runFor(bid);
+    const inner = createMockProvider({
+      draft: { textFn: () => `少年推开木门，庭院的积水映着冷月，他没有回头。${'线'.repeat(480)}` },
+      qc: { sequence: [{ text: 'OVERALL: 9' }, { repeat: { text: 'OVERALL: 9' } }] },
+      rewrite: { textFn: (m) => `第${m.chapterNo}章改。${'改'.repeat(480)}` },
+      summarize: { text: 'SUMMARY: 第1章推进完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
+    });
+    const cap = capturing(inner);
+    const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    // 抄用命中是 L0 硬失败 → 第一轮 qc 即转人工（不是重写），与 gate 语义一致
+    expect(outcome.status).toBe('needs_human');
+
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.user).not.toContain('【范例片段】'); // 注入被开关拦下
+    // 但样本仍作 referenceTexts 喂给 L0：mock 正文逐字抄了样本 → 判抄
+    const qc1 = listSteps(db, runId).find((s) => s.step === 'qc' && s.attempt === 1)!;
+    const l0 = (qc1.outputJson as { l0: { checks: Array<{ name: string; pass: boolean; details?: string }> } }).l0;
+    const plag = l0.checks.find((c) => c.name === 'plagiarism_ngram')!;
+    expect(plag.pass).toBe(false);
+    expect(plag.details).toContain('与参考文本重合');
+    // 样本 id 记录也不受开关影响（裁决④：只有注入这一件事受控）
+    const rows = db
+      .prepare('SELECT style_sample_ids_json FROM chapter_versions WHERE chapter_id = ?')
+      .all('inj-ch-fewoff') as Array<{ style_sample_ids_json: string }>;
+    expect(rows.some((r) => JSON.parse(r.style_sample_ids_json).includes('s1'))).toBe(true);
+  }, 60000);
 });
 
 describe('B3 入库分阈值 app_meta 覆盖（章级生效）', () => {

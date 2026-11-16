@@ -211,7 +211,11 @@ export async function runChapterPipeline(
     }
     // B1：七维六轴画像文本与 fewShot 块提前装配（draft 与 full 重写共用同一块；targeted 只补 styleRules 精简槽）
     const styleDimsText = styleDims && styleAxes ? renderStyleDimsBlock(styleDims, styleAxes, config.budgets.draft.styleDims) : '';
-    const fewShotBlock = styleSamples.length > 0 ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot, styleTerms) : undefined;
+    // B4 裁决④：fewShot 块受逐书开关控制（默认关）；styleSamples 采集、styleSampleIds 记录、抄用检测（:289 referenceTexts）一概不看开关
+    const fewShotBlock =
+      book.styleFewshotOn && styleSamples.length > 0
+        ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot, styleTerms)
+        : undefined;
 
     // ── draft（复用或新建）──
     if (resumeFrom && resumeFrom !== 'draft' && doneCount('draft') > 0) {
