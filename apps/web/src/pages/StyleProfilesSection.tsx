@@ -5,6 +5,7 @@ import { Button } from '../components/ui';
 import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAnalysisDto, type StyleProfileDto } from '@inkforge/shared';
 import ImitationProfilesSection from './ImitationProfilesSection';
 import BookSamplePicker from './BookSamplePicker';
+import { decodeTextFile } from './NewBookPage';
 
 type Phase = 'form' | 'preview';
 
@@ -17,6 +18,8 @@ export default function StyleProfilesSection() {
   const { data: profiles, refetch } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
   const [name, setName] = useState('');
   const [text, setText] = useState('');
+  // 文件选择回显（owner 复测反馈：蒸馏面板 file input 漏改，对齐 NewBookPage 虚线底框+编码探测）
+  const [fileInfo, setFileInfo] = useState('');
   // 采样参数预填服务端默认（段数 20 = sample.ts；温度 0.3 = analysis.ts），不再裸露空框
   const [maxSegments, setMaxSegments] = useState('20');
   const [temperature, setTemperature] = useState('0.3');
@@ -302,18 +305,34 @@ export default function StyleProfilesSection() {
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
-            <input
-              type="file"
-              accept=".txt,.md"
-              aria-label="导入样本文件"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                const reader = new FileReader();
-                reader.onload = () => setText(String(reader.result ?? ''));
-                reader.readAsText(f);
-              }}
-            />
+            {/* 文件选择区（owner 复测反馈：原生 file input 裸奔漏改）——对齐 NewBookPage：虚线底框+文件名/编码回显 */}
+            <div>
+              <input
+                type="file"
+                id="import-sample-file"
+                accept=".txt,.md"
+                aria-label="导入样本文件"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const { text: decoded, encoding } = decodeTextFile(reader.result as ArrayBuffer);
+                    setText(decoded);
+                    setFileInfo(`${f.name} · 已按 ${encoding} 解码（${decoded.length} 字）`);
+                  };
+                  reader.readAsArrayBuffer(f);
+                }}
+              />
+              <label
+                htmlFor="import-sample-file"
+                className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed px-3 py-6 text-sm text-muted hover:border-primary hover:bg-primary-soft/40"
+              >
+                <span>点击选择本地 txt / md 文件（自动识别 UTF-8 / GBK 编码）</span>
+                {fileInfo && <span className="text-xs font-medium text-primary-strong">{fileInfo}</span>}
+              </label>
+            </div>
             <BookSamplePicker onImport={setText} />
             <p className="text-xs text-muted">采样参数（一般保持默认即可）：段数=从原文均匀抽取多少段送 AI 分析，越多越全面也越慢；温度=分析随机度，越低越稳定。</p>
             <div className="flex gap-2">

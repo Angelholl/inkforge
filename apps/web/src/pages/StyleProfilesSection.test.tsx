@@ -283,6 +283,27 @@ describe('StyleProfilesSection 三态确认门', () => {
     );
   });
 
+  it('文件选择虚线底框+编码探测回显：GBK 字节正确解码且不再原生裸 input（回归 owner 复测反馈：蒸馏面板漏改）', async () => {
+    distilled = false;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init)));
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    // 虚线底框控件在场（对齐 NewBookPage 的文件选择区，不再是原生裸框）
+    expect(screen.getByText(/点击选择本地 txt/)).toBeTruthy();
+
+    // 「第一章 你好」的 GBK 字节（同 NewBookPage 反馈③回归用例：B5DA一 D2BB 章 D5C2 空 20 你 C4E3 好 BAC3）
+    const gbk = new Uint8Array([0xb5, 0xda, 0xd2, 0xbb, 0xd5, 0xc2, 0x20, 0xc4, 0xe3, 0xba, 0xc3]);
+    fireEvent.change(screen.getByLabelText('导入样本文件'), {
+      target: { files: [new File([gbk], '旧稿.txt', { type: 'text/plain' })] },
+    });
+    // GBK 直读本会全篇 U+FFFD，经 decodeTextFile 应回 GB18030 正确解码灌入样本框
+    await waitFor(() =>
+      expect((screen.getByPlaceholderText(/粘贴风格样本/) as HTMLTextAreaElement).value).toBe('第一章 你好'),
+    );
+    expect(screen.getByText(/旧稿\.txt · 已按 GB18030 解码/)).toBeTruthy();
+  });
+
   it('选书带章：current 版本判定、空章跳过与分隔行拼接', async () => {
     distilled = false;
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));

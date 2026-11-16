@@ -337,3 +337,11 @@
 **主模型随案钉细节（owner 可驳回）：** 蒸馏表单前置校验（空名/样本 <200 字拦截）+采样参数预填服务端默认（20/0.3）+一行人话说明；parseBody 400 人话化（「请求参数不合法：path: message」分号连接，无测试锚定文案，仅断言 400 状态码的既有用例不受影响）；新导向导文案「①建书→②导入原文→③到书详情页设定并发起续写」。
 
 **验证链：** typecheck 全绿；定向（server 六文件 36/36、web 四文件 35/35）；全量 server 269/269 + web 77/77 + shared 2/2（基线 348 只增不减）；lint 零输出；build 冒烟 385.77kB 通过；安全深扫秘密正则零命中+pnpm audit --prod 零漏洞。GUI 未验证（owner 真实测试）。中文码点序教训：JS sort 按 UTF-16 码元（'乙'<'甲'），同毫秒 created_at 顺序无契约——断言用 Set 比对。
+
+## DEC-2026-1117-02 [OWNER] 复测反馈：蒸馏面板文件选择漏改补齐（2026-11-17）
+
+**背景：** owner 复测 349423b 后反馈蒸馏面板「选择文件」仍是原生裸 input（截图 StyleProfilesSection 表单）。根因（systematic-debugging 四阶段）：DEC-2026-1117-01 反馈①「文件选择原生 input 零样式」的修复只落 NewBookPage（虚线底框+回显），全库仅两处 file input，蒸馏面板 StyleProfilesSection 漏改；且该面板仍走 readAsText 无编码探测——同根因③（TXT 乱码）在此面板的第二处漏改。
+
+**处置（沿用 1117-01 已拍板样式，无新拍板）：** 蒸馏面板文件选择对齐 NewBookPage——hidden input+虚线底框 label（虚线框、hover 描边、文件名「xx.txt · 已按 GB18030 解码（N 字）」回显）+decodeTextFile 编码探测（GBK 样本不再乱码）。回归测试先红后绿：GBK 字节→虚线框在场+正确解码回显（镜像 NewBookPage 反馈③用例）。
+
+**验证链：** typecheck 全绿；定向 StyleProfilesSection 16/16 + NewBookPage 5/5；全量 server 269/269 + web 78/78 + shared 2/2（基线 349 只增不减）；lint 零输出；build 冒烟 386.41kB 通过；秘密正则零命中+pnpm audit --prod 零漏洞。GUI 未验证（owner 真实测试）。教训：反馈修复按 grep 全库点位清单逐处销号，不许只修报告里截图那一处（本次 ①③ 各漏一处）。
