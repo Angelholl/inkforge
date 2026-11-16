@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 import { SelectionRewrite } from './SelectionRewrite';
 import type { VersionDto } from '@inkforge/shared';
 
@@ -39,12 +40,12 @@ export default function ChapterReaderPage() {
       </Link>
       <h1 className="mt-2 text-2xl font-bold">第{no}章 正文</h1>
       <div className="mt-4 flex gap-2">
-        <button className="rounded bg-bg px-4 py-2" onClick={rollback}>
+        <Button onClick={rollback}>
           回滚到当前所选
-        </button>
-        <button className="rounded bg-primary px-4 py-2 text-white" onClick={exportBook}>
+        </Button>
+        <Button variant="primary" onClick={exportBook}>
           导出 markdown
-        </button>
+        </Button>
       </div>
       {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
 
@@ -53,17 +54,12 @@ export default function ChapterReaderPage() {
         <ul className="mt-2 flex flex-wrap gap-2">
           {list.map((v) => (
             <li key={v.id}>
-              <button
-                className={`rounded px-3 py-1.5 text-xs ${
-                  current?.id === v.id ? 'bg-primary text-white' : 'bg-bg'
-                }`}
-                onClick={() => setSelected(v.id)}
-              >
+              <Button variant="quiet" size="sm" active={current?.id === v.id} onClick={() => setSelected(v.id)}>
                 {v.kind} · {v.wordCount}字 · {v.createdAt.slice(11, 19)}
                 {v.params && (v.params as { overall?: number }).overall != null && (
                   <> · {((v.params as { overall?: number }).overall as number).toFixed(1)}分</>
                 )}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

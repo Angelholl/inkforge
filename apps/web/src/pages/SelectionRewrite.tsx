@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 
 interface Props {
   versionId: string;
@@ -49,14 +50,15 @@ export function SelectionRewrite({ versionId, onCreated }: Props) {
       />
       <div className="mt-2 flex flex-wrap gap-2">
         {SELECTION_PRESETS.map((p) => (
-          <button
+          <Button
             key={p.label}
-            className="rounded bg-bg px-3 py-1 text-sm"
+            variant="quiet"
+            size="sm"
             aria-label={`预设-${p.label}`}
             onClick={() => setInstruction(p.instruction)}
           >
             {p.label}
-          </button>
+          </Button>
         ))}
       </div>
       <input
@@ -66,9 +68,9 @@ export function SelectionRewrite({ versionId, onCreated }: Props) {
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
       />
-      <button className="mt-2 rounded bg-primary px-4 py-1.5 text-white disabled:opacity-50" onClick={submit} disabled={busy}>
-        {busy ? '重写中…' : '提交选段重写'}
-      </button>
+      <Button variant="primary" size="sm" className="mt-2" onClick={submit} loading={busy}>
+        提交选段重写
+      </Button>
       {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
     </section>
   );

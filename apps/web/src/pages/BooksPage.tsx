@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { api } from '../api/client';
-import { Badge, Card, Chip } from '../components/ui';
+import { Badge, Button, Card, Chip } from '../components/ui';
 import type { BookDto } from '@inkforge/shared';
 
 /** 书架（D1）：卡片网格 + 流程 chip 条（设定/大纲就绪态）；删除两步确认沿用。 */
@@ -45,24 +45,21 @@ export default function BooksPage() {
             {confirmId === b.id ? (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-danger">章节/人物/运行记录一并清除，不可恢复</span>
-                <button className="rounded-ctl bg-danger px-2 py-1 text-white" onClick={() => void remove(b.id)}>
+                <Button variant="danger" size="sm" solid onClick={() => void remove(b.id)}>
                   确认删除
-                </button>
-                <button className="rounded-ctl border border-line px-2 py-1" onClick={() => setConfirmId(null)}>
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setConfirmId(null)}>
                   取消
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="mt-auto flex items-center gap-2">
                 <Link to={`/books/${b.id}`} className="text-xs text-primary-strong hover:underline">
                   打开
                 </Link>
-                <button
-                  className="ml-auto rounded-ctl border border-danger px-2 py-1 text-xs text-danger hover:bg-danger-soft"
-                  onClick={() => setConfirmId(b.id)}
-                >
+                <Button variant="quiet" tone="danger" size="sm" className="ml-auto" onClick={() => setConfirmId(b.id)}>
                   删除
-                </button>
+                </Button>
               </div>
             )}
           </Card>

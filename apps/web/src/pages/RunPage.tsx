@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useRunEvents } from '../hooks/useRunEvents';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 import type { RunDto } from '@inkforge/shared';
 
 function statusBadge(status: string): string {
@@ -67,15 +68,15 @@ export default function RunPage() {
         </Link>
       </p>
       <div className="mt-4 flex gap-2">
-        <button className="rounded bg-warn px-4 py-2 text-white" onClick={() => api.pauseRun(run.id).then(() => setMsg('已请求暂停'))}>
+        <Button onClick={() => api.pauseRun(run.id).then(() => setMsg('已请求暂停'))}>
           暂停
-        </button>
-        <button className="rounded bg-bg px-4 py-2" onClick={() => api.resumeRun(run.id).then(() => setMsg('已请求继续'))}>
+        </Button>
+        <Button onClick={() => api.resumeRun(run.id).then(() => setMsg('已请求继续'))}>
           继续
-        </button>
-        <button className="rounded bg-danger px-4 py-2 text-white" onClick={() => api.cancelRun(run.id).then(() => setMsg('已请求取消'))}>
+        </Button>
+        <Button variant="danger" onClick={() => api.cancelRun(run.id).then(() => setMsg('已请求取消'))}>
           取消
-        </button>
+        </Button>
       </div>
       {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
       <table className="mt-6 w-full text-left text-sm">

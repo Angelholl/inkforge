@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 
 const MAX_CHAPTERS = 20;
 
@@ -53,9 +54,9 @@ export default function BookSamplePicker({ onImport }: { onImport: (text: string
 
   if (!open) {
     return (
-      <button className="rounded border px-4 py-2 text-sm" onClick={() => setOpen(true)}>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
         从书架选书
-      </button>
+      </Button>
     );
   }
 
@@ -90,9 +91,9 @@ export default function BookSamplePicker({ onImport }: { onImport: (text: string
         ))}
       </ul>
       {atLimit && <p className="text-sm text-muted">最多可选 20 章（对齐采样基准）</p>}
-      <button className="rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50" disabled={checked.size === 0} onClick={() => void importChapters()}>
+      <Button variant="primary" disabled={checked.size === 0} onClick={() => void importChapters()}>
         导入所选 {checked.size} 章
-      </button>
+      </Button>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );
