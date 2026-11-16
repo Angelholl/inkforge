@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { Button } from '../components/ui';
 import type { OutlineCardDto, OutlineStageDto, OutlineTreeDto, OutlineVolumeDto } from '@inkforge/shared';
 
 const emptyCard = (seq: number): OutlineCardDto => ({ title: '新卡', body: '', seq, chapterFrom: null, chapterTo: null });
@@ -107,18 +108,18 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
             onChange={(e) => setChapterCount(Number(e.target.value))}
           />
         </label>
-        <button className="rounded bg-primary px-3 py-1 text-white" disabled={busy} onClick={() => void suggest()}>
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => void suggest()}>
           AI 生成大纲树
-        </button>
-        <button className="rounded bg-bg px-3 py-1" disabled={busy} onClick={addVolume}>
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busy} onClick={addVolume}>
           手动加卷
-        </button>
-        <button className="rounded bg-bg px-3 py-1" disabled={busy || !saved} onClick={() => setDraft(cloneTree(saved!))}>
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busy || !saved} onClick={() => setDraft(cloneTree(saved!))}>
           编辑已存树
-        </button>
-        <button className="rounded bg-bg px-3 py-1" disabled={busy || !saved} onClick={() => void check()}>
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busy || !saved} onClick={() => void check()}>
           偏离复核
-        </button>
+        </Button>
       </div>
 
       {tree === null ? (
@@ -136,12 +137,12 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                 )}
                 {draft && (
                   <>
-                    <button className="text-primary-strong" onClick={() => addStage(vi)}>
+                    <Button variant="quiet" tone="primary" size="sm" onClick={() => addStage(vi)}>
                       加阶段
-                    </button>
-                    <button className="text-danger" onClick={() => removeVolume(vi)}>
+                    </Button>
+                    <Button variant="quiet" tone="danger" size="sm" onClick={() => removeVolume(vi)}>
                       删卷
-                    </button>
+                    </Button>
                   </>
                 )}
               </div>
@@ -166,12 +167,12 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                       )}
                       {draft && (
                         <>
-                          <button className="text-primary-strong" onClick={() => addCard(vi, si)}>
+                          <Button variant="quiet" tone="primary" size="sm" onClick={() => addCard(vi, si)}>
                             加卡
-                          </button>
-                          <button className="text-danger" onClick={() => removeStage(vi, si)}>
+                          </Button>
+                          <Button variant="quiet" tone="danger" size="sm" onClick={() => removeStage(vi, si)}>
                             删阶段
-                          </button>
+                          </Button>
                         </>
                       )}
                     </div>
@@ -214,9 +215,9 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
                                 />
                               </label>
                               <input aria-label="卡要点" className={`flex-1 ${inputCls}`} value={c.body} onChange={(e) => mutate((t) => (t.volumes[vi].stages[si].cards[ci].body = e.target.value))} />
-                              <button className="text-danger" onClick={() => removeCard(vi, si, ci)}>
+                              <Button variant="quiet" tone="danger" size="sm" onClick={() => removeCard(vi, si, ci)}>
                                 删卡
-                              </button>
+                              </Button>
                             </>
                           ) : (
                             <span>
@@ -238,11 +239,12 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
 
       {draft && (
         <div className="mt-2 flex gap-2">
-          <button className="rounded bg-primary px-4 py-1.5 text-sm text-white" disabled={busy} onClick={() => void save()}>
+          <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
             保存大纲树
-          </button>
-          <button
-            className="rounded bg-bg px-4 py-1.5 text-sm"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={busy}
             onClick={() => {
               setDraft(null);
@@ -250,7 +252,7 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
             }}
           >
             放弃草稿
-          </button>
+          </Button>
         </div>
       )}
 

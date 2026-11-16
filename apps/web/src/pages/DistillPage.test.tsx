@@ -48,6 +48,9 @@ describe('DistillPage', () => {
     await waitFor(() => expect((screen.getByLabelText('蒸馏模板') as HTMLTextAreaElement).value).toBe('DIM 测试模板'));
     expect(screen.getByPlaceholderText('档案名称')).toBeTruthy();
     expect(screen.getByText('风格档案')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '保存模板' }) as HTMLButtonElement).className).toContain('bg-primary');
+    expect((screen.getByRole('button', { name: '保存模板' }) as HTMLButtonElement).className).toContain('h-ctl');
+    expect((screen.getByRole('button', { name: '恢复默认' }) as HTMLButtonElement).className).toContain('border-line');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/imitation-profiles', expect.anything()));
   });
 

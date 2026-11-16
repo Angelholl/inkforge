@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { API_BASE } from '../api/client';
 import StyleProfilesSection from './StyleProfilesSection';
+import { Button } from '../components/ui';
 
 export default function DistillPage() {
   const [distillTemplate, setDistillTemplate] = useState('');
@@ -57,12 +58,12 @@ export default function DistillPage() {
           onChange={(e) => setDistillTemplate(e.target.value)}
         />
         <div className="mt-2 flex gap-2">
-          <button className="rounded bg-primary px-4 py-1.5 text-sm text-white" disabled={tplBusy} onClick={() => void saveTemplate(distillTemplate)}>
+          <Button variant="primary" size="md" disabled={tplBusy} onClick={() => void saveTemplate(distillTemplate)}>
             保存模板
-          </button>
-          <button className="rounded bg-bg px-4 py-1.5 text-sm" disabled={tplBusy} onClick={() => void saveTemplate('')}>
+          </Button>
+          <Button variant="secondary" size="md" disabled={tplBusy} onClick={() => void saveTemplate('')}>
             恢复默认
-          </button>
+          </Button>
         </div>
         {tplMsg && <p className="mt-2 text-sm text-ink">{tplMsg}</p>}
       </section>
