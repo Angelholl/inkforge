@@ -6,7 +6,7 @@ export function Card({ className = '', children }: { className?: string; childre
   return <div className={`rounded-card border border-line bg-surface p-4 ${className}`}>{children}</div>;
 }
 
-export type BadgeTone = 'ok' | 'warn' | 'danger' | 'info' | 'muted';
+export type BadgeTone = 'ok' | 'warn' | 'danger' | 'info' | 'muted' | 'inflight';
 
 const BADGE_TONES: Record<BadgeTone, string> = {
   ok: 'bg-ok-soft text-ok',
@@ -14,19 +14,21 @@ const BADGE_TONES: Record<BadgeTone, string> = {
   danger: 'bg-danger-soft text-danger',
   info: 'bg-primary-soft text-primary-strong',
   muted: 'bg-bg text-muted',
+  // 炉火橙（DEC-2026-1118-02）：仅「运行中/inflight/live」；accent 文字一律 accent-strong（<18px 禁 accent）
+  inflight: 'bg-accent-soft text-accent-strong',
 };
 
-/** 状态徽标（D2）：ok/warn/danger/info/muted 五语义。 */
+/** 状态徽标（D2）：ok/warn/danger/info/muted/inflight 六语义；4px 锐角与流程 pill 分工。 */
 export function Badge({ tone = 'muted', children }: { tone?: BadgeTone; children: ReactNode }) {
-  return <span className={`inline-block rounded-ctl px-2 py-0.5 text-xs ${BADGE_TONES[tone]}`}>{children}</span>;
+  return <span className={`inline-block rounded-[4px] px-2 py-0.5 text-xs ${BADGE_TONES[tone]}`}>{children}</span>;
 }
 
-/** 流程 chip 条（D2）：active=主色软底，否则灰底。 */
+/** 流程 chip 条（D2）：pill 形态与状态徽标 4px 锐角分工；active=墨晕软底，否则灰底描线。 */
 export function Chip({ active = false, children }: { active?: boolean; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center rounded-ctl px-2 py-0.5 text-xs ${
-        active ? 'bg-primary-soft text-primary-strong' : 'bg-bg text-faint'
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ${
+        active ? 'bg-primary-soft text-primary-strong' : 'bg-bg text-faint border border-line'
       }`}
     >
       {children}
@@ -67,13 +69,18 @@ export function Console({ lines, className = '' }: { lines: ConsoleLine[]; class
   );
 }
 
-/** run 状态 → Badge tone 映射（详情页 aside 控制卡/控制台共用）。 */
+/** run/step 状态 → Badge tone 映射（详情页 aside 控制卡/运行页共用）：inflight=炉火橙「机器在烧」，needs_human=warn。 */
 export function runStatusTone(status: string): BadgeTone {
   if (status === 'done') return 'ok';
   if (status === 'failed' || status === 'cancelled') return 'danger';
-  if (status === 'running' || status === 'queued') return 'info';
-  if (status === 'paused') return 'warn';
+  if (status === 'needs_human' || status === 'paused') return 'warn';
+  if (status === 'inflight' || status === 'running' || status === 'queued') return 'inflight';
   return 'muted';
+}
+
+/** 「机器在烧」判定（炉火呼吸点渲染条件）。 */
+export function isInflightStatus(status: string): boolean {
+  return status === 'inflight' || status === 'running' || status === 'queued';
 }
 
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet';
@@ -90,7 +97,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-45';
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-ctl font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-45 active:brightness-95';
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-white hover:bg-primary-strong',

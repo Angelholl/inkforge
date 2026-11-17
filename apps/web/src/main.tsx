@@ -2,6 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+// 思源宋 400（阅读正文）/600（标题品牌）两字重切片（DEC-2026-1118-02 D2；OFL 许可随包 public/fonts/）
+import '@fontsource/noto-serif-sc/400.css';
+import '@fontsource/noto-serif-sc/600.css';
 import App from './App';
 import BooksPage from './pages/BooksPage';
 import NewBookIdeaPage from './pages/NewBookIdeaPage';

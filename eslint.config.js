@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'data/**', '**/data/**', 'data-*/**', 'apps/desktop/src-tauri/**'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', 'data/**', '**/data/**', 'data-*/**', 'artifacts/**', 'apps/desktop/src-tauri/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

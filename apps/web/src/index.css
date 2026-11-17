@@ -1,45 +1,58 @@
 @import 'tailwindcss';
 
 /*
- * inkforge 设计 token（DEC-2026-1115-04 UI 三卡 D1，SubTrans 对标）
- * 约定：页面底色 bg、卡面 surface、边线 line、主色 primary 系、语义 ok/warn/danger、
- * 深色控制台 console-bg + 五分色（1 常规 2 次要 3 错误 4 警告 5 成功）；
- * 间距用 Tailwind 默认 4-32 档位；圆角 ctl 8px / card 16px；控件高 h-ctl 36px。
+ * inkforge 设计 token（DEC-2026-1118-02 UI 重塑「松烟」，取代 DEC-2026-1115-04 SubTrans 对标配色）
+ * 约定：页面底色 bg、卡面 surface、边线三级 line（装饰）/line-strong（hover/虚线）/line-control（控件边界 3.25:1）、
+ * 主色 primary 系=松烟墨（实底按钮/rail 左标/勾选）、accent 系=炉火橙（仅运行态：<18px 文字一律 accent-strong）、
+ * 语义 ok/warn/danger、深色炉膛 console-bg + 五分色（1 常规 2 次要 3 错误 4 警告 5 成功）；
+ * 圆角三档 ctl 6px / card 10px / pill 999px；控件高 h-ctl 36px；唯一阴影 shadow-overlay 供浮层。
+ * 显示族 font-display=思源宋（捆绑 400/600 两字重切片，见 main.tsx）；对比度阈值由 design/tokens.test.ts 钉死。
  * 固定浅色配色：桌面 WebView 跟随系统深色模式时未显式设色会黑底黑字（2026-11-12 目验缺陷）。
  */
 @theme {
-  --color-bg: #f3f4f6;
+  --color-bg: #f7f6f3;
   --color-surface: #ffffff;
-  --color-line: #e5e7eb;
-  --color-ink: #111827;
-  --color-muted: #6b7280;
-  --color-faint: #9ca3af;
+  --color-line: #e7e4de;
+  --color-line-strong: #d6d2c9;
+  --color-line-control: #948e83;
+  --color-ink: #1f1d19;
+  --color-muted: #6e6a63;
+  --color-faint: #a6a199;
 
-  --color-primary: #3b82f6;
-  --color-primary-strong: #2563eb;
-  --color-primary-soft: #dbeafe;
+  --color-primary: #26231f;
+  --color-primary-strong: #141210;
+  --color-primary-soft: #ece9e3;
 
-  --color-ok: #16a34a;
-  --color-ok-soft: #dcfce7;
-  --color-warn: #d97706;
-  --color-warn-soft: #fef3c7;
-  --color-danger: #dc2626;
-  --color-danger-soft: #fee2e2;
+  --color-accent: #de5a1f;
+  --color-accent-soft: #fbe9dd;
+  --color-accent-strong: #9c3a10;
 
-  --color-console-bg: #0f172a;
-  --color-console-1: #e2e8f0;
-  --color-console-2: #94a3b8;
-  --color-console-3: #f87171;
-  --color-console-4: #fbbf24;
-  --color-console-5: #4ade80;
+  --color-ok: #267a3e;
+  --color-ok-soft: #e2f1e4;
+  --color-warn: #8a6000;
+  --color-warn-soft: #f7edcf;
+  --color-danger: #b3261e;
+  --color-danger-soft: #f7e2de;
 
-  --radius-ctl: 8px;
-  --radius-card: 16px;
+  --color-console-bg: #191613;
+  --color-console-1: #eae6df;
+  --color-console-2: #918b81;
+  --color-console-3: #f28a6e;
+  --color-console-4: #e8b45c;
+  --color-console-5: #85cb90;
+
+  --radius-ctl: 6px;
+  --radius-card: 10px;
+  --radius-pill: 999px;
 
   --height-ctl: 36px;
 
+  --shadow-overlay: 0 1px 2px rgba(31, 29, 25, 0.06), 0 8px 24px rgba(31, 29, 25, 0.1);
+
   --font-sans:
-    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+    'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
+  --font-display: 'Noto Serif SC', Georgia, 'Source Han Serif SC', 'SimSun', serif;
+  --font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
 }
 
 :root {
@@ -50,4 +63,45 @@ body {
   background-color: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+/* 墨晕选区（松烟特有低噪细节） */
+::selection {
+  background: var(--color-primary-soft);
+}
+
+/* 键盘焦点全站基线（评议员 R1：链接/卡片此前无 focus-visible；控件级在 Field/Button 类上更细） */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* 锚点跳转平滑（阅读动线），减弱动效偏好下退化为即时跳转 */
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* 炉火呼吸点（标志性瞬间，全站唯一主动动画）：run inflight 时的「机器在烧」物理隐喻 */
+@keyframes ember-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.ember-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  animation: ember-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ember-dot {
+    animation: none;
+  }
 }
