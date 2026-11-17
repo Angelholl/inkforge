@@ -213,7 +213,7 @@ describe('风格绑定关联表（0010）', () => {
   it('setBookStyleBinding/getBookStyleBinding 往返：主辅行+dims 映射+fewshot 归零', () => {
     const bid = booksRepo.createBook(db, { title: '绑定之书' }).id;
     booksRepo.setBookFewshot(db, bid, true);
-    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB', 'pC'], dimsSource: { 对话: 'pB' } }, '{"v":2}');
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB', 'pC'], dimsSource: { 对话: 'pB' }, weights: {} }, '{"v":2}');
     const b = booksRepo.getBook(db, bid)!;
     expect(b.styleProfileId).toBe('pA');
     expect(b.styleSnapshotJson).toBe('{"v":2}');
@@ -222,13 +222,34 @@ describe('风格绑定关联表（0010）', () => {
       primaryProfileId: 'pA',
       auxProfileIds: ['pB', 'pC'],
       dimsSource: { 对话: 'pB' },
+      weights: {},
     });
+    booksRepo.deleteBook(db, bid);
+  });
+
+  it('setBookStyleBinding weights 往返：60/40 全行同值落库读回；weights={} 读回空对象（legacy 标记）', () => {
+    const bid = booksRepo.createBook(db, { title: '比例之书' }).id;
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: {}, weights: { pA: 60, pB: 40 } }, '{"v":2}');
+    expect(booksRepo.getBookStyleBinding(db, bid)).toEqual({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: {},
+      weights: { pA: 60, pB: 40 },
+    });
+    const rows = db.prepare('SELECT is_primary, weights_json FROM book_style_profiles WHERE book_id = ? ORDER BY is_primary DESC').all(bid) as Array<{
+      is_primary: number;
+      weights_json: string;
+    }>;
+    expect(rows.map((r) => r.weights_json)).toEqual(['{"pA":60,"pB":40}', '{"pA":60,"pB":40}']); // 全行同值（先例=dims_json）
+    // 重绑空 weights → 读回空对象（legacy 标记）
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: [], dimsSource: {}, weights: {} }, '{"v":2}');
+    expect(booksRepo.getBookStyleBinding(db, bid)?.weights).toEqual({});
     booksRepo.deleteBook(db, bid);
   });
 
   it('setBookStyleBinding(null) 解绑清三处；deleteBook 清关联表', () => {
     const bid = booksRepo.createBook(db, { title: '解绑之书' }).id;
-    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: {} }, '{"v":1}');
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: {}, weights: {} }, '{"v":1}');
     booksRepo.setBookStyleBinding(db, bid, null, null);
     expect(booksRepo.getBookStyleBinding(db, bid)).toBeNull();
     const b = booksRepo.getBook(db, bid)!;
@@ -237,7 +258,7 @@ describe('风格绑定关联表（0010）', () => {
     expect(b.styleFewshotOn).toBe(false);
     expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles WHERE book_id = ?').get(bid) as { n: number }).n).toBe(0);
     // 重绑后删书，关联表清理
-    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: [], dimsSource: {} }, null);
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: [], dimsSource: {}, weights: {} }, null);
     expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles WHERE book_id = ?').get(bid) as { n: number }).n).toBe(1);
     expect(booksRepo.deleteBook(db, bid)).toBe(true);
     expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles').get() as { n: number }).n).toBe(0);

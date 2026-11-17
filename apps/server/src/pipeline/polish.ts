@@ -37,7 +37,7 @@ export function polishBenchmarks(
   let terms: StyleTermDto[] = [];
   if (!book.styleProfileId) return { voiceRefMetrics, referenceTexts, terms };
   const binding = booksRepo.getBookStyleBinding(db, book.id)
-    ?? { primaryProfileId: book.styleProfileId, auxProfileIds: [], dimsSource: {} };
+    ?? { primaryProfileId: book.styleProfileId, auxProfileIds: [], dimsSource: {}, weights: {} };
   const bundle = binding ? loadStyleBundle(db, { styleProfileId: book.styleProfileId, styleSnapshotJson: book.styleSnapshotJson }) : undefined;
   const merged = bundle ? mergeStyleProfiles(bundle, chapterNo) : undefined;
   if (!merged) return { voiceRefMetrics, referenceTexts, terms };

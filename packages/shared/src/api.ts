@@ -270,12 +270,16 @@ export interface StyleBindBody {
   auxProfileIds?: string[];
   /** 七维→贡献档案 id；缺省维归主 */
   dimsSource?: Record<string, string>;
+  /** 融合比例：客户端最大余数归一后提交（Σ=100、整数≥1、键集=绑定全集）；缺省=legacy（贡献维数计权） */
+  weights?: Record<string, number>;
 }
 
 export interface StyleBindingDto {
   primaryProfileId: string;
   auxProfileIds: string[];
   dimsSource: Record<string, string>;
+  /** 空对象=legacy（旧绑定：按贡献维数计权） */
+  weights: Record<string, number>;
 }
 
 export interface RewriteSelectionBody {

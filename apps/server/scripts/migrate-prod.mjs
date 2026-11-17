@@ -29,8 +29,8 @@ try {
     const { migrate } = await import('../src/db/migrate.ts');
     migrate(copy);
     const uv = copy.pragma('user_version', { simple: true });
-    if (uv !== 10) {
-      console.error(`副本预演 user_version=${uv} !== 10`);
+    if (uv !== 11) {
+      console.error(`副本预演 user_version=${uv} !== 11`);
       process.exit(3);
     }
     const counts = (db) =>
@@ -70,7 +70,7 @@ try {
     .all()
     .map((r) => r.name);
   console.log(`uv=${uv} indexes=${idx.join(',')}`);
-  if (uv !== 10 || idx.length !== 2) process.exit(4);
+  if (uv !== 11 || idx.length !== 2) process.exit(4);
   console.log('MIGRATE-PROD-OK');
 } finally {
   prod.close();

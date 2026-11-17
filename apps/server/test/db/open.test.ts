@@ -35,13 +35,15 @@ afterEach(() => {
 });
 
 describe('openDb + migrate', () => {
-  it('迁移后 user_version=10、WAL 开启、16 个核心对象存在、0007/0009 列在场、幂等', () => {
+  it('迁移后 user_version=11、WAL 开启、16 个核心对象存在、0007/0009 列在场、幂等', () => {
     const { db } = tmpDb();
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(10);
+    expect(db.pragma('user_version', { simple: true })).toBe(11);
     // 0007（B4 裁决④）：逐书文风示例开关列；0009：人物下线列
     expect(db.prepare("SELECT name FROM pragma_table_info('books') WHERE name = 'style_fewshot_on'").all()).toHaveLength(1);
     expect(db.prepare("SELECT name FROM pragma_table_info('characters') WHERE name = 'offline_from_chapter'").all()).toHaveLength(1);
+    // 0011（DEC-2026-1117-05）：融合比例列
+    expect(db.prepare("SELECT name FROM pragma_table_info('book_style_profiles') WHERE name = 'weights_json'").all()).toHaveLength(1);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     const names = (
       db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>
@@ -67,14 +69,14 @@ describe('openDb + migrate', () => {
       expect(names).toContain(t);
     }
     expect(() => migrate(db)).not.toThrow();
-    expect(db.pragma('user_version', { simple: true })).toBe(10);
+    expect(db.pragma('user_version', { simple: true })).toBe(11);
     db.close();
   });
 
   it('迁移 0002：run_steps 唯一约束与 partial_outputs UPSERT 幂等', () => {
     const { db } = tmpDb();
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(10);
+    expect(db.pragma('user_version', { simple: true })).toBe(11);
     const now = new Date().toISOString();
     db.prepare(
       "INSERT INTO books(id, title, created_at, updated_at) VALUES('b1','书',?,?)",

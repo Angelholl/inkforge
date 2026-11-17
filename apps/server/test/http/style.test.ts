@@ -271,7 +271,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
       styleBinding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> };
     };
     expect(g.styleProfileId).toBe(p1);
-    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['对话']: p2, ['节奏']: p3 } });
+    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['对话']: p2, ['节奏']: p3 }, weights: {} });
     const row = db.prepare('SELECT style_fewshot_on FROM books WHERE id = ?').get(book.id) as { style_fewshot_on: number };
     expect(row.style_fewshot_on).toBe(0);
 
@@ -321,7 +321,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
       styleBinding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> };
       styleSnapshotJson: string;
     };
-    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [], dimsSource: {} }); // 七键缺省=全主，消费方归一
+    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [], dimsSource: {}, weights: {} }); // 七键缺省=全主，消费方归一
     const snap = JSON.parse(g.styleSnapshotJson) as { v: number };
     expect(snap.v).toBe(2);
 
@@ -339,6 +339,75 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     expect(body.error).toContain('已被书绑定');
     expect(body.books.some((x) => x.id === b2.id)).toBe(true);
 
+    await app.inject({ method: 'PUT', url: `/api/books/${b1.id}/style`, payload: { profileId: null } });
+    await app.inject({ method: 'PUT', url: `/api/books/${b2.id}/style`, payload: { profileId: null } });
+    for (const pid of [p1, p2]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
+
+  it('weights 校验矩阵：和≠100/键集多余/键集缺失/值 0/辅内部重复/解绑带 weights → 400 人话', async () => {
+    const p1 = await newProfile('比例矩阵主档');
+    const p2 = await newProfile('比例矩阵辅档');
+    const p3 = await newProfile('比例矩阵未勾档');
+    const book = await newBook('比例矩阵书');
+
+    const cases: Array<{ payload: Record<string, unknown>; msg: string | null }> = [
+      { payload: { primaryProfileId: p1, auxProfileIds: [p2], weights: { [p1]: 60, [p2]: 39 } }, msg: '比例之和必须为 100' },
+      { payload: { primaryProfileId: p1, auxProfileIds: [p2], weights: { [p1]: 50, [p2]: 40, [p3]: 10 } }, msg: '比例键集必须恰为基准档案与辅档案全集' },
+      { payload: { primaryProfileId: p1, auxProfileIds: [p2, p3], weights: { [p1]: 60, [p2]: 40 } }, msg: '比例键集必须恰为基准档案与辅档案全集' },
+      { payload: { primaryProfileId: p1, auxProfileIds: [p2], weights: { [p1]: 0, [p2]: 100 } }, msg: null }, // 值 0：zod int().min(1) 内建文案
+      { payload: { primaryProfileId: p1, auxProfileIds: [p2, p2] }, msg: '辅档案不可重复勾选' }, // D4 回归：此前落库撞 UNIQUE 出 500
+      { payload: { profileId: null, weights: { [p1]: 100 } }, msg: '解绑请求不得携带绑定字段' },
+    ];
+    for (const c of cases) {
+      const r = await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: c.payload });
+      expect(r.statusCode, `payload ${JSON.stringify(c.payload)} 应 400`).toBe(400);
+      const err = (r.json() as { error: string }).error;
+      expect(err).toContain('请求参数不合法');
+      if (c.msg) expect(err, `payload ${JSON.stringify(c.payload)} 应含文案「${c.msg}」`).toContain(c.msg);
+    }
+
+    for (const pid of [p1, p2, p3]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
+
+  it('weights 成功路径：回显带 weights+快照 mergeVersion=2 带 weights；legacy body 快照无 weights 键', async () => {
+    const p1 = await newProfile('比例成功主档');
+    const p2 = await newProfile('比例成功辅档');
+    const b1 = await newBook('比例成功书');
+    const bind = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${b1.id}/style`,
+      payload: { primaryProfileId: p1, auxProfileIds: [p2], weights: { [p1]: 60, [p2]: 40 } },
+    });
+    expect(bind.statusCode).toBe(200);
+
+    const g = (await app.inject({ method: 'GET', url: `/api/books/${b1.id}` })).json() as {
+      styleBinding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string>; weights: Record<string, number> };
+      styleSnapshotJson: string;
+    };
+    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [p2], dimsSource: {}, weights: { [p1]: 60, [p2]: 40 } });
+    const snap = JSON.parse(g.styleSnapshotJson) as { v: number; mergeVersion: number; weights: Record<string, number> };
+    expect(snap.v).toBe(2);
+    expect(snap.mergeVersion).toBe(2);
+    expect(snap.weights).toEqual({ [p1]: 60, [p2]: 40 });
+
+    // legacy body {profileId}：新快照 mergeVersion=2 但无 weights 键（空权重不写键），回显 weights={}
+    const b2 = await newBook('比例legacy书');
+    const bind2 = await app.inject({ method: 'PUT', url: `/api/books/${b2.id}/style`, payload: { profileId: p1 } });
+    expect(bind2.statusCode).toBe(200);
+    const g2 = (await app.inject({ method: 'GET', url: `/api/books/${b2.id}` })).json() as {
+      styleBinding: { weights: Record<string, number> };
+      styleSnapshotJson: string;
+    };
+    expect(g2.styleBinding.weights).toEqual({});
+    const snap2 = JSON.parse(g2.styleSnapshotJson) as { mergeVersion: number; weights?: Record<string, number> };
+    expect(snap2.mergeVersion).toBe(2);
+    expect('weights' in snap2).toBe(false);
+
+    // 清理：解绑两书 + 删档案，不留脏引用
     await app.inject({ method: 'PUT', url: `/api/books/${b1.id}/style`, payload: { profileId: null } });
     await app.inject({ method: 'PUT', url: `/api/books/${b2.id}/style`, payload: { profileId: null } });
     for (const pid of [p1, p2]) {

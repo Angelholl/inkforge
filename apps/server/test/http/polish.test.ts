@@ -176,7 +176,7 @@ describe('polishBenchmarks（混合档案基准）', () => {
     setBookStyleBinding(
       db,
       bid,
-      { primaryProfileId: 'pb-main', auxProfileIds: ['pb-aux'], dimsSource: { 写作特点: 'pb-aux', 特色词汇: 'pb-aux', 章节结构: 'pb-aux' } },
+      { primaryProfileId: 'pb-main', auxProfileIds: ['pb-aux'], dimsSource: { 写作特点: 'pb-aux', 特色词汇: 'pb-aux', 章节结构: 'pb-aux' }, weights: {} },
       JSON.stringify(bundle),
     );
     return bid;

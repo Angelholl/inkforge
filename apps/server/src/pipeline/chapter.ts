@@ -109,7 +109,7 @@ export async function runChapterPipeline(
   // DEC-2026-1117-04 裁决②③：素材统一走 loadStyleBundle + mergeStyleProfiles（continue 亦注入；
   // 快照优先/回落 live 行逻辑整体收编进 loadStyleBundle；binding 缺关联表时按主镜像合成）
   const binding = booksRepo.getBookStyleBinding(db, args.bookId)
-    ?? (book.styleProfileId ? { primaryProfileId: book.styleProfileId, auxProfileIds: [], dimsSource: {} } : null);
+    ?? (book.styleProfileId ? { primaryProfileId: book.styleProfileId, auxProfileIds: [], dimsSource: {}, weights: {} } : null);
   const bundle = binding ? loadStyleBundle(db, { styleProfileId: book.styleProfileId, styleSnapshotJson: book.styleSnapshotJson }) : undefined;
   const merged: MergedStyleProfile | undefined = bundle ? mergeStyleProfiles(bundle, args.chapterNo) : undefined;
   // generate+绑定档案：voice-match 基准取混合档案主 metrics 快照（空串/坏 JSON 回落主档案现行 metrics_json 再容错 → undefined，B6）

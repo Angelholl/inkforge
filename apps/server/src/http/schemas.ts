@@ -57,9 +57,11 @@ export const styleBindSchema = z
     primaryProfileId: z.string().min(1).optional(),
     auxProfileIds: z.array(z.string().min(1)).max(3, '风格档案最多绑定 4 个（1 主 + 3 辅）').optional(),
     dimsSource: z.record(z.string(), z.string().min(1)).optional(),
+    weights: z.record(z.string(), z.number().int().min(1)).optional(),
   })
   .superRefine((v, ctx) => {
-    const hasBindingFields = v.primaryProfileId !== undefined || v.auxProfileIds !== undefined || v.dimsSource !== undefined;
+    const hasBindingFields =
+      v.primaryProfileId !== undefined || v.auxProfileIds !== undefined || v.dimsSource !== undefined || v.weights !== undefined;
     // 规则 1：解绑请求不得携带绑定字段（规则 7：解绑无需主风格，放行）
     if (v.profileId === null) {
       if (hasBindingFields) {
@@ -84,6 +86,10 @@ export const styleBindSchema = z
     if (aux.includes(v.primaryProfileId)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '主风格不可重复勾选' });
     }
+    // 规则 4.5（DEC-2026-1117-05 D4）：辅档案内部重复——此前漏拦致落库撞 UNIQUE 出 500，现显式 400
+    if (new Set(aux).size !== aux.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '辅档案不可重复勾选' });
+    }
     // 规则 5：dimsSource 键 ∈ 七维；值 ∈ 主∪辅
     const allowed = new Set([v.primaryProfileId, ...aux]);
     for (const [dim, src] of Object.entries(v.dimsSource ?? {})) {
@@ -91,6 +97,16 @@ export const styleBindSchema = z
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `未知风格维度：${dim}` });
       } else if (!allowed.has(src)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `维度来源必须在已勾选档案中：${dim}` });
+      }
+    }
+    // 规则 8（DEC-2026-1117-05）：weights 键集恰等绑定全集且 Σ=100（客户端归一后提交，服务端只校验不重归一）
+    if (v.weights !== undefined) {
+      const expected = new Set([v.primaryProfileId, ...aux]);
+      const got = Object.keys(v.weights);
+      if (got.length !== expected.size || !got.every((id) => expected.has(id))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weights'], message: '比例键集必须恰为基准档案与辅档案全集' });
+      } else if (Object.values(v.weights).reduce((s, n) => s + n, 0) !== 100) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weights'], message: '比例之和必须为 100' });
       }
     }
   });

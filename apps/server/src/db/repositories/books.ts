@@ -121,6 +121,8 @@ export interface StyleBinding {
   auxProfileIds: string[];
   /** 七维→贡献档案 id；空对象=全归主（0010 存量行形态） */
   dimsSource: Record<string, string>;
+  /** 融合比例（0011）：Record<profileId, 整数≥1> Σ=100；空对象=legacy 按贡献维数计权（DEC-2026-1117-05） */
+  weights: Record<string, number>;
 }
 
 export function setBookStyleBinding(db: Database, bookId: string, binding: StyleBinding | null, snapshotJson: string | null): void {
@@ -135,19 +137,22 @@ export function setBookStyleBinding(db: Database, bookId: string, binding: Style
     db.prepare('DELETE FROM book_style_profiles WHERE book_id = ?').run(bookId);
     if (binding) {
       const dimsJson = JSON.stringify(binding.dimsSource);
-      db.prepare('INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, created_at) VALUES(?,?,?,?,?)').run(
+      const weightsJson = JSON.stringify(binding.weights ?? {});
+      db.prepare('INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, weights_json, created_at) VALUES(?,?,?,?,?,?)').run(
         bookId,
         binding.primaryProfileId,
         1,
         dimsJson,
+        weightsJson,
         ts,
       );
       for (const aux of binding.auxProfileIds) {
-        db.prepare('INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, created_at) VALUES(?,?,?,?,?)').run(
+        db.prepare('INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, weights_json, created_at) VALUES(?,?,?,?,?,?)').run(
           bookId,
           aux,
           0,
           dimsJson,
+          weightsJson,
           ts,
         );
       }
@@ -158,14 +163,15 @@ export function setBookStyleBinding(db: Database, bookId: string, binding: Style
 
 export function getBookStyleBinding(db: Database, bookId: string): StyleBinding | null {
   const rows = db
-    .prepare('SELECT profile_id, is_primary, dims_json FROM book_style_profiles WHERE book_id = ? ORDER BY is_primary DESC, rowid ASC')
-    .all(bookId) as Array<{ profile_id: string; is_primary: number; dims_json: string }>;
+    .prepare('SELECT profile_id, is_primary, dims_json, weights_json FROM book_style_profiles WHERE book_id = ? ORDER BY is_primary DESC, rowid ASC')
+    .all(bookId) as Array<{ profile_id: string; is_primary: number; dims_json: string; weights_json: string }>;
   if (rows.length === 0) return null;
   const primary = rows[0]!;
   return {
     primaryProfileId: primary.profile_id,
     auxProfileIds: rows.slice(1).map((r) => r.profile_id),
     dimsSource: JSON.parse(primary.dims_json) as Record<string, string>,
+    weights: JSON.parse(primary.weights_json) as Record<string, number>,
   };
 }
 

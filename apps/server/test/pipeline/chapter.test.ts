@@ -360,7 +360,7 @@ COMMENT: 节奏拖沓，需压缩。`;
     setBookStyleBinding(
       db,
       bid,
-      { primaryProfileId: 'mix-main', auxProfileIds: ['mix-aux'], dimsSource: { 写作特点: 'mix-aux', 特色词汇: 'mix-aux', 章节结构: 'mix-aux' } },
+      { primaryProfileId: 'mix-main', auxProfileIds: ['mix-aux'], dimsSource: { 写作特点: 'mix-aux', 特色词汇: 'mix-aux', 章节结构: 'mix-aux' }, weights: {} },
       JSON.stringify(bundle),
     );
 

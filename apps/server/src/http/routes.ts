@@ -591,10 +591,12 @@ ${repairPrompt(first.errors)}`))).text,
       booksRepo.setBookStyleBinding(db, bookId, null, null);
       return reply.send({ ok: true, styleProfileId: null });
     }
-    // legacy {profileId: 字符串} 归一单主七维全主；新 body 走 primary/aux/dimsSource
+    // legacy {profileId: 字符串} 归一单主七维全主；新 body 走 primary/aux/dimsSource/weights
     const primaryProfileId = typeof body.profileId === 'string' ? body.profileId : body.primaryProfileId!;
     const auxProfileIds = typeof body.profileId === 'string' ? [] : (body.auxProfileIds ?? []);
     const dimsSource = typeof body.profileId === 'string' ? {} : (body.dimsSource ?? {});
+    // 融合比例（DEC-2026-1117-05）：legacy 单绑无比例；新绑定缺省=legacy 口径（空对象，按贡献维数计权）
+    const weights = typeof body.profileId === 'string' ? {} : (body.weights ?? {});
     // 逐 id 存在性 + 内容冻结（容错解析：坏 JSON 降级空内容，对齐 polish.ts 语义，不整绑失败）
     const profiles: Record<string, StyleProfileContent> = {};
     for (const id of [primaryProfileId, ...auxProfileIds]) {
@@ -605,8 +607,14 @@ ${repairPrompt(first.errors)}`))).text,
       profiles[id] = contentFromProfileRow(row);
     }
     // 绑定即组装 V2 bundle 冻结内容落快照（后续改档案不影响已绑定书），主镜像写 books.style_profile_id
-    const bundle = buildStyleBundle({ primaryProfileId, auxProfileIds, dimsSource, profiles });
-    booksRepo.setBookStyleBinding(db, bookId, { primaryProfileId, auxProfileIds, dimsSource }, JSON.stringify(bundle));
+    const bundle = buildStyleBundle({
+      primaryProfileId,
+      auxProfileIds,
+      dimsSource,
+      profiles,
+      weights: Object.keys(weights).length > 0 ? weights : undefined,
+    });
+    booksRepo.setBookStyleBinding(db, bookId, { primaryProfileId, auxProfileIds, dimsSource, weights }, JSON.stringify(bundle));
     reply.send({ ok: true, styleProfileId: primaryProfileId });
   });
 
