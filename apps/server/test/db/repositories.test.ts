@@ -208,3 +208,38 @@ describe('人物卡仓储 + 书籍 meta', () => {
     expect(booksRepo.updateBookMeta(db, 'missing', { title: 'x' })).toBeUndefined();
   });
 });
+
+describe('风格绑定关联表（0010）', () => {
+  it('setBookStyleBinding/getBookStyleBinding 往返：主辅行+dims 映射+fewshot 归零', () => {
+    const bid = booksRepo.createBook(db, { title: '绑定之书' }).id;
+    booksRepo.setBookFewshot(db, bid, true);
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB', 'pC'], dimsSource: { 对话: 'pB' } }, '{"v":2}');
+    const b = booksRepo.getBook(db, bid)!;
+    expect(b.styleProfileId).toBe('pA');
+    expect(b.styleSnapshotJson).toBe('{"v":2}');
+    expect(b.styleFewshotOn).toBe(false);
+    expect(booksRepo.getBookStyleBinding(db, bid)).toEqual({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB', 'pC'],
+      dimsSource: { 对话: 'pB' },
+    });
+    booksRepo.deleteBook(db, bid);
+  });
+
+  it('setBookStyleBinding(null) 解绑清三处；deleteBook 清关联表', () => {
+    const bid = booksRepo.createBook(db, { title: '解绑之书' }).id;
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: {} }, '{"v":1}');
+    booksRepo.setBookStyleBinding(db, bid, null, null);
+    expect(booksRepo.getBookStyleBinding(db, bid)).toBeNull();
+    const b = booksRepo.getBook(db, bid)!;
+    expect(b.styleProfileId).toBeNull();
+    expect(b.styleSnapshotJson).toBeNull();
+    expect(b.styleFewshotOn).toBe(false);
+    expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles WHERE book_id = ?').get(bid) as { n: number }).n).toBe(0);
+    // 重绑后删书，关联表清理
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: [], dimsSource: {} }, null);
+    expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles WHERE book_id = ?').get(bid) as { n: number }).n).toBe(1);
+    expect(booksRepo.deleteBook(db, bid)).toBe(true);
+    expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles').get() as { n: number }).n).toBe(0);
+  });
+});

@@ -98,7 +98,7 @@ export function listCharacters(db: Database, bookId: string): CharacterCard[] {
   ).map(toCharacterCard);
 }
 
-/** 风格绑定/解绑：绑定且传 snapshot 时同步写 persona 快照（DEC-2026-1115-04 批次三）；解绑/未传清快照。 */
+/** 遗留：仅写主镜像不写关联表（测试兜底路径用）；生产绑定走 setBookStyleBinding。绑定且传 snapshot 时同步写 persona 快照（DEC-2026-1115-04 批次三）；解绑/未传清快照。 */
 export function setBookStyleProfile(
   db: Database,
   bookId: string,
@@ -113,6 +113,69 @@ export function setBookStyleProfile(
     new Date().toISOString(),
     bookId,
   );
+}
+
+/** 风格绑定（0010 关联表，引用真相）：books.style_profile_id 为主镜像。binding=null 解绑清三处；重绑/解绑均把 fewshot 开关归零（B4 裁决④）。 */
+export interface StyleBinding {
+  primaryProfileId: string;
+  auxProfileIds: string[];
+  /** 七维→贡献档案 id；空对象=全归主（0010 存量行形态） */
+  dimsSource: Record<string, string>;
+}
+
+export function setBookStyleBinding(db: Database, bookId: string, binding: StyleBinding | null, snapshotJson: string | null): void {
+  const ts = new Date().toISOString();
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, style_fewshot_on = 0, updated_at = ? WHERE id = ?').run(
+      binding?.primaryProfileId ?? null,
+      binding ? snapshotJson : null,
+      ts,
+      bookId,
+    );
+    db.prepare('DELETE FROM book_style_profiles WHERE book_id = ?').run(bookId);
+    if (binding) {
+      const dimsJson = JSON.stringify(binding.dimsSource);
+      db.prepare('INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, created_at) VALUES(?,?,?,?,?)').run(
+        bookId,
+        binding.primaryProfileId,
+        1,
+        dimsJson,
+        ts,
+      );
+      for (const aux of binding.auxProfileIds) {
+        db.prepare('INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, created_at) VALUES(?,?,?,?,?)').run(
+          bookId,
+          aux,
+          0,
+          dimsJson,
+          ts,
+        );
+      }
+    }
+  });
+  tx();
+}
+
+export function getBookStyleBinding(db: Database, bookId: string): StyleBinding | null {
+  const rows = db
+    .prepare('SELECT profile_id, is_primary, dims_json FROM book_style_profiles WHERE book_id = ? ORDER BY is_primary DESC, rowid ASC')
+    .all(bookId) as Array<{ profile_id: string; is_primary: number; dims_json: string }>;
+  if (rows.length === 0) return null;
+  const primary = rows[0]!;
+  return {
+    primaryProfileId: primary.profile_id,
+    auxProfileIds: rows.slice(1).map((r) => r.profile_id),
+    dimsSource: JSON.parse(primary.dims_json) as Record<string, string>,
+  };
+}
+
+/** 反查绑定某档案的书（主镜像 UNION 关联表，UNION 自动去重）。 */
+export function listBooksBoundToProfile(db: Database, profileId: string): Array<{ id: string; title: string }> {
+  return db
+    .prepare(
+      'SELECT id, title FROM books WHERE style_profile_id = ? UNION SELECT b.id, b.title FROM book_style_profiles r JOIN books b ON b.id = r.book_id WHERE r.profile_id = ? ORDER BY title',
+    )
+    .all(profileId, profileId) as Array<{ id: string; title: string }>;
 }
 
 /** 仿写档案绑定/解绑（profileId=null 解绑；存在性守卫由路由层做 404）。 */
@@ -239,6 +302,7 @@ export function deleteBook(db: Database, id: string): boolean {
     db.prepare('DELETE FROM character_states WHERE character_id IN (SELECT id FROM characters WHERE book_id = ?)').run(id);
     db.prepare('DELETE FROM characters WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM foreshadowings WHERE book_id = ?').run(id);
+    db.prepare('DELETE FROM book_style_profiles WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM outline_nodes WHERE book_id = ?').run(id);
     db.prepare('DELETE FROM books WHERE id = ?').run(id);
   });

@@ -11,6 +11,8 @@ export interface BookDto {
   description: string;
   outline: string;
   styleProfileId?: string;
+  /** 0010 风格多选绑定（关联表引用真相）：主辅档案+七维映射 */
+  styleBinding?: StyleBindingDto | null;
   styleSnapshotJson?: string | null;
   imitationProfileId?: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入 */
@@ -262,8 +264,18 @@ export interface ImportOriginalResult {
 }
 
 export interface StyleBindBody {
-  /** null = 解绑（服务端 styleBindSchema 早已接受，web 类型此前滞后） */
-  profileId: string | null;
+  /** legacy：null=解绑；字符串=等价 {primaryProfileId} 七维全主（旧客户端兼容） */
+  profileId?: string | null;
+  primaryProfileId?: string;
+  auxProfileIds?: string[];
+  /** 七维→贡献档案 id；缺省维归主 */
+  dimsSource?: Record<string, string>;
+}
+
+export interface StyleBindingDto {
+  primaryProfileId: string;
+  auxProfileIds: string[];
+  dimsSource: Record<string, string>;
 }
 
 export interface RewriteSelectionBody {
