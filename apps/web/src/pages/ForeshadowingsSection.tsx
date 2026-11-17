@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { Button } from '../components/ui';
+import { Button, Badge } from '../components/ui';
+import { CardHeader } from '../components/Section';
+import { inputNarrow } from '../components/Field';
 import type { ForeshadowingDto } from '@inkforge/shared';
 
 /** 伏笔分区（三小件 C2）：列表（埋设章/状态/回收章）+ 新增 + 标记回收（须带回收章）+ 删除。 */
@@ -66,79 +68,78 @@ export default function ForeshadowingsSection({ bookId }: { bookId: string }) {
     }
   };
 
-  const statusChip = (s: ForeshadowingDto['status']): string =>
-    s === 'resolved' ? 'bg-ok-soft text-ok' : s === 'advanced' ? 'bg-primary-soft text-primary-strong' : 'bg-bg text-muted';
-
   return (
-    <section className="mt-6">
-      <h2 className="font-semibold">伏笔</h2>
-      <ul className="mt-2 space-y-1">
-        {rows.map((f) => (
-          <li key={f.id} className="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm">
-            <span className={`rounded px-2 py-0.5 text-xs ${statusChip(f.status)}`}>{f.status}</span>
-            <span className="font-medium">{f.description}</span>
-            <span className="text-muted">
-              埋设于第{f.plantedCh}章{f.resolvedCh ? ` · 回收于第${f.resolvedCh}章` : ''}
-            </span>
-            {f.status !== 'resolved' && (
-              <>
-                <input
-                  type="number"
-                  min={1}
-                  aria-label={`回收章-${f.description}`}
-                  placeholder="回收章"
-                  className="w-16 rounded border px-1 py-0.5 text-xs"
-                  value={resolveCh[f.id] ?? ''}
-                  onChange={(e) => setResolveCh({ ...resolveCh, [f.id]: Number(e.target.value) })}
-                />
-                <Button variant="quiet" tone="primary" size="sm" disabled={busy} onClick={() => void resolve(f)}>
-                  标记回收
+    <section className="rounded-card border border-line bg-surface">
+      <CardHeader title="伏笔" />
+      <div className="p-4">
+        <ul className="space-y-1">
+          {rows.map((f) => (
+            <li key={f.id} className="flex flex-wrap items-center gap-2 rounded-ctl border border-line px-3 py-2 text-sm">
+              <Badge tone={f.status === 'resolved' ? 'ok' : f.status === 'advanced' ? 'info' : 'muted'}>{f.status}</Badge>
+              <span className="font-medium">{f.description}</span>
+              <span className="text-muted tabular-nums">
+                埋设于第{f.plantedCh}章{f.resolvedCh ? ` · 回收于第${f.resolvedCh}章` : ''}
+              </span>
+              {f.status !== 'resolved' && (
+                <>
+                  <input
+                    type="number"
+                    min={1}
+                    aria-label={`回收章-${f.description}`}
+                    placeholder="回收章"
+                    className={`${inputNarrow} w-16`}
+                    value={resolveCh[f.id] ?? ''}
+                    onChange={(e) => setResolveCh({ ...resolveCh, [f.id]: Number(e.target.value) })}
+                  />
+                  <Button variant="quiet" tone="primary" size="sm" disabled={busy} onClick={() => void resolve(f)}>
+                    标记回收
+                  </Button>
+                </>
+              )}
+              {confirmingDeleteId === f.id ? (
+                <>
+                  <span className="text-danger text-xs">该伏笔记录将删除，不可恢复。</span>
+                  <Button variant="danger" solid size="sm" disabled={busy} onClick={() => void remove(f)}>
+                    确认删除
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
+                    取消
+                  </Button>
+                </>
+              ) : (
+                <Button variant="quiet" tone="danger" size="sm" className="ml-auto" disabled={busy} onClick={() => setConfirmingDeleteId(f.id)}>
+                  删除
                 </Button>
-              </>
-            )}
-            {confirmingDeleteId === f.id ? (
-              <>
-                <span className="text-danger text-xs">该伏笔记录将删除，不可恢复。</span>
-                <Button variant="danger" solid size="sm" disabled={busy} onClick={() => void remove(f)}>
-                  确认删除
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
-                  取消
-                </Button>
-              </>
-            ) : (
-              <Button variant="quiet" tone="danger" size="sm" className="ml-auto" disabled={busy} onClick={() => setConfirmingDeleteId(f.id)}>
-                删除
-              </Button>
-            )}
-          </li>
-        ))}
-        {rows.length === 0 && <li className="text-sm text-muted">暂无伏笔登记。</li>}
-      </ul>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-        <input
-          className="flex-1 rounded border px-2 py-1"
-          placeholder="伏笔描述（如：师父留下的铜牌来历）"
-          aria-label="伏笔描述"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <label className="text-xs text-muted">
-          埋设章
+              )}
+            </li>
+          ))}
+          {rows.length === 0 && <li className="text-sm text-muted">暂无伏笔登记。</li>}
+        </ul>
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-sm">
           <input
-            type="number"
-            min={1}
-            aria-label="埋设章号"
-            className="ml-1 w-16 rounded border px-1 py-1"
-            value={plantedCh}
-            onChange={(e) => setPlantedCh(Number(e.target.value))}
+            className={`${inputNarrow} min-w-0 flex-1`}
+            placeholder="伏笔描述（如：师父留下的铜牌来历）"
+            aria-label="伏笔描述"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
           />
-        </label>
-        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void add()}>
-          登记伏笔
-        </Button>
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            埋设章
+            <input
+              type="number"
+              min={1}
+              aria-label="埋设章号"
+              className={`${inputNarrow} w-16`}
+              value={plantedCh}
+              onChange={(e) => setPlantedCh(Number(e.target.value))}
+            />
+          </label>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={() => void add()}>
+            登记伏笔
+          </Button>
+        </div>
+        {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
       </div>
-      {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
     </section>
   );
 }

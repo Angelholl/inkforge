@@ -51,22 +51,22 @@ export default function DiffPage() {
   const removedCount = parts.filter((p) => p.removed).length;
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <Link to={`/books/${bookId}/chapters/${no}`} className="text-sm text-muted">
+    <main className="mx-auto max-w-[42rem] px-6 py-8">
+      <Link to={`/books/${bookId}/chapters/${no}`} className="text-sm text-muted hover:text-ink">
         ← 阅读器
       </Link>
-      <h1 className="mt-2 text-2xl font-bold">版本对比 · 第{no}章</h1>
-      <p className="mt-1 text-sm text-muted">
+      <h1 className="mt-3 font-display text-xl font-semibold">版本对比 · 第{no}章</h1>
+      <p className="mt-1 text-sm text-muted tabular-nums">
         插入段 {addedCount} · 删除段 {removedCount}
       </p>
       {!older && !!newer && <p className="mt-1 text-sm text-muted">{list.length < 2 ? '不足两个版本，无法对比' : '上一版已删或不存在，无法对比'}</p>}
       {!older && !newer && <p className="mt-1 text-sm text-muted">尚无版本，无法对比</p>}
-      <div className="mt-4 rounded border bg-white p-4 text-sm leading-7 whitespace-pre-wrap">
+      <div className="mt-4 whitespace-pre-wrap rounded-card bg-surface px-8 py-8 font-display text-[15px] leading-7">
         {parts.map((p, i) => (
           <span
             key={i}
             className={
-              p.added ? 'bg-ok-soft text-ok' : p.removed ? 'bg-danger-soft text-danger line-through' : ''
+              p.added ? 'bg-ok-soft/60 border-l-2 border-ok' : p.removed ? 'bg-danger-soft/60 border-l-2 border-danger line-through' : ''
             }
             data-testid={p.added ? 'diff-added' : p.removed ? 'diff-removed' : undefined}
           >

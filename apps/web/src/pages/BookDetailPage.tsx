@@ -1,11 +1,57 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
+import { RefreshCw } from 'lucide-react';
 import { api, apiErrorText } from '../api/client';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
 import { Badge, Button, Chip } from '../components/ui';
+import { CardHeader } from '../components/Section';
+import { checkboxBase, inputNarrow, selectBase, textareaBase } from '../components/Field';
+
+/** 书详情七节锚点（DEC-2026-1118-02 D4 锚点分区）：纯文本 <a>（禁节名 aria-label，防与表单 label 撞车）。 */
+const SECTIONS = [
+  { id: 'sec-worldview', label: '设定' },
+  { id: 'sec-outline-tree', label: '大纲' },
+  { id: 'sec-foreshadowing', label: '伏笔' },
+  { id: 'sec-characters', label: '人物卡' },
+  { id: 'sec-style', label: '风格' },
+  { id: 'sec-chapters', label: '章节' },
+  { id: 'sec-blueprint', label: '蓝图' },
+] as const;
+
+/** 锚点条滚动跟随（评议员 R4：禁 IntersectionObserver——jsdom 无此 API；scroll 监听+rAF 节流）。 */
+function useActiveSection(enabled: boolean): string {
+  const [active, setActive] = useState<string>(SECTIONS[0].id);
+  useEffect(() => {
+    if (!enabled) return;
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const doc = document.documentElement;
+        if (window.innerHeight + window.scrollY >= doc.scrollHeight - 4) {
+          setActive(SECTIONS[SECTIONS.length - 1].id);
+          return;
+        }
+        let current: string = SECTIONS[0].id;
+        for (const s of SECTIONS) {
+          const el = document.getElementById(s.id);
+          if (el && el.getBoundingClientRect().top <= 96) current = s.id;
+        }
+        setActive(current);
+      });
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [enabled]);
+  return active;
+}
 import { STYLE_DIMENSIONS } from '@inkforge/shared';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
 
@@ -144,9 +190,10 @@ function StyleBindPanel({
           const isOn = checked.includes(p.id);
           const full = !isOn && checked.length >= 4;
           return (
-            <label key={p.id} className="flex items-center gap-1" title={full ? '最多绑定 4 个（1 主 + 3 辅）' : undefined}>
+            <label key={p.id} className="flex items-center gap-1.5 text-sm" title={full ? '最多绑定 4 个（1 主 + 3 辅）' : undefined}>
               <input
                 type="checkbox"
+                className={checkboxBase}
                 aria-label={`风格档案勾选-${p.name}`}
                 checked={isOn}
                 disabled={full}
@@ -160,7 +207,7 @@ function StyleBindPanel({
       <select
         aria-label="基准档案"
         title="规则全量、声线锚、画像默认归属归基准档案"
-        className="rounded border px-2 py-1"
+        className={`${selectBase} w-56`}
         value={primary}
         onChange={(e) => changePrimary(e.target.value)}
       >
@@ -188,7 +235,7 @@ function StyleBindPanel({
                 <input
                   type="number"
                   min={1}
-                  className="w-16 rounded border px-1 py-0.5"
+                  className={`${inputNarrow} w-16`}
                   aria-label={`比例-${p.name}`}
                   value={rawWeights[id] ?? ''}
                   onChange={(e) => {
@@ -209,11 +256,11 @@ function StyleBindPanel({
         <summary className="cursor-pointer text-sm">高级设置</summary>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {STYLE_DIMENSIONS.map((d) => (
-            <label key={d} className="flex items-center gap-1">
+            <label key={d} className="flex items-center gap-1 text-sm">
               {d}
               <select
                 aria-label={`维度来源-${d}`}
-                className="rounded border px-2 py-1"
+                className={`${selectBase} w-44`}
                 value={dims[d] ?? ''}
                 onChange={(e) => {
                   setDims({ ...dims, [d]: e.target.value });
@@ -498,13 +545,14 @@ export default function BookDetailPage() {
   };
 
   const doneCount = (book?.chapters ?? []).filter((c) => c.status === 'done').length;
+  const activeSec = useActiveSection(Boolean(book));
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <Link to="/" className="text-sm text-muted">
+    <main className="mx-auto max-w-6xl px-8 py-8">
+      <Link to="/" className="text-sm text-muted hover:text-ink">
         ← 书架
       </Link>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-bold">{book?.title ?? '…'}</h1>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-2">
+        <h1 className="font-display text-[22px] font-semibold">{book?.title ?? '…'}</h1>
         {/* 详情 chip 条（D2） */}
         <Chip active>章节 {book?.chapters.length ?? 0}</Chip>
         <Chip active={doneCount > 0}>完成 {doneCount}</Chip>
@@ -516,15 +564,15 @@ export default function BookDetailPage() {
         )}
         {book?.imitationProfileId && <Chip active>仿写已绑</Chip>}
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button variant="primary" onClick={generateAll}>
           整书生成
         </Button>
-        <label className="flex items-center gap-1.5 text-sm text-muted">
+        <label className="flex items-center gap-1.5 text-xs text-muted">
           质量轮数
           <select
             aria-label="质量轮数"
-            className="h-ctl rounded-ctl border border-line bg-surface px-2 text-sm"
+            className={`${selectBase} w-24`}
             value={maxRounds}
             onChange={(e) => setMaxRounds(Number(e.target.value))}
           >
@@ -533,167 +581,199 @@ export default function BookDetailPage() {
             <option value={3}>3 轮</option>
           </select>
         </label>
-        <Button variant="secondary" onClick={() => void refetch()}>
-          刷新
-        </Button>
-        <select
-          aria-label="导出格式"
-          className="h-ctl rounded-ctl border border-line bg-surface px-2 text-sm"
-          value={exportFormat}
-          onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+        <Button
+          variant="quiet"
+          iconOnly
+          aria-label="刷新"
+          title="刷新"
+          onClick={() => void refetch()}
         >
-          <option value="chapters-md">分章 Markdown</option>
-          <option value="combined-md">全书合并</option>
-          <option value="txt">分章 TXT</option>
-        </select>
-        <Button variant="secondary" onClick={() => void exportNow()}>
-          导出
+          <RefreshCw size={16} strokeWidth={1.8} aria-hidden="true" />
         </Button>
+        <span className="ml-auto inline-flex items-center gap-2">
+          <select
+            aria-label="导出格式"
+            className={`${selectBase} w-40`}
+            value={exportFormat}
+            onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+          >
+            <option value="chapters-md">分章 Markdown</option>
+            <option value="combined-md">全书合并</option>
+            <option value="txt">分章 TXT</option>
+          </select>
+          <Button variant="secondary" onClick={() => void exportNow()}>
+            导出
+          </Button>
+        </span>
         <span className="w-full text-xs text-faint">导出文件保存到本机 data/exports/，不自动下载</span>
       </div>
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="min-w-0">
+      {/* 锚点条（D4）：sticky 跟随，纯文本 <a>；祖先链无 overflow-hidden/auto */}
+      <nav aria-label="页面分区" className="sticky top-0 z-10 -mx-8 mt-4 flex flex-wrap items-center gap-1 border-b border-line bg-bg/85 px-8 py-2 backdrop-blur">
+        {SECTIONS.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+              activeSec === s.id ? 'bg-primary-soft font-medium text-primary-strong' : 'text-muted hover:text-ink'
+            }`}
+          >
+            {s.label}
+          </a>
+        ))}
+      </nav>
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-6">
 
-      <section className="mt-6">
-        <h2 className="font-semibold">世界观与剧情大纲</h2>
-        <textarea
-          className="mt-2 w-full rounded border px-3 py-2"
-          rows={6}
-          aria-label="世界观"
-          placeholder="世界观 / 规则（越具体越好）"
-          value={worldText}
-          onChange={(e) => setWorldText(e.target.value)}
-        />
-        <textarea
-          className="mt-2 w-full rounded border px-3 py-2"
-          rows={4}
-          aria-label="剧情大纲"
-          placeholder="全书剧情大纲（可选）：分卷 / 关键转折 / 结局走向"
-          value={outlineText}
-          onChange={(e) => setOutlineText(e.target.value)}
-        />
-        <Button variant="primary" className="mt-2" onClick={() => void saveMeta()}>
-          保存设定
-        </Button>
-      </section>
-
-      {bookId && <OutlineTreeSection bookId={bookId} />}
-
-      {bookId && <ForeshadowingsSection bookId={bookId} />}
-
-      <section className="mt-6">
-        <h2 className="font-semibold">人物卡</h2>
-        <ul className="mt-2 space-y-2">
-          {(characters ?? []).map((c) => (
-            <li key={c.id} className="rounded border px-3 py-2 text-sm">
-              {editingCard?.id === c.id ? (
-                <div className="space-y-1">
-                  <input
-                    className="w-40 rounded border px-2 py-1"
-                    aria-label="编辑姓名"
-                    value={editingCard.name}
-                    onChange={(e) => setEditingCard({ ...editingCard, name: e.target.value })}
-                  />
-                  <textarea
-                    className="w-full rounded border px-2 py-1"
-                    rows={2}
-                    aria-label="编辑设定"
-                    value={editingCard.setting}
-                    onChange={(e) => setEditingCard({ ...editingCard, setting: e.target.value })}
-                  />
-                  <div className="flex gap-2">
-                    <Button variant="primary" size="sm" onClick={() => void saveCard()}>
-                      保存
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={() => setEditingCard(null)}>
-                      取消
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <span className="font-medium">{c.name}</span>
-                  <span className="min-w-0 flex-1 text-muted">{settingPreview(c.baseSetting)}</span>
-                  {c.offlineFromChapter != null && <Badge tone="muted">第{c.offlineFromChapter}章起下线</Badge>}
-                  {confirmingDeleteId === c.id ? (
-                    <>
-                      <span className="text-danger text-xs">该人物卡及其历史状态将一并删除，不可恢复。</span>
-                      <Button variant="danger" size="sm" solid onClick={() => void removeCard(c)}>
-                        确认删除
-                      </Button>
-                      <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
-                        取消
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="quiet"
-                        tone="primary"
-                        size="sm"
-                        onClick={() =>
-                          setEditingCard({ id: c.id, name: c.name, setting: settingRawText(c.baseSetting) })
-                        }
-                      >
-                        编辑
-                      </Button>
-                      {c.offlineFromChapter == null ? (
-                        <>
-                          <input
-                            type="number"
-                            min={1}
-                            aria-label={`下线章号-${c.name}`}
-                            title="从第几章起该角色退场"
-                            className="w-16 rounded border px-2 py-1 text-xs"
-                            value={offlineDraft[c.id] ?? nextChapterNo}
-                            onChange={(e) =>
-                              setOfflineDraft({ ...offlineDraft, [c.id]: Number(e.target.value) || nextChapterNo })
-                            }
-                          />
-                          <Button variant="quiet" tone="danger" size="sm" onClick={() => void offlineCard(c)}>
-                            下线
-                          </Button>
-                        </>
-                      ) : (
-                        <Button variant="quiet" tone="primary" size="sm" onClick={() => void reviveCard(c)}>
-                          恢复在场
-                        </Button>
-                      )}
-                      <Button variant="quiet" tone="danger" size="sm" onClick={() => setConfirmingDeleteId(c.id)}>
-                        删除
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-2 space-y-1">
-          <input
-            className="w-40 rounded border px-2 py-1"
-            placeholder="姓名"
-            aria-label="新卡姓名"
-            value={newCardName}
-            onChange={(e) => setNewCardName(e.target.value)}
+      <section id="sec-worldview" className="scroll-mt-16 rounded-card border border-line bg-surface">
+        <CardHeader title="世界观与剧情大纲" />
+        <div className="space-y-2 p-4">
+          <textarea
+            className={textareaBase}
+            rows={6}
+            aria-label="世界观"
+            placeholder="世界观 / 规则（越具体越好）"
+            value={worldText}
+            onChange={(e) => setWorldText(e.target.value)}
           />
           <textarea
-            className="w-full rounded border px-2 py-1 text-sm"
-            rows={2}
-            placeholder="人物设定（身份 / 性格 / 目标…）"
-            aria-label="新卡设定"
-            value={newCardSetting}
-            onChange={(e) => setNewCardSetting(e.target.value)}
+            className={textareaBase}
+            rows={4}
+            aria-label="剧情大纲"
+            placeholder="全书剧情大纲（可选）：分卷 / 关键转折 / 结局走向"
+            value={outlineText}
+            onChange={(e) => setOutlineText(e.target.value)}
           />
-          <Button variant="secondary" size="sm" onClick={() => void addCard()}>
-            添加人物
-          </Button>
+          <div>
+            <Button variant="primary" onClick={() => void saveMeta()}>
+              保存设定
+            </Button>
+          </div>
         </div>
       </section>
 
-      <section className="mt-6">
-        <h2 className="font-semibold">风格档案</h2>
-        <div className="mt-2">
+      <div id="sec-outline-tree" className="scroll-mt-16">
+        {bookId && <OutlineTreeSection bookId={bookId} />}
+      </div>
+
+      <div id="sec-foreshadowing" className="scroll-mt-16">
+        {bookId && <ForeshadowingsSection bookId={bookId} />}
+      </div>
+
+      <section id="sec-characters" className="scroll-mt-16 rounded-card border border-line bg-surface">
+        <CardHeader title="人物卡" />
+        <div className="p-4">
+          <ul className="space-y-2">
+            {(characters ?? []).map((c) => (
+              <li key={c.id} className="rounded-ctl border border-line px-3 py-2 text-sm">
+                {editingCard?.id === c.id ? (
+                  <div className="space-y-1">
+                    <input
+                      className={`${inputNarrow} w-40`}
+                      aria-label="编辑姓名"
+                      value={editingCard.name}
+                      onChange={(e) => setEditingCard({ ...editingCard, name: e.target.value })}
+                    />
+                    <textarea
+                      className={textareaBase}
+                      rows={2}
+                      aria-label="编辑设定"
+                      value={editingCard.setting}
+                      onChange={(e) => setEditingCard({ ...editingCard, setting: e.target.value })}
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="primary" size="sm" onClick={() => void saveCard()}>
+                        保存
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => setEditingCard(null)}>
+                        取消
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-start gap-2">
+                    <span className="font-medium">{c.name}</span>
+                    <span className="min-w-0 flex-1 text-muted">{settingPreview(c.baseSetting)}</span>
+                    {c.offlineFromChapter != null && <Badge tone="muted">第{c.offlineFromChapter}章起下线</Badge>}
+                    {confirmingDeleteId === c.id ? (
+                      <>
+                        <span className="text-danger text-xs">该人物卡及其历史状态将一并删除，不可恢复。</span>
+                        <Button variant="danger" size="sm" solid onClick={() => void removeCard(c)}>
+                          确认删除
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
+                          取消
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="quiet"
+                          tone="primary"
+                          size="sm"
+                          onClick={() =>
+                            setEditingCard({ id: c.id, name: c.name, setting: settingRawText(c.baseSetting) })
+                          }
+                        >
+                          编辑
+                        </Button>
+                        {c.offlineFromChapter == null ? (
+                          <>
+                            <input
+                              type="number"
+                              min={1}
+                              aria-label={`下线章号-${c.name}`}
+                              title="从第几章起该角色退场"
+                              className={`${inputNarrow} w-16`}
+                              value={offlineDraft[c.id] ?? nextChapterNo}
+                              onChange={(e) =>
+                                setOfflineDraft({ ...offlineDraft, [c.id]: Number(e.target.value) || nextChapterNo })
+                              }
+                            />
+                            <Button variant="quiet" tone="danger" size="sm" onClick={() => void offlineCard(c)}>
+                              下线
+                            </Button>
+                          </>
+                        ) : (
+                          <Button variant="quiet" tone="primary" size="sm" onClick={() => void reviveCard(c)}>
+                            恢复在场
+                          </Button>
+                        )}
+                        <Button variant="quiet" tone="danger" size="sm" onClick={() => setConfirmingDeleteId(c.id)}>
+                          删除
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 space-y-2 border-t border-line pt-3">
+            <input
+              className={`${inputNarrow} w-40`}
+              placeholder="姓名"
+              aria-label="新卡姓名"
+              value={newCardName}
+              onChange={(e) => setNewCardName(e.target.value)}
+            />
+            <textarea
+              className={textareaBase}
+              rows={2}
+              placeholder="人物设定（身份 / 性格 / 目标…）"
+              aria-label="新卡设定"
+              value={newCardSetting}
+              onChange={(e) => setNewCardSetting(e.target.value)}
+            />
+            <Button variant="secondary" size="sm" onClick={() => void addCard()}>
+              添加人物
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section id="sec-style" className="scroll-mt-16 rounded-card border border-line bg-surface">
+        <CardHeader title="风格档案" />
+        <div className="p-4">
           {/* 书加载完成才挂载 + 换书 key 重建（critic 2.4）：防 useState 初值首帧捕 null 永不重算 */}
           {book ? (
             <StyleBindPanel
@@ -703,54 +783,45 @@ export default function BookDetailPage() {
               onBind={(body) => void bindStyle(body)}
             />
           ) : null}
+          <p className="mt-2 text-xs text-faint">续写也注入混合风格：前文腔调优先，文风档案作质感参照。</p>
+          {book?.styleProfileId && (
+            <div className="mt-2 border-t border-line pt-2">
+              <label htmlFor="book-style-fewshot" className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  id="book-style-fewshot"
+                  type="checkbox"
+                  className={checkboxBase}
+                  checked={book.styleFewshotOn}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    void api
+                      .setBookFewshot(bookId, next)
+                      .then((r) => {
+                        setMsg(r.styleFewshotOn ? '文风示例注入已开启' : '文风示例注入已关闭');
+                        void refetch();
+                      })
+                      .catch((err: unknown) => setMsg(apiErrorText(err)));
+                  }}
+                />
+                文风示例注入
+              </label>
+              <p className="mt-1 text-xs text-faint">
+                关闭后不向写手注入范文片段；抄用检测仍以绑定样本为参考，不随开关关闭。新绑定默认关。
+              </p>
+            </div>
+          )}
         </div>
-        <p className="mt-1 text-xs text-faint">续写也注入混合风格：前文腔调优先，文风档案作质感参照。</p>
-        {book?.styleProfileId && (
-          <div className="mt-2">
-            <label htmlFor="book-style-fewshot" className="flex items-center gap-2 text-sm font-medium">
-              <input
-                id="book-style-fewshot"
-                type="checkbox"
-                checked={book.styleFewshotOn}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  void api
-                    .setBookFewshot(bookId, next)
-                    .then((r) => {
-                      setMsg(r.styleFewshotOn ? '文风示例注入已开启' : '文风示例注入已关闭');
-                      void refetch();
-                    })
-                    .catch((err: unknown) => setMsg(apiErrorText(err)));
-                }}
-              />
-              文风示例注入
-            </label>
-            <p className="mt-1 text-xs text-faint">
-              关闭后不向写手注入范文片段；抄用检测仍以绑定样本为参考，不随开关关闭。新绑定默认关。
-            </p>
-          </div>
-        )}
       </section>
 
-      <section className="mt-6">
-        <h2 className="font-semibold">章节</h2>
-        <ul className="mt-2 space-y-1">
+      <section id="sec-chapters" className="scroll-mt-16 rounded-card border border-line bg-surface">
+        <CardHeader title="章节" />
+        <ul className="space-y-1 p-4">
           {(book?.chapters ?? []).map((c) => (
-            <li key={c.id} className="flex items-center gap-3 rounded border px-3 py-2">
+            <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-ctl border border-line px-3 py-2">
               <span>
                 第{c.chapterNo}章 {c.title}
               </span>
-              <span
-                className={`rounded px-2 py-0.5 text-xs ${
-                  c.status === 'done'
-                    ? 'bg-ok-soft text-ok'
-                    : c.status === 'needs_human'
-                      ? 'bg-warn-soft text-warn'
-                      : 'bg-bg text-muted'
-                }`}
-              >
-                {c.status}
-              </span>
+              <Badge tone={c.status === 'done' ? 'ok' : c.status === 'needs_human' ? 'warn' : 'muted'}>{c.status}</Badge>
               {c.isOriginal && (
                 <Button variant="quiet" tone="primary" size="sm" onClick={() => void summarize(c.chapterNo)}>
                   补摘要
@@ -765,7 +836,10 @@ export default function BookDetailPage() {
               >
                 生成
               </Button>
-              <Link className="text-sm text-primary-strong" to={`/books/${bookId}/chapters/${c.chapterNo}`}>
+              <Link
+                className="inline-flex h-8 items-center gap-1.5 rounded-ctl border border-line bg-surface px-3 text-xs text-ink transition-colors hover:bg-bg"
+                to={`/books/${bookId}/chapters/${c.chapterNo}`}
+              >
                 阅读
               </Link>
             </li>
@@ -773,58 +847,60 @@ export default function BookDetailPage() {
         </ul>
       </section>
 
-      <section className="mt-6">
-        <h2 className="font-semibold">蓝图编辑</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <label className="text-sm">
-            章号
-            <input
-              type="number"
-              min={1}
-              className="ml-2 w-20 rounded border px-2 py-1"
-              value={chapterNo}
-              onChange={(e) => setChapterNo(Number(e.target.value) || 1)}
-            />
-          </label>
-          <label className="text-sm">
-            字数
-            <input
-              type="number"
-              min={500}
-              step={100}
-              aria-label="本章目标字数"
-              className="ml-2 w-24 rounded border px-2 py-1"
-              value={targetChars}
-              onChange={(e) => setTargetChars(Number(e.target.value) || 3000)}
-            />
-          </label>
-          <Button variant="secondary" loading={suggesting} onClick={() => void suggest()}>
-            AI 建议蓝图
-          </Button>
-          <Button variant="primary" onClick={saveBlueprint}>
-            保存蓝图
-          </Button>
-          <Button variant="secondary" onClick={generate}>
-            生成本章
-          </Button>
-          <Button variant="primary" onClick={() => void startContinue()}>
-            发起续写（第{chapterNo}章）
-          </Button>
+      <section id="sec-blueprint" className="scroll-mt-16 rounded-card border border-line bg-surface">
+        <CardHeader title="蓝图编辑" action={<span className="text-xs text-faint">QC 按目标字数 ±10% 校验</span>} />
+        <div className="p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-muted">
+              章号
+              <input
+                type="number"
+                min={1}
+                className={`${inputNarrow} w-20`}
+                value={chapterNo}
+                onChange={(e) => setChapterNo(Number(e.target.value) || 1)}
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted">
+              字数
+              <input
+                type="number"
+                min={500}
+                step={100}
+                aria-label="本章目标字数"
+                className={`${inputNarrow} w-24`}
+                value={targetChars}
+                onChange={(e) => setTargetChars(Number(e.target.value) || 3000)}
+              />
+            </label>
+            <Button variant="secondary" loading={suggesting} onClick={() => void suggest()}>
+              AI 建议蓝图
+            </Button>
+            <Button variant="primary" onClick={saveBlueprint}>
+              保存蓝图
+            </Button>
+            <Button variant="secondary" onClick={generate}>
+              生成本章
+            </Button>
+            <Button variant="primary" onClick={() => void startContinue()}>
+              发起续写（第{chapterNo}章）
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-faint">
+            下一章续写：章号默认接续末章 → 「AI 建议蓝图」或手填 JSON → 「保存蓝图」→ 「发起续写」（取前文锚点声线；「生成本章」则按蓝图全新生成）。
+            字数=本章目标字数，QC 按其 ±10% 校验。
+          </p>
+          <textarea
+            className={`${textareaBase} mt-2 h-72 font-mono text-xs`}
+            placeholder='蓝图 JSON，如 {"goal":"…","beats":["…"],"mustHaveBeats":[],"bannedTopics":[]}'
+            value={blueprintText}
+            onChange={(e) => setBlueprintText(e.target.value)}
+          />
+          {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
         </div>
-        <p className="mt-1 text-xs text-faint">
-          下一章续写：章号默认接续末章 → 「AI 建议蓝图」或手填 JSON → 「保存蓝图」→ 「发起续写」（取前文锚点声线；「生成本章」则按蓝图全新生成）。
-          字数=本章目标字数，QC 按其 ±10% 校验。
-        </p>
-        <textarea
-          className="mt-2 h-72 w-full rounded border p-3 font-mono text-xs"
-          placeholder='蓝图 JSON，如 {"goal":"…","beats":["…"],"mustHaveBeats":[],"bannedTopics":[]}'
-          value={blueprintText}
-          onChange={(e) => setBlueprintText(e.target.value)}
-        />
-        {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
       </section>
         </div>
-        <aside className="space-y-4">
+        <aside className="space-y-4 lg:sticky lg:top-6">
           <RunAsideCard runs={book?.runs ?? []} />
         </aside>
       </div>

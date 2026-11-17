@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { Button } from '../components/ui';
+import { CardHeader } from '../components/Section';
+import { inputNarrow } from '../components/Field';
 import type { OutlineCardDto, OutlineStageDto, OutlineTreeDto, OutlineVolumeDto } from '@inkforge/shared';
 
 const emptyCard = (seq: number): OutlineCardDto => ({ title: '新卡', body: '', seq, chapterFrom: null, chapterTo: null });
@@ -90,20 +92,21 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
   const removeStage = (vi: number, si: number): void => mutate((t) => t.volumes[vi].stages.splice(si, 1));
   const removeCard = (vi: number, si: number, ci: number): void => mutate((t) => t.volumes[vi].stages[si].cards.splice(ci, 1));
 
-  const inputCls = 'rounded border px-2 py-1 text-sm';
+  const inputCls = inputNarrow;
 
   return (
-    <section className="mt-6">
-      <h2 className="font-semibold">三级大纲树（卷 → 阶段 → 滚动卡）</h2>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-        <label>
+    <section className="rounded-card border border-line bg-surface">
+      <CardHeader title="三级大纲树（卷 → 阶段 → 滚动卡）" />
+      <div className="p-4">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <label className="flex items-center gap-1.5 text-xs text-muted">
           总章数
           <input
             type="number"
             min={1}
             max={50}
             aria-label="大纲总章数"
-            className={`ml-1 w-20 ${inputCls}`}
+            className={`${inputCls} w-20`}
             value={chapterCount}
             onChange={(e) => setChapterCount(Number(e.target.value))}
           />
@@ -127,7 +130,7 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
       ) : (
         <div className="mt-2 space-y-1 text-sm">
           {tree.volumes.map((v, vi) => (
-            <div key={vi} className="rounded border px-3 py-2">
+            <div key={vi} className="rounded-ctl border border-line px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="rounded bg-primary-soft px-1.5 text-xs text-primary-strong">卷{v.seq}</span>
                 {draft ? (
@@ -257,11 +260,12 @@ export default function OutlineTreeSection({ bookId }: { bookId: string }) {
       )}
 
       {report && (
-        <pre className="mt-2 max-h-64 overflow-auto rounded bg-console-bg p-2 text-xs text-console-1">
+        <pre className="mt-2 max-h-64 overflow-auto rounded-ctl bg-console-bg p-2 text-xs text-console-1">
           {report}
         </pre>
       )}
       {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
+      </div>
     </section>
   );
 }
