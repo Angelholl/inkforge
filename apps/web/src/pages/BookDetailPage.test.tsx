@@ -554,6 +554,29 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     });
   });
 
+  it('高级设置共存选项（DEC-2026-1118-03）：勾 2 档案时七维各追加「共存」，选共存保存 → 该维=__coexist__；单档案不出现', async () => {
+    installBindStub({});
+    renderPanel();
+    // 单档案：无共存选项
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
+    (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
+    expect(screen.queryByRole('option', { name: /共存/ })).toBeNull();
+    // 勾第 2 档案：七维各出现一个「共存」选项
+    fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
+    expect(screen.getAllByRole('option', { name: /共存/ })).toHaveLength(7);
+    fireEvent.change(screen.getByLabelText('维度来源-特色词汇'), { target: { value: '__coexist__' } });
+    expect((screen.getByLabelText('维度来源-特色词汇') as HTMLSelectElement).value).toBe('__coexist__');
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    const body = JSON.parse(String(put.init?.body)) as { dimsSource: Record<string, string> };
+    expect(body.dimsSource['特色词汇']).toBe('__coexist__');
+    expect(body.dimsSource['对话']).toBe('p1'); // 其余维不受影响
+  });
+
   it('上限 4：第 5 个档案勾选框 disabled；解绑发 {profileId:null}', async () => {
     installBindStub({});
     renderPanel();

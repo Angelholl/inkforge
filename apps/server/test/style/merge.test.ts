@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
 import type { StyleSample } from '../../src/style/distill';
 import {
   buildStyleBundle,
@@ -482,5 +482,76 @@ describe('weights 加权路径（DEC-2026-1117-05）', () => {
     const legacy = mergeStyleProfiles(bundle({ primaryProfileId: 'p1', profiles: { p1: p } }), 1);
     expect(weighted).toEqual(legacy);
     expect(weighted.samples).toHaveLength(3);
+  });
+});
+
+describe('七维共存（DEC-2026-1118-03）', () => {
+  it('共存维拼接：特色词汇=主辅按绑定序 "A词汇；B词汇"，单源维不受影响', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { 特色词汇: DIM_SOURCE_COEXIST },
+      profiles: { pA: prof({ dims: { 特色词汇: 'A词汇', 节奏: 'A节奏' } }), pB: prof({ dims: { 特色词汇: 'B词汇' } }) },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.dims['特色词汇']).toBe('A词汇；B词汇');
+    expect(m.dims['节奏']).toBe('A节奏');
+  });
+
+  it('共存全等去重：辅文本与主全等 → 只出现一次，legacy 计权只记主（辅零贡献 → 该轴取主原值）', () => {
+    const same = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, `${d}同文`])) as Partial<Record<StyleDimension, string>>;
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, DIM_SOURCE_COEXIST])),
+      profiles: { pA: prof({ dims: same, axes: { ...fullAxes, 叙述温度: 70 } }), pB: prof({ dims: { ...same }, axes: { ...fullAxes, 叙述温度: 56 } }) },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.dims['特色词汇']).toBe('特色词汇同文'); // 无 '；' 拼接痕迹
+    expect(m.axes['叙述温度']).toBe(70); // 去重段不计辅贡献 → wB=0 不参与
+  });
+
+  it('共存计权：七维全共存主辅文本各异 → legacy wA=7/wB=7 → 轴 63、样本 A2+B1', () => {
+    const dimsA = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, `A${d}`])) as Partial<Record<StyleDimension, string>>;
+    const dimsB = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, `B${d}`])) as Partial<Record<StyleDimension, string>>;
+    const poolA: StyleSample[] = [{ id: 'a0', text: 'xa0' }, { id: 'a1', text: 'xa1' }, { id: 'a2', text: 'xa2' }];
+    const poolB: StyleSample[] = [{ id: 'b0', text: 'xb0' }];
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, DIM_SOURCE_COEXIST])),
+      profiles: { pA: prof({ dims: dimsA, axes: { ...fullAxes, 叙述温度: 70 }, samples: poolA }), pB: prof({ dims: dimsB, axes: { ...fullAxes, 叙述温度: 56 }, samples: poolB }) },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.axes['叙述温度']).toBe(63); // (7×70+7×56)/14
+    const ids = m.samples.map((s) => s.id);
+    expect(ids.filter((id) => id.startsWith('pA:'))).toHaveLength(2); // 1.5/1.5 平手主先补足
+    expect(ids.filter((id) => id.startsWith('pB:'))).toHaveLength(1);
+    expect(m.dims['节奏']).toBe('A节奏；B节奏');
+  });
+
+  it('共存单边空/全空：辅该维空 → 仅主文本；该维全空 → 空串不占注入行', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { 特色词汇: DIM_SOURCE_COEXIST, 节奏: DIM_SOURCE_COEXIST },
+      profiles: { pA: prof({ dims: { 特色词汇: 'A词汇' } }), pB: prof({ dims: {} }) },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.dims['特色词汇']).toBe('A词汇');
+    expect(m.dims['节奏']).toBe('');
+  });
+
+  it('加权路径与共存正交：weights {pA:60,pB:40} + 共存维 → 轴 64、共存拼接照常', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { 特色词汇: DIM_SOURCE_COEXIST },
+      weights: { pA: 60, pB: 40 },
+      profiles: { pA: prof({ dims: { 特色词汇: 'A词汇' }, axes: { ...fullAxes, 叙述温度: 70 } }), pB: prof({ dims: { 特色词汇: 'B词汇' }, axes: { ...fullAxes, 叙述温度: 56 } }) },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.axes['叙述温度']).toBe(64); // (60×70+40×56)/100=64.4→64
+    expect(m.dims['特色词汇']).toBe('A词汇；B词汇');
   });
 });

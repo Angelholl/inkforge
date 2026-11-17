@@ -52,7 +52,7 @@ function useActiveSection(enabled: boolean): string {
   }, [enabled]);
   return active;
 }
-import { STYLE_DIMENSIONS } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, STYLE_DIMENSIONS } from '@inkforge/shared';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
 
 /**
@@ -139,7 +139,8 @@ function StyleBindPanel({
       setPrimary(np);
       setDims((prev) => {
         const out = { ...prev };
-        for (const d of STYLE_DIMENSIONS) if (out[d] === p.id || (out[d] === primary && !touched.has(d))) out[d] = np;
+        // 共存键在余下档案 <2 时回落新主（单档案无共存语义，select 也不再渲染该选项）
+        for (const d of STYLE_DIMENSIONS) if (out[d] === p.id || (out[d] === primary && !touched.has(d)) || (out[d] === DIM_SOURCE_COEXIST && next.length < 2)) out[d] = np;
         return out;
       });
       resetWeightsFor(np, next);
@@ -276,9 +277,11 @@ function StyleBindPanel({
                     </option>
                   );
                 })}
+                {ordered.length >= 2 && <option value={DIM_SOURCE_COEXIST}>共存（各档案拼接）</option>}
               </select>
             </label>
           ))}
+          <p className="mt-1 w-full text-xs text-faint">共存＝该维文本按绑定序（主→辅）拼接各勾选档案的非空文本，重复段去重。</p>
         </div>
       </details>
       {/* 无主或零勾选禁用保存：防发 primaryProfileId:'' 吃 400（critic 2.4） */}

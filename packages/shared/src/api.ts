@@ -268,7 +268,7 @@ export interface StyleBindBody {
   profileId?: string | null;
   primaryProfileId?: string;
   auxProfileIds?: string[];
-  /** 七维→贡献档案 id；缺省维归主 */
+  /** 七维→贡献档案 id；缺省维归主；值=DIM_SOURCE_COEXIST（'__coexist__'）→ 该维各档案文本共存拼接 */
   dimsSource?: Record<string, string>;
   /** 融合比例：客户端最大余数归一后提交（Σ=100、整数≥1、键集=绑定全集）；缺省=legacy（贡献维数计权） */
   weights?: Record<string, number>;
@@ -353,6 +353,9 @@ export interface StyleProfileCreateBody {
 // ── 蒸馏结构化档案（七维文本 + 六轴量化，MirrorNovel 对标；RULES 行保留为文本补充）──
 export const STYLE_DIMENSIONS = ['节奏', '对话', '描写', '情感基调', '写作特点', '特色词汇', '章节结构'] as const;
 export const STYLE_AXES = ['叙述温度', '语言密度', '叙述者姿态', '节奏', '幽默', '情绪表达'] as const;
+
+/** 七维来源「共存」哨兵（DEC-2026-1118-03）：dimsSource[dim]=该值 → 该维文本按绑定序（主→辅）拼接各勾选档案的非空文本（全等段去重，'；' 连接）。双下划线包边，不会与真实档案 id 冲突。 */
+export const DIM_SOURCE_COEXIST = '__coexist__';
 
 export type StyleDimension = (typeof STYLE_DIMENSIONS)[number];
 export type StyleAxis = (typeof STYLE_AXES)[number];

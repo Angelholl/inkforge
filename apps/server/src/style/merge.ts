@@ -3,8 +3,9 @@
  * 算法钉死（全部确定性，无随机）：
  * 0. 去重防御：auxProfileIds 滤除 primaryProfileId（同一档案不得双计权重与样本）。
  * 1. 七维来源判定：缺键/空串/值 ∉ {主∪辅} → primary（merge 内按 ids 全集解析；normalizeDimsSource 导出为「仅主合法」收窄形态，签名不含辅集合，勿用于多档案归一）。
- * 2. dims[dim]：来源档案该维文本 trim 非空即用并记实际来源；来源不在 profiles 或文本空 → 回落主档案该维文本（实际来源=主）；仍空 → ''（实际来源=无）。
- * 3. 权重（双分支，DEC-2026-1117-05）：bundle.weights 键集非空 → 加权路径 w_p=weights[p]（正有限数，缺键/非法=0，主保底废除）；缺席/空对象 → legacy 路径 w_p=实际贡献维数、主 max(w,1) 保底（改前行为逐字节保留）。第 4/7 步消费方式不变。
+ * 1'. 共存维（dimsSource[dim]=DIM_SOURCE_COEXIST，DEC-2026-1118-03）：按绑定序（主→辅）收集各档案该维 trim 非空文本、与已收段全等判重跳过，'；' 连接为该维文本；实际贡献=所有被收段档案（可多档案同记）。
+ * 2. dims[dim]（单源维）：来源档案该维文本 trim 非空即用并记实际贡献；来源不在 profiles 或文本空 → 回落主档案该维文本（贡献=主）；仍空 → ''（贡献=无）。
+ * 3. 权重（双分支，DEC-2026-1117-05）：bundle.weights 键集非空 → 加权路径 w_p=weights[p]（正有限数，缺键/非法=0，主保底废除）；缺席/空对象 → legacy 路径 w_p=实际贡献维数（每维给其贡献档案各 +1，共存维可多档案同加）、主 max(w,1) 保底（改前行为逐字节保留）。第 4/7 步消费方式不变。
  * 4. axes[axis]：参与集合 P = 该轴值为有限数字 且 w_p > 0 的档案；P 空 → 该轴不写入；否则 Math.round(Σ w_p·v / Σ w_p)。
  * 5. rulesText：主原样全量（预算截断归 assembler）；辅逐行 trim 非空、与已收行 trim 相等判重跳过；
  *    追加前置条件 累计长度 + 1 + 行长 ≤ RULES_TOTAL_BUDGET(400)，不满足则 break 当前辅档案行循环、继续下一辅档案。
@@ -15,7 +16,7 @@
  *    拼接顺序主在前辅按绑定序；全池空 → []。
  * 8. primaryMetricsJson = profiles[primary]?.metricsJson ?? ''。
  */
-import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import { getLatestProfile, type StyleSample } from './distill';
 import { pickStyleSamples } from './inject';
@@ -176,27 +177,42 @@ export function mergeStyleProfiles(bundle: StyleBundleV2, chapterNo: number): Me
   const profiles = bundle.profiles ?? {};
   const ids = [primaryProfileId, ...auxProfileIds];
 
-  // 1-2. 七维来源判定 + dims 文本（实际来源记录）：缺键/空串/越权值 → primary（normalizeDimsSource 同语义，此处按 ids 集合放宽合法辅映射）
+  // 1-2. 七维来源判定 + dims 文本（实际贡献记录）：缺键/空串/越权值 → primary（normalizeDimsSource 同语义，此处按 ids 集合放宽合法辅映射）；
+  //      共存哨兵 → 按绑定序拼接各档案非空文本（全等段去重，'；' 连接，保持注入单行格式）
   const dims = {} as Record<StyleDimension, string>;
-  const actualSource = {} as Record<StyleDimension, string | undefined>;
+  const contributors = {} as Record<StyleDimension, string[]>;
   const validIds = new Set(ids);
   for (const dim of STYLE_DIMENSIONS) {
     const raw = bundle.dimsSource?.[dim];
+    if (raw === DIM_SOURCE_COEXIST) {
+      const segs: string[] = [];
+      const contrib: string[] = [];
+      for (const id of ids) {
+        const c = profiles[id];
+        const t = c ? (c.dims?.[dim] ?? '').trim() : '';
+        if (t === '' || segs.includes(t)) continue;
+        segs.push(t);
+        contrib.push(id);
+      }
+      dims[dim] = segs.join('；');
+      contributors[dim] = contrib;
+      continue;
+    }
     const src = typeof raw === 'string' && raw !== '' && validIds.has(raw) ? raw : primaryProfileId;
     const srcContent = profiles[src];
     const srcText = srcContent ? (srcContent.dims?.[dim] ?? '').trim() : '';
     if (srcContent && srcText !== '') {
       dims[dim] = srcText;
-      actualSource[dim] = src;
+      contributors[dim] = [src];
       continue;
     }
     const primaryText = profiles[primaryProfileId] ? (profiles[primaryProfileId].dims?.[dim] ?? '').trim() : '';
     if (primaryText !== '') {
       dims[dim] = primaryText;
-      actualSource[dim] = primaryProfileId;
+      contributors[dim] = [primaryProfileId];
     } else {
       dims[dim] = '';
-      actualSource[dim] = undefined;
+      contributors[dim] = [];
     }
   }
 
@@ -213,8 +229,9 @@ export function mergeStyleProfiles(bundle: StyleBundleV2, chapterNo: number): Me
     }
   } else {
     for (const dim of STYLE_DIMENSIONS) {
-      const src = actualSource[dim];
-      if (src !== undefined && weights.has(src)) weights.set(src, weights.get(src)! + 1);
+      for (const src of contributors[dim]) {
+        if (weights.has(src)) weights.set(src, weights.get(src)! + 1);
+      }
     }
     weights.set(primaryProfileId, Math.max(weights.get(primaryProfileId) ?? 0, 1));
   }

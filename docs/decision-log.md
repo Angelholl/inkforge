@@ -411,3 +411,17 @@
 **计划真值：** docs/plans/2026-11-18-ui-reshape-songyan.md（writing-plans 粒度+评议员修正案 v2 已并入）。执行=主模型亲执（owner 会话令），不外派。提交三段（基座/常规页/复杂页）。GUI 未验证（owner 真实测试）。执行留痕与验证链收口时补记。
 
 **执行留痕补记（2026-11-18 收口）：** 主模型亲执四提交：5f4358e（基座：token 全表+Field/DataTable/EmptyState/Section+tokens.test 对比度门+宋体 400/600 捆绑+eslint artifacts 忽略）/ d5a5842（常规页 11 文件）/ 4095e8d（书详情锚点+阅读沉浸 6 文件）/ a2f92cd（docs）。实现期裁决二：①D2 字重收窄再修正——阅读正文 400 必需，仅捆 600 会让长文渲染 SemiBold 过重，改捆 400+600（与 owner 批准的两字重体积等量；owner 选项字面为 SemiBold+Bold，此为偏离裁决，完成通知明示，可一行补回 700）；②eslint.config.js 增 artifacts/** 忽略（截图 chrome-profile 缓存 JS 致 2.4 万误报，生成产物目录豁免的 infra 修正）。验证链（主模型亲跑）：typecheck 全 workspace 0 错、lint 零输出、web 102+server 317+shared 2=**421**（基线 417 只增不减，+4=tokens.test 对比度门）、build 398.02kB 冒烟、audit --prod 零新增；**8 个既有 UI 测试文件 git diff 零改动实证**（测试钉串红线兑现）。推送：01e1826..a2f92cd 收口推送（ls-remote 复核✓）；推送前主模型亲审替代 code-review（owner 不外派令：Standards/Spec 两轴+测试零 diff+无 console.log+无 any 核查）。双档截图自评（1440×1000+1280×820）存 artifacts/ui-reshape/shots-new*/：裸边框清零/锚点条跟随/1280 断点 aside/阅读宋体渲染均实证。GUI 未验证（owner 真实测试）点位：全站视觉（书架书脊卡/锚点条滚动高亮/表单 focus-visible 键盘走查/运行中炉火呼吸点/宋体切片生效——owner 机装有 Noto Serif SC 本机字体时留意捆绑源生效）、书详情窄窗 aside。Backlog 登记（评议员现代化缺口延后项）：加载骨架、统一 toast 层、完整自绘 select/number 控件族、窄窗页顶进度条、Tauri minWidth。
+
+## DEC-2026-1118-03 [OWNER] 七维来源新增「共存」选项：dimsSource 哨兵 __coexist__ 各档案文本拼接（2026-11-18）
+
+**背景：** owner 指出书详情风格绑定面板「高级设置」七维来源依然只能二选一（N 选一），要求新增第三个选项「共存」——如特色词汇选共存后同时出现 A 和 B 的特色词汇。主模型亲执（owner 会话令本会话不外派），无异议项未走 critic 评议（低风险：纯增量选项，旧绑定行为逐字节保留）。
+
+**拍板与实现要点：**
+1. 哨兵常量 `DIM_SOURCE_COEXIST='__coexist__'`（packages/shared，双下划线包边不与真实档案 id 冲突）；`StyleBindBody.dimsSource` docblock 同步；shared 以 src 直出无需构建。
+2. 服务端绑定 schema 规则 5：值合法集 = 主∪辅 ∪ {哨兵}；越权 id / 未知维度校验原样保留。
+3. merge 算法钉死新增 1' 条：共存维按绑定序（主→辅）收集各档案该维 trim 非空文本、与已收段全等判重跳过、`；` 连接（保持 inject.ts `· 维度：text` 单行注入格式不被折行）；实际贡献=所有被收段档案（去重段不计贡献）。
+4. legacy 贡献计权：每维给其贡献档案各 +1（共存维可多档案同加）；显式 weights 路径与共存正交不受影响；主 max(w,1) 保底不变。normalizeDimsSource（仅主合法收窄形态）不改——单主语义下哨兵归主本就正确。
+5. UI：绑定面板高级设置每维 select 追加「共存（各档案拼接）」选项（勾选 ≥2 档案时渲染）+ 语义提示行「共存＝该维文本按绑定序（主→辅）拼接各勾选档案的非空文本，重复段去重。」；失勾至余下 <2 档案时共存键回落新主（select 不再渲染该选项，防悬空值）；换主重映射不影响哨兵键；保存经既有 dimsSource 通道落库快照。
+6. 兼容性：旧快照（V1/V2）不含哨兵 → 合并行为逐字节不变；哨兵只经 UI 显式选择写入。
+
+**验证链（主模型亲跑）：** lint 零输出、typecheck 全 workspace 0 错、全量测试 server 323+web 103+shared 2=**428**（基线 421 只增不减，+7=merge 5+http style 1+web 面板 1）、build 398.31kB、audit --prod 零新增。推送前主模型亲审替代 code-review（owner 不外派令，Standards/Spec 两轴）。GUI 未验证（owner 真实测试）点位：书详情→风格绑定→高级设置七维「共存」选项出现（勾 2+ 档案）/选共存保存回显/解绑重绑初值、生成时该维文本双档案拼接实际效果。

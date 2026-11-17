@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { STYLE_DIMENSIONS } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, STYLE_DIMENSIONS } from '@inkforge/shared';
 
 export const createBookSchema = z.object({
   title: z.string().min(1),
@@ -90,12 +90,12 @@ export const styleBindSchema = z
     if (new Set(aux).size !== aux.length) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '辅档案不可重复勾选' });
     }
-    // 规则 5：dimsSource 键 ∈ 七维；值 ∈ 主∪辅
+    // 规则 5：dimsSource 键 ∈ 七维；值 ∈ 主∪辅 ∪ {共存哨兵}（DEC-2026-1118-03）
     const allowed = new Set([v.primaryProfileId, ...aux]);
     for (const [dim, src] of Object.entries(v.dimsSource ?? {})) {
       if (!(STYLE_DIMENSIONS as readonly string[]).includes(dim)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `未知风格维度：${dim}` });
-      } else if (!allowed.has(src)) {
+      } else if (src !== DIM_SOURCE_COEXIST && !allowed.has(src)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `维度来源必须在已勾选档案中：${dim}` });
       }
     }

@@ -7,6 +7,7 @@ import { buildApp } from '../../src/app';
 import { createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
 import type { DistillJobDto, DistillStyleDraftDto } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST } from '@inkforge/shared';
 
 let dir: string;
 let db: Database;
@@ -278,6 +279,36 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     // 清理：解绑 + 删三档案，不留脏引用
     await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
     for (const pid of [p1, p2, p3]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
+
+  it('共存哨兵（DEC-2026-1118-03）：dimsSource 值=__coexist__ 放行落库回显；未勾选档案值仍 400', async () => {
+    const p1 = await newProfile('共存主档');
+    const p2 = await newProfile('共存辅档');
+    const book = await newBook('共存书');
+
+    const bind = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, auxProfileIds: [p2], dimsSource: { ['特色词汇']: DIM_SOURCE_COEXIST } },
+    });
+    expect(bind.statusCode).toBe(200);
+    const g = (await app.inject({ method: 'GET', url: `/api/books/${book.id}` })).json() as {
+      styleBinding: { dimsSource: Record<string, string> };
+    };
+    expect(g.styleBinding.dimsSource['特色词汇']).toBe(DIM_SOURCE_COEXIST);
+
+    // 哨兵放行不放宽其余校验：越权 id 照旧 400
+    const bad = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, dimsSource: { ['对话']: 'no-such-profile' } },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
+    for (const pid of [p1, p2]) {
       expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
     }
   });
