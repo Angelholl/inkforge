@@ -10,7 +10,7 @@ import * as runsRepo from '../db/repositories/runs';
 import * as booksRepo from '../db/repositories/books';
 import { getLatestProfile } from '../style/distill';
 import type { StyleMetrics } from '../style/metrics';
-import type { StyleSample } from '../style/distill';
+import { loadStyleBundle, mergeStyleProfiles } from '../style/merge';
 import { runL0Checks, loadCliches } from '../quality/l0';
 
 const CLIQUES_PATH = process.env.INKFORGE_CLIQUES_PATH ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
@@ -21,6 +21,44 @@ const POLISH_PASSES = [
   { name: '风格一致', instruction: '对以下章节做风格一致性校对：对齐绑定文风档案的句长、对话占比、叙事人称与用词习惯，逐段修正偏离处。' },
   { name: '去 AI 化', instruction: '对以下章节去 AI 化：删除套话句式（如「不是…而是…」「空气仿佛凝固」），把模板化表达替换为具体细节，使口吻自然。' },
 ] as const;
+
+/** L0 基准素材（DEC-2026-1117-04 裁决②：走合并档案，与 chapter.ts 同构）：
+ *  binding=getBookStyleBinding ?? 主镜像合成 → loadStyleBundle（快照优先回落 live 行）→ mergeStyleProfiles。
+ *  terms=merged.terms；referenceTexts=merged.samples 直取 text（轮转已在 merge 第 7 步完成，不再二次轮转；空数组→undefined）；
+ *  voiceRefMetrics=主档案 metrics 快照（空串/坏 JSON 回落 getLatestProfile(主) 现行 metrics_json 再容错 → undefined）。
+ *  merged 为 undefined（未绑定/无档案行）→ 三值维持空缺省。 */
+export function polishBenchmarks(
+  db: Database,
+  book: { id: string; styleProfileId: string | null; styleSnapshotJson: string | null },
+  chapterNo: number,
+): { voiceRefMetrics: StyleMetrics | undefined; referenceTexts: string[] | undefined; terms: StyleTermDto[] } {
+  let voiceRefMetrics: StyleMetrics | undefined;
+  let referenceTexts: string[] | undefined;
+  let terms: StyleTermDto[] = [];
+  if (!book.styleProfileId) return { voiceRefMetrics, referenceTexts, terms };
+  const binding = booksRepo.getBookStyleBinding(db, book.id)
+    ?? { primaryProfileId: book.styleProfileId, auxProfileIds: [], dimsSource: {} };
+  const bundle = binding ? loadStyleBundle(db, { styleProfileId: book.styleProfileId, styleSnapshotJson: book.styleSnapshotJson }) : undefined;
+  const merged = bundle ? mergeStyleProfiles(bundle, chapterNo) : undefined;
+  if (!merged) return { voiceRefMetrics, referenceTexts, terms };
+  terms = merged.terms;
+  const texts = merged.samples.map((s) => s.text);
+  if (texts.length > 0) referenceTexts = texts;
+  try {
+    voiceRefMetrics = JSON.parse(merged.primaryMetricsJson) as StyleMetrics;
+  } catch {
+    voiceRefMetrics = undefined;
+  }
+  if (!voiceRefMetrics) {
+    const profile = getLatestProfile(db, merged.primaryProfileId);
+    try {
+      voiceRefMetrics = profile ? (JSON.parse(profile.metrics_json) as StyleMetrics) : undefined;
+    } catch {
+      voiceRefMetrics = undefined;
+    }
+  }
+  return { voiceRefMetrics, referenceTexts, terms };
+}
 
 /** 批量校对单章：三章 pass 顺序改写 → 单个 revised 版本（不移动 current 指针，人工采用）；
  *  L0 基准=绑定档案（persona 快照优先）metrics + few-shot 3 段样本；结果记 params.l0。 */
@@ -38,46 +76,11 @@ export async function runPolishChapter(
   const v0 = chapter.currentVersionId ? chaptersRepo.getVersion(db, chapter.currentVersionId) : undefined;
   if (!v0) return; // 无正文的章不校对
 
-  // L0 基准素材：绑定档案（快照优先回落现值），损坏 JSON 容错
+  // L0 基准素材：绑定档案走合并档案（与 chapter 同构），损坏 JSON 容错
   const book = booksRepo.getBook(db, args.bookId);
-  let voiceRefMetrics: StyleMetrics | undefined;
-  let referenceTexts: string[] | undefined;
-  let terms: StyleTermDto[] = [];
-  if (book?.styleProfileId) {
-    const profile = getLatestProfile(db, book.styleProfileId);
-    if (profile) {
-      const metricsSource = profile.metrics_json;
-      let rulesSource = profile.rules_json;
-      let samplesSource = profile.samples_json;
-      if (book.styleSnapshotJson) {
-        try {
-          const snap = JSON.parse(book.styleSnapshotJson) as { rulesJson?: string; samplesJson?: string };
-          if (snap.rulesJson) rulesSource = snap.rulesJson;
-          if (snap.samplesJson) samplesSource = snap.samplesJson;
-        } catch {
-          /* 损坏快照回落档案现值 */
-        }
-      }
-      try {
-        voiceRefMetrics = JSON.parse(metricsSource) as StyleMetrics;
-      } catch {
-        voiceRefMetrics = undefined;
-      }
-      try {
-        const sampleList = JSON.parse(samplesSource) as StyleSample[];
-        const startIdx = (args.chapterNo - 1) % Math.max(1, sampleList.length);
-        referenceTexts = sampleList.slice(startIdx, startIdx + 3).map((s) => s.text);
-        if (referenceTexts.length === 0) referenceTexts = undefined;
-      } catch {
-        referenceTexts = undefined;
-      }
-      try {
-        terms = (JSON.parse(rulesSource) as { terms?: StyleTermDto[] }).terms ?? [];
-      } catch {
-        terms = [];
-      }
-    }
-  }
+  const { voiceRefMetrics, referenceTexts, terms } = book
+    ? polishBenchmarks(db, book, args.chapterNo)
+    : { voiceRefMetrics: undefined, referenceTexts: undefined, terms: [] as StyleTermDto[] };
 
   let content = v0.content;
   for (const [i, pass] of POLISH_PASSES.entries()) {

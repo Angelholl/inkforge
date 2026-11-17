@@ -8,17 +8,25 @@ import { createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
 import { getRun, listSteps } from '../../src/db/repositories/runs';
 import { appendChapterVersion, getChapter, listVersions, setCurrentVersion } from '../../src/db/repositories/chapters';
+import { createBook, setBookStyleBinding } from '../../src/db/repositories/books';
+import * as booksRepo from '../../src/db/repositories/books';
+import { createRun } from '../../src/db/repositories/runs';
+import { buildStyleBundle, mergeStyleProfiles, type StyleProfileContent } from '../../src/style/merge';
+import { runPolishChapter, polishBenchmarks } from '../../src/pipeline/polish';
+import { createDefaultMockProvider } from '../../src/llm/mock';
+import type { CompletionRequest, LlmProvider } from '../../src/llm/types';
 
 let dir: string;
 let db: Database;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let bookId: string;
+let config: ReturnType<typeof loadConfig>;
 
 const POLISH_OUTPUT = '校对后的正文内容，句式自然，无套话。'.repeat(10);
 
 beforeAll(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-polish-'));
-  const config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
+  config = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: dir });
   db = openDb(path.join(config.dataDir, 'inkforge.db'));
   app = await buildApp({
     config,
@@ -104,6 +112,95 @@ describe('B10 批量校对（polish run）', () => {
     await waitForDone(runId);
     expect(getRun(db, runId)!.status).toBe('done');
     expect(listSteps(db, runId)).toHaveLength(0);
+  });
+});
+
+describe('polishBenchmarks（混合档案基准）', () => {
+  function capturing(inner: LlmProvider): { calls: Array<{ step: string; system: string; user: string }>; provider: LlmProvider } {
+    const calls: Array<{ step: string; system: string; user: string }> = [];
+    return {
+      calls,
+      provider: {
+        complete: async (req: CompletionRequest) => {
+          calls.push({ step: String((req.meta as { step?: string } | undefined)?.step ?? ''), system: req.system ?? '', user: req.user ?? '' });
+          return inner.complete(req);
+        },
+      },
+    };
+  }
+
+  function setupBoundBook(suffix: string): string {
+    const bid = createBook(db, { title: '校对混合档案书', description: '修真。' }).id;
+    db.prepare(
+      "INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      `pb-ch${suffix}`,
+      bid,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '混合档案校对测试', beats: [], mustHaveBeats: [], bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+    const ch = getChapter(db, bid, 1)!;
+    const v = appendChapterVersion(db, { chapterId: ch.id, kind: 'draft', content: '原始正文，包含「不是…而是…」套话句式。'.repeat(6) });
+    setCurrentVersion(db, ch.id, v.id);
+    const bundle = buildStyleBundle({
+      primaryProfileId: 'pb-main',
+      auxProfileIds: ['pb-aux'],
+      dimsSource: { 写作特点: 'pb-aux', 特色词汇: 'pb-aux', 章节结构: 'pb-aux' },
+      profiles: {
+        'pb-main': {
+          version: 1,
+          metricsJson: '{}',
+          rulesText: '主规则',
+          dims: { 节奏: '主节奏', 对话: '主对话', 描写: '主描写', 情感基调: '主情感基调' },
+          axes: {},
+          terms: [],
+          samples: [
+            { id: 's1', text: '主样本一' },
+            { id: 's2', text: '主样本二' },
+          ],
+        },
+        'pb-aux': {
+          version: 1,
+          metricsJson: '',
+          rulesText: '',
+          dims: { 写作特点: '辅写作特点', 特色词汇: '辅特色词汇', 章节结构: '辅章节结构' },
+          axes: {},
+          terms: [{ term: '灵力', note: '代指法力' }],
+          samples: [{ id: 'a1', text: '辅样本一' }],
+        },
+      } satisfies Record<string, StyleProfileContent>,
+    });
+    setBookStyleBinding(
+      db,
+      bid,
+      { primaryProfileId: 'pb-main', auxProfileIds: ['pb-aux'], dimsSource: { 写作特点: 'pb-aux', 特色词汇: 'pb-aux', 章节结构: 'pb-aux' } },
+      JSON.stringify(bundle),
+    );
+    return bid;
+  }
+
+  it('polishBenchmarks：合并档案基准——术语并集含辅、referenceTexts 直取 merged.samples 无二次轮转', async () => {
+    const bid = setupBoundBook('a');
+    const book = booksRepo.getBook(db, bid)!;
+    const bundle = JSON.parse(book.styleSnapshotJson!) as Parameters<typeof mergeStyleProfiles>[0];
+    const merged = mergeStyleProfiles(bundle, 2);
+
+    const out = polishBenchmarks(db, book, 2);
+    expect(out.terms).toContainEqual({ term: '灵力', note: '代指法力' });
+    expect(merged.samples).toHaveLength(3);
+    expect(out.referenceTexts).toEqual(merged.samples.map((s) => s.text));
+    expect(out.voiceRefMetrics).toEqual({});
+
+    // 注入面：runPolishChapter 既有 harness，task 槽含辅档案术语条目
+    const runId = createRun(db, { bookId: bid, mode: 'generate', chapterScope: { from: 1, to: 1 }, kind: 'polish' }).id;
+    const cap = capturing(createDefaultMockProvider());
+    await runPolishChapter({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    const rewrites = cap.calls.filter((c) => c.step === 'rewrite');
+    expect(rewrites).toHaveLength(3);
+    expect(rewrites.some((c) => c.user.includes('灵力：代指法力'))).toBe(true);
   });
 });
 
