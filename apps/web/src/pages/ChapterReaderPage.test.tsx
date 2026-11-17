@@ -132,10 +132,10 @@ describe('ChapterReaderPage', () => {
     expect(await screen.findByText(/当前版本不可删除/)).toBeTruthy();
   });
 
-  it('导出澄清：按钮「导出全书正文（Markdown）」+旁注；toast 报 outDir 绝对路径', async () => {
+  it('导出澄清：按钮「导出全书正文（TXT）」+旁注；toast 报 outDir 绝对路径', async () => {
     mockFetch();
     renderPage();
-    const btn = screen.getByRole('button', { name: '导出全书正文（Markdown）' });
+    const btn = screen.getByRole('button', { name: '导出全书正文（TXT）' });
     expect(screen.getByText('保存到本机 data/exports/，不自动下载')).toBeTruthy();
     fireEvent.click(btn);
     expect(await screen.findByText(/已导出 1 个文件至 X:\\mock\\data\\exports\\测试书/)).toBeTruthy();

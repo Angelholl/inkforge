@@ -75,6 +75,7 @@ describe('REST API', () => {
     expect(ex.statusCode).toBe(200);
     const body = ex.json() as { files: string[]; outDir: string };
     expect(body.files.length).toBeGreaterThanOrEqual(1);
+    expect(body.files.every((f) => f.endsWith('.txt'))).toBe(true); // 缺省 txt（DEC-2026-1118-01）
     expect(path.isAbsolute(body.outDir)).toBe(true); // D3：toast 报位依据
     expect(body.outDir).toContain('exports');
     const hits = await app.inject({ method: 'GET', url: `/api/books/${bookId}/search?q=${encodeURIComponent('章1段')}` });

@@ -11,16 +11,16 @@ function safeTitle(title: string): string {
 
 /**
  * 导出（C3 三格式）：
- * - chapters-md（默认）：{NNN}-{safeTitle}.md = '# 第N章 title\n\n' + current 全文
+ * - txt（默认，DEC-2026-1118-01）：分章 .txt，无 '# ' 标题行（纯正文）
+ * - chapters-md：{NNN}-{safeTitle}.md = '# 第N章 title\n\n' + current 全文
  * - combined-md：单个「全书.md」，章节间以 '\n\n---\n\n' 间隔
- * - txt：分章 .txt，无 '# ' 标题行（纯正文）
  * 无版本章跳过。
  */
 export async function exportBook(
   db: Database,
   bookId: string,
   outDir: string,
-  format: ExportFormat = 'chapters-md',
+  format: ExportFormat = 'txt',
 ): Promise<{ files: string[] }> {
   await fs.mkdir(outDir, { recursive: true });
   const files: string[] = [];

@@ -70,7 +70,7 @@ export default function ChapterReaderPage() {
           回滚到当前所选
         </Button>
         <Button variant="primary" onClick={exportBook}>
-          导出全书正文（Markdown）
+          导出全书正文（TXT）
         </Button>
         <span className="text-xs text-muted">保存到本机 data/exports/，不自动下载</span>
       </div>

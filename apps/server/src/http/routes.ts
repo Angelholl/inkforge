@@ -961,8 +961,8 @@ ${repairPrompt(first.errors)}`))).text,
     const { bookId } = req.params as { bookId: string };
     const book = booksRepo.getBook(db, bookId);
     if (!book) return reply.code(404).send({ error: 'not found' });
-    // C3 导出格式：query.format 枚举校验，缺省 chapters-md
-    const rawFormat = (req.query as { format?: string }).format ?? 'chapters-md';
+    // C3 导出格式：query.format 枚举校验，缺省 txt（DEC-2026-1118-01 owner 令：默认不作 .md）
+    const rawFormat = (req.query as { format?: string }).format ?? 'txt';
     const formats = ['chapters-md', 'combined-md', 'txt'] as const;
     if (!formats.includes(rawFormat as (typeof formats)[number])) {
       return reply.code(400).send({ error: `format 须为 ${formats.join('/')}` });

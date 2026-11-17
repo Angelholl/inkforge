@@ -487,7 +487,7 @@ export default function BookDetailPage() {
     }
   };
 
-  const [exportFormat, setExportFormat] = useState<ExportFormat>('chapters-md');
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('txt');
   const exportNow = async () => {
     try {
       const r = await api.exportBook(bookId, exportFormat);
