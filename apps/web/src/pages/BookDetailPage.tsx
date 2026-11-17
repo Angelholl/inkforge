@@ -9,13 +9,48 @@ import { Badge, Button, Chip } from '../components/ui';
 import { STYLE_DIMENSIONS } from '@inkforge/shared';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
 
-/** 风格绑定面板（多选拼装）：档案勾选（上限 4）+ 主风格 + 七维来源，保存经 onBind 发多选 body，解绑发 {profileId:null}。 */
+/**
+ * 融合比例归一（DEC-2026-1117-05，客户端归一后提交、服务端只校验）：
+ * ① 钳位：整数、≥1（0/空串/NaN/负一律按 1，禁 0%）；
+ * ② Hamilton 最大余数法分 100 席（平手=orderedIds 序：基准先、再绑定序）；
+ * ③ 0 席钳底：从当前最大席（平手同序）挪 1，循环至全部 ≥1（≤4 档案 Σ=100 必终止）。
+ */
+export function normalizeWeights(values: Record<string, number>, orderedIds: string[]): Record<string, number> {
+  const clamped = orderedIds.map((id) => {
+    const v = Math.trunc(Number(values[id]));
+    return Number.isFinite(v) && v >= 1 ? v : 1;
+  });
+  const total = clamped.reduce((s, n) => s + n, 0);
+  const seats = clamped.map((n) => Math.floor((100 * n) / total));
+  let left = 100 - seats.reduce((s, n) => s + n, 0);
+  const byRemainder = orderedIds
+    .map((id, i) => ({ i, rem: (100 * clamped[i]!) / total - seats[i]! }))
+    .sort((a, b) => b.rem - a.rem || a.i - b.i);
+  for (let k = 0; left > 0; k += 1, left -= 1) {
+    seats[byRemainder[k % byRemainder.length]!.i]! += 1;
+  }
+  for (;;) {
+    const deficient = seats.findIndex((s) => s < 1);
+    if (deficient < 0) break;
+    let donor = 0;
+    for (let i = 1; i < seats.length; i += 1) if (seats[i]! > seats[donor]!) donor = i;
+    seats[donor]! -= 1;
+    seats[deficient]! += 1;
+  }
+  const out: Record<string, number> = {};
+  orderedIds.forEach((id, i) => {
+    out[id] = seats[i]!;
+  });
+  return out;
+}
+
+/** 风格绑定面板（多选融合，DEC-2026-1117-05）：档案勾选（上限 4）+ 基准档案 + 比例区（六轴与范例取样）+ 七维来源收进高级设置；保存经 onBind 发多选 body，解绑发 {profileId:null}。 */
 function StyleBindPanel({
   binding,
   profiles,
   onBind,
 }: {
-  binding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> } | null;
+  binding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string>; weights?: Record<string, number> } | null;
   profiles: StyleProfileDto[];
   onBind: (body: StyleBindBody) => void;
 }) {
@@ -27,12 +62,26 @@ function StyleBindPanel({
     for (const d of STYLE_DIMENSIONS) base[d] = binding?.dimsSource?.[d] ?? binding?.primaryProfileId ?? '';
     return base;
   });
-  // 用户显式改过的维度键：换主风格时这些键不跟随重映射
+  // 用户显式改过的维度键：换基准档案时这些键不跟随重映射
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  // 融合比例：raw 存钳位后未归一整数，保存时 normalizeWeights 归一（防逐键打架）
+  const legacyRow = binding !== null && Object.keys(binding.weights ?? {}).length === 0;
+  const [rawWeights, setRawWeights] = useState<Record<string, number>>(() => (!legacyRow && binding ? { ...binding.weights } : {}));
+  const [weightsTouched, setWeightsTouched] = useState(false);
 
   const profileOf = (id: string) => profiles.find((p) => p.id === id);
-  // 主+已勾辅（主排首）＝七维 select 的选项序
+  // 主+已勾辅（主排首）＝七维 select 与比例区的选项序
   const ordered = [primary, ...checked.filter((id) => id !== primary)].filter(Boolean);
+
+  const resetWeightsFor = (np: string, nextIds: string[]) => {
+    const newIds = [np, ...nextIds.filter((id) => id !== np)].filter(Boolean);
+    if (!legacyRow && newIds.length > 0) {
+      setRawWeights(normalizeWeights(Object.fromEntries(newIds.map((id) => [id, 1])), newIds));
+    } else {
+      setRawWeights({}); // legacy 行保持空不预填；空勾选清空
+    }
+    setWeightsTouched(false);
+  };
 
   const toggle = (p: StyleProfileDto) => {
     if (checked.includes(p.id)) {
@@ -46,9 +95,12 @@ function StyleBindPanel({
         for (const d of STYLE_DIMENSIONS) if (out[d] === p.id || (out[d] === primary && !touched.has(d))) out[d] = np;
         return out;
       });
+      resetWeightsFor(np, next);
     } else {
       if (checked.length >= 4) return; // 上限 4（1 主 + 3 辅）
-      setChecked([...checked, p.id]);
+      const next = [...checked, p.id];
+      const np = primary || p.id;
+      setChecked(next);
       if (!primary) {
         setPrimary(p.id);
         setDims((prev) => {
@@ -57,12 +109,13 @@ function StyleBindPanel({
           return out;
         });
       }
+      resetWeightsFor(np, next);
     }
   };
 
   const changePrimary = (v: string) => {
     setPrimary(v);
-    // 换主重映射：值===旧主且未 touched 的键改指新主（否则七键初值永远指旧主，critic 2.4）
+    // 换主重映射：值===旧主且未 touched 的键改指新主（否则七键初值永远指旧主，critic 2.4）；比例成员未变不重算（N5）
     setDims((prev) => {
       const out = { ...prev };
       for (const d of STYLE_DIMENSIONS) if (!touched.has(d) && out[d] === primary) out[d] = v;
@@ -74,7 +127,13 @@ function StyleBindPanel({
     // dims 补齐七键：未显式改的键 = 主
     const dimsSource: Record<string, string> = {};
     for (const d of STYLE_DIMENSIONS) dimsSource[d] = dims[d] || primary;
-    onBind({ primaryProfileId: primary, auxProfileIds: checked.filter((id) => id !== primary), dimsSource });
+    const ids = [primary, ...checked.filter((id) => id !== primary)].filter(Boolean);
+    const body: StyleBindBody = { primaryProfileId: primary, auxProfileIds: checked.filter((id) => id !== primary), dimsSource };
+    // 非 legacy 行恒带 weights（含单档案 {id:100}——修辅权重 0 根因）；legacy 行触碰过才带（N6）
+    if ((!legacyRow || weightsTouched) && ids.length > 0) {
+      body.weights = normalizeWeights(Object.fromEntries(ids.map((id) => [id, rawWeights[id] ?? 1])), ids);
+    }
+    onBind(body);
   };
 
   return (
@@ -97,8 +156,14 @@ function StyleBindPanel({
           );
         })}
       </div>
-      <select aria-label="主风格" className="rounded border px-2 py-1" value={primary} onChange={(e) => changePrimary(e.target.value)}>
-        {primary === '' && <option value="">（未选主风格）</option>}
+      <select
+        aria-label="基准档案"
+        title="规则全量、声线锚、画像默认归属归基准档案"
+        className="rounded border px-2 py-1"
+        value={primary}
+        onChange={(e) => changePrimary(e.target.value)}
+      >
+        {primary === '' && <option value="">（未选基准档案）</option>}
         {checked.map((id) => {
           const p = profileOf(id);
           if (!p) return null;
@@ -109,32 +174,65 @@ function StyleBindPanel({
           );
         })}
       </select>
-      <div className="flex flex-wrap items-center gap-2">
-        {STYLE_DIMENSIONS.map((d) => (
-          <label key={d} className="flex items-center gap-1">
-            {d}
-            <select
-              aria-label={`维度来源-${d}`}
-              className="rounded border px-2 py-1"
-              value={dims[d] ?? ''}
-              onChange={(e) => {
-                setDims({ ...dims, [d]: e.target.value });
-                setTouched(new Set(touched).add(d));
-              }}
-            >
-              {ordered.map((id) => {
-                const p = profileOf(id);
-                if (!p) return null;
-                return (
-                  <option key={id} value={id}>
-                    {p.name}（v{p.version}）
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-        ))}
-      </div>
+      {checked.length >= 2 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">六轴与范例取样比例</span>
+          {legacyRow && <span className="text-xs text-faint">旧绑定：按贡献维数计权（保持原行为）</span>}
+          {ordered.map((id) => {
+            const p = profileOf(id);
+            if (!p) return null;
+            return (
+              <label key={id} className="flex items-center gap-1">
+                {p.name}
+                <input
+                  type="number"
+                  min={1}
+                  className="w-16 rounded border px-1 py-0.5"
+                  aria-label={`比例-${p.name}`}
+                  value={rawWeights[id] ?? ''}
+                  onChange={(e) => {
+                    const n = Math.trunc(Number(e.target.value));
+                    setRawWeights({ ...rawWeights, [id]: Number.isFinite(n) && n >= 1 ? n : 1 });
+                    setWeightsTouched(true);
+                  }}
+                />
+              </label>
+            );
+          })}
+          <p className="mt-1 w-full text-xs text-faint">
+            规则与术语始终为基准全量+辅去重补充，画像各维文本按高级设置取源，不受比例影响
+          </p>
+        </div>
+      )}
+      <details className="w-full">
+        <summary className="cursor-pointer text-sm">高级设置</summary>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {STYLE_DIMENSIONS.map((d) => (
+            <label key={d} className="flex items-center gap-1">
+              {d}
+              <select
+                aria-label={`维度来源-${d}`}
+                className="rounded border px-2 py-1"
+                value={dims[d] ?? ''}
+                onChange={(e) => {
+                  setDims({ ...dims, [d]: e.target.value });
+                  setTouched(new Set(touched).add(d));
+                }}
+              >
+                {ordered.map((id) => {
+                  const p = profileOf(id);
+                  if (!p) return null;
+                  return (
+                    <option key={id} value={id}>
+                      {p.name}（v{p.version}）
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          ))}
+        </div>
+      </details>
       {/* 无主或零勾选禁用保存：防发 primaryProfileId:'' 吃 400（critic 2.4） */}
       <Button variant="primary" disabled={!primary || checked.length === 0} onClick={save}>
         保存绑定

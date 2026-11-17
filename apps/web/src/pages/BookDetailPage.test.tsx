@@ -2,7 +2,7 @@ import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import BookDetailPage from './BookDetailPage';
+import BookDetailPage, { normalizeWeights } from './BookDetailPage';
 
 // 回归：original 章须有「补摘要」按钮（手动触发，零自动模型调用——DEC-2026-1113-05 第 3 条）
 const book = {
@@ -515,12 +515,16 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     );
   }
 
-  it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 七键 dimsSource', async () => {
+  it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 七键 dimsSource + weights 均分', async () => {
     installBindStub({});
     renderPanel();
     fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
     fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
-    expect((screen.getByLabelText('主风格') as HTMLSelectElement).value).toBe('p1');
+    expect((screen.getByLabelText('基准档案') as HTMLSelectElement).value).toBe('p1');
+    // 比例区（≥2 勾选渲染）：默认均分余数归基准
+    expect((screen.getByLabelText('比例-风格A') as HTMLInputElement).value).toBe('50');
+    expect((screen.getByLabelText('比例-风格B') as HTMLInputElement).value).toBe('50');
+    (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
     fireEvent.change(screen.getByLabelText('维度来源-对话'), { target: { value: 'p2' } });
     fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
     const put = await waitFor(() => {
@@ -532,6 +536,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
       primaryProfileId: 'p1',
       auxProfileIds: ['p2'],
       dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
+      weights: { p1: 50, p2: 50 },
     });
   });
 
@@ -552,7 +557,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: null });
   });
 
-  it('已绑书初值渲染：binding 非空 → 勾选/主风格/七维值全部落对', async () => {
+  it('已绑书初值渲染：binding 非空 → 勾选/基准档案/七维值全部落对（legacy 提示在场）', async () => {
     installBindStub({
       firstFrameUndefined: true,
       bookOverride: {
@@ -564,13 +569,138 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     renderPanel();
     await waitFor(() => expect(calls.some((c) => c.url.includes('/api/books/b1') && !c.url.includes('characters'))).toBe(true));
     // 首帧 book undefined：面板不得挂载（critic 2.4 挂载时机）
-    expect(screen.queryByLabelText('主风格')).toBeNull();
+    expect(screen.queryByLabelText('基准档案')).toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: '刷新' }));
-    await waitFor(() => expect((screen.getByLabelText('主风格') as HTMLSelectElement).value).toBe('p1'));
+    await waitFor(() => expect((screen.getByLabelText('基准档案') as HTMLSelectElement).value).toBe('p1'));
     expect((screen.getByLabelText('风格档案勾选-风格A') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('风格档案勾选-风格B') as HTMLInputElement).checked).toBe(true);
+    // 旧绑定（无 weights）= legacy：提示在场、比例不预填
+    expect(screen.getByText('旧绑定：按贡献维数计权（保持原行为）')).toBeTruthy();
+    expect((screen.getByLabelText('比例-风格A') as HTMLInputElement).value).toBe('');
+    (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
     expect((screen.getByLabelText('维度来源-对话') as HTMLSelectElement).value).toBe('p2');
     expect((screen.getByLabelText('维度来源-节奏') as HTMLSelectElement).value).toBe('p1');
     expect((screen.getByRole('button', { name: '保存绑定' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('三档默认均分平手余数归基准：勾 3 档比例显示 34/33/33，保存 weights {p1:34,p2:33,p3:33}', async () => {
+    installBindStub({});
+    renderPanel();
+    for (const name of ['风格A', '风格B', '风格C']) {
+      fireEvent.click(await screen.findByLabelText(`风格档案勾选-${name}`));
+    }
+    expect((screen.getByLabelText('比例-风格A') as HTMLInputElement).value).toBe('34');
+    expect((screen.getByLabelText('比例-风格B') as HTMLInputElement).value).toBe('33');
+    expect((screen.getByLabelText('比例-风格C') as HTMLInputElement).value).toBe('33');
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body)).weights).toEqual({ p1: 34, p2: 33, p3: 33 });
+  });
+
+  it('比例输入 0 按 1 处理：回显 \'1\'，保存归一 {p1:2,p2:98}', async () => {
+    installBindStub({});
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
+    fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
+    fireEvent.change(screen.getByLabelText('比例-风格A'), { target: { value: '0' } });
+    expect((screen.getByLabelText('比例-风格A') as HTMLInputElement).value).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body)).weights).toEqual({ p1: 2, p2: 98 });
+  });
+
+  it('legacy 行未触碰：提示在场、比例不预填、勾选变化后保存 body 无 weights 键', async () => {
+    installBindStub({
+      bookOverride: {
+        styleProfileId: 'p1',
+        styleFewshotOn: false,
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: { 对话: 'p2' }, weights: {} },
+      },
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-风格C'));
+    expect(screen.getByText('旧绑定：按贡献维数计权（保持原行为）')).toBeTruthy();
+    expect((screen.getByLabelText('比例-风格A') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('比例-风格C') as HTMLInputElement).value).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    // toEqual 三键精确形态即证无 weights 键
+    expect(JSON.parse(String(put.init?.body))).toEqual({
+      primaryProfileId: 'p1',
+      auxProfileIds: ['p2', 'p3'],
+      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
+    });
+  });
+
+  it('legacy 行触碰比例后保存带 weights：70/30 原样归一 {p1:70,p2:30}', async () => {
+    installBindStub({
+      bookOverride: {
+        styleProfileId: 'p1',
+        styleFewshotOn: false,
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: {}, weights: {} },
+      },
+    });
+    renderPanel();
+    fireEvent.change(await screen.findByLabelText('比例-风格A'), { target: { value: '70' } });
+    fireEvent.change(screen.getByLabelText('比例-风格B'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body)).weights).toEqual({ p1: 70, p2: 30 });
+  });
+
+  it('单档案保存 weights {p1:100}：无比例区渲染', async () => {
+    installBindStub({});
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
+    expect(screen.queryByLabelText('比例-风格A')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body)).weights).toEqual({ p1: 100 });
+  });
+
+  it('加权行回显：binding.weights {p1:60,p2:40} → 输入 60/40，未触碰保存原样带出', async () => {
+    installBindStub({
+      bookOverride: {
+        styleProfileId: 'p1',
+        styleFewshotOn: false,
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: {}, weights: { p1: 60, p2: 40 } },
+      },
+    });
+    renderPanel();
+    expect(((await screen.findByLabelText('比例-风格A')) as HTMLInputElement).value).toBe('60');
+    expect((screen.getByLabelText('比例-风格B') as HTMLInputElement).value).toBe('40');
+    expect(screen.queryByText('旧绑定：按贡献维数计权（保持原行为）')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body)).weights).toEqual({ p1: 60, p2: 40 });
+  });
+
+  it('normalizeWeights 纯函数：悬殊输入钳底循环；已归一输入幂等', () => {
+    expect(normalizeWeights({ a: 1000, b: 1, c: 1, d: 1 }, ['a', 'b', 'c', 'd'])).toEqual({ a: 97, b: 1, c: 1, d: 1 });
+    expect(normalizeWeights({ x: 50, y: 50 }, ['x', 'y'])).toEqual({ x: 50, y: 50 });
   });
 });
