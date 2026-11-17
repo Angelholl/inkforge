@@ -4,7 +4,7 @@
  * 0. 去重防御：auxProfileIds 滤除 primaryProfileId（同一档案不得双计权重与样本）。
  * 1. 七维来源判定：缺键/空串/值 ∉ {主∪辅} → primary（merge 内按 ids 全集解析；normalizeDimsSource 导出为「仅主合法」收窄形态，签名不含辅集合，勿用于多档案归一）。
  * 2. dims[dim]：来源档案该维文本 trim 非空即用并记实际来源；来源不在 profiles 或文本空 → 回落主档案该维文本（实际来源=主）；仍空 → ''（实际来源=无）。
- * 3. 权重：w_p = |{dim : 实际来源 === p}|；主 w = max(w, 1) 保底；W = Σw。
+ * 3. 权重（双分支，DEC-2026-1117-05）：bundle.weights 键集非空 → 加权路径 w_p=weights[p]（正有限数，缺键/非法=0，主保底废除）；缺席/空对象 → legacy 路径 w_p=实际贡献维数、主 max(w,1) 保底（改前行为逐字节保留）。第 4/7 步消费方式不变。
  * 4. axes[axis]：参与集合 P = 该轴值为有限数字 且 w_p > 0 的档案；P 空 → 该轴不写入；否则 Math.round(Σ w_p·v / Σ w_p)。
  * 5. rulesText：主原样全量（预算截断归 assembler）；辅逐行 trim 非空、与已收行 trim 相等判重跳过；
  *    追加前置条件 累计长度 + 1 + 行长 ≤ RULES_TOTAL_BUDGET(400)，不满足则 break 当前辅档案行循环、继续下一辅档案。
@@ -36,12 +36,15 @@ export interface StyleProfileContent {
 
 export interface StyleBundleV2 {
   v: 2;
-  /** 恒 1；parse 缺省容忍=1——bundle 冻结的是内容非合并语义，算法演进时给已绑书留判别门 */
+  /** 恒 2（buildStyleBundle）；parse 缺省容忍=1 → 无 weights 即 legacy——bundle 冻结的是内容非合并语义 */
   mergeVersion: number;
   boundAt: string;
   primaryProfileId: string;
   auxProfileIds: string[];
   dimsSource: Record<string, string>;
+  /** 融合比例（DEC-2026-1117-05）：Record<profileId, 整数≥1>，键集=绑定全集、Σ=100（服务端 zod 保证）；
+   *  缺席/空对象=legacy（贡献维数计权+主保底1）。buildStyleBundle 仅在非空对象时写入本键。 */
+  weights?: Record<string, number>;
   profiles: Record<string, StyleProfileContent>;
 }
 
@@ -71,14 +74,17 @@ export function buildStyleBundle(input: {
   dimsSource: Record<string, string>;
   profiles: Record<string, StyleProfileContent>;
   boundAt?: string;
+  weights?: Record<string, number>;
 }): StyleBundleV2 {
   return {
     v: 2,
-    mergeVersion: 1,
+    mergeVersion: 2,
     boundAt: input.boundAt ?? new Date().toISOString(),
     primaryProfileId: input.primaryProfileId,
     auxProfileIds: input.auxProfileIds,
     dimsSource: input.dimsSource,
+    // legacy 语义由键缺席承载：空/缺省不写 weights 键，序列化后与改前快照逐字节同形
+    ...(input.weights && Object.keys(input.weights).length > 0 ? { weights: input.weights } : {}),
     profiles: input.profiles,
   };
 }
@@ -130,6 +136,8 @@ export function parseStyleBundle(raw: string | null | undefined): StyleBundleV2 
   const boundAt = typeof obj.boundAt === 'string' ? obj.boundAt : '';
   const auxProfileIds = Array.isArray(obj.auxProfileIds) ? (obj.auxProfileIds as unknown[]).filter((x): x is string => typeof x === 'string') : [];
   const dimsSource = obj.dimsSource && typeof obj.dimsSource === 'object' && !Array.isArray(obj.dimsSource) ? (obj.dimsSource as Record<string, string>) : {};
+  // weights 容错读：非对象/数组 → undefined（=legacy），V1 适配路径恒无 weights
+  const weights = obj.weights && typeof obj.weights === 'object' && !Array.isArray(obj.weights) ? (obj.weights as Record<string, number>) : undefined;
 
   // V1 旧快照适配：字符串键 rulesJson → 单主 bundle
   if (typeof obj.rulesJson === 'string') {
@@ -143,11 +151,11 @@ export function parseStyleBundle(raw: string | null | undefined): StyleBundleV2 
       terms: Array.isArray(rulesData.terms) ? (rulesData.terms as StyleTermDto[]) : [],
       samples: tolerantSamples(typeof obj.samplesJson === 'string' ? obj.samplesJson : undefined),
     };
-    return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds: [], dimsSource: {}, profiles: { [primaryProfileId]: content } };
+    return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds: [], dimsSource: {}, weights: undefined, profiles: { [primaryProfileId]: content } };
   }
 
   const profiles = obj.profiles && typeof obj.profiles === 'object' && !Array.isArray(obj.profiles) ? (obj.profiles as Record<string, StyleProfileContent>) : {};
-  return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds, dimsSource, profiles };
+  return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds, dimsSource, weights, profiles };
 }
 
 /** 绑定读取：快照优先回落 live 行（快照缺/坏时按单主组装），无绑定/无行 → undefined。 */
@@ -192,14 +200,24 @@ export function mergeStyleProfiles(bundle: StyleBundleV2, chapterNo: number): Me
     }
   }
 
-  // 3. 权重：按实际贡献维数，主保底 1
+  // 3. 权重（双分支，DEC-2026-1117-05）：bundle.weights 键集非空 → 加权路径（w_p=正有限数，缺键/非法=0，主保底废除）；
+  //    缺席/空对象 → legacy 路径（w_p=实际贡献维数、主 max(w,1) 保底，改前行为逐字节保留）
+  const weightsInput = bundle.weights;
+  const useWeights = weightsInput != null && Object.keys(weightsInput).length > 0;
   const weights = new Map<string, number>();
   for (const id of ids) weights.set(id, 0);
-  for (const dim of STYLE_DIMENSIONS) {
-    const src = actualSource[dim];
-    if (src !== undefined && weights.has(src)) weights.set(src, weights.get(src)! + 1);
+  if (useWeights) {
+    for (const id of ids) {
+      const w = weightsInput![id];
+      weights.set(id, typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : 0);
+    }
+  } else {
+    for (const dim of STYLE_DIMENSIONS) {
+      const src = actualSource[dim];
+      if (src !== undefined && weights.has(src)) weights.set(src, weights.get(src)! + 1);
+    }
+    weights.set(primaryProfileId, Math.max(weights.get(primaryProfileId) ?? 0, 1));
   }
-  weights.set(primaryProfileId, Math.max(weights.get(primaryProfileId) ?? 0, 1));
   const W = ids.reduce((sum, id) => sum + (weights.get(id) ?? 0), 0);
 
   // 4. 六轴加权：参与需 w_p > 0 且值为有限数字；P 空 → 不写入

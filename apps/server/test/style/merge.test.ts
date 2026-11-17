@@ -24,6 +24,7 @@ function bundle(over: {
   dimsSource?: Record<string, string>;
   profiles?: Record<string, StyleProfileContent>;
   boundAt?: string;
+  weights?: Record<string, number>;
 }): StyleBundleV2 {
   return buildStyleBundle({
     primaryProfileId: over.primaryProfileId ?? 'p1',
@@ -31,6 +32,7 @@ function bundle(over: {
     dimsSource: over.dimsSource ?? {},
     profiles: over.profiles ?? { p1: prof({ dims: { ...fullDims }, axes: { ...fullAxes }, samples: [{ id: 's0', text: 't0' }, { id: 's1', text: 't1' }, { id: 's2', text: 't2' }, { id: 's3', text: 't3' }] }) },
     boundAt: over.boundAt ?? '2026-01-01T00:00:00.000Z',
+    weights: over.weights,
   });
 }
 
@@ -319,5 +321,166 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
     expect(r2).toEqual(r1);
     const b2 = bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 描写: 'pB' }, profiles: { pB: profiles.pB, pA: profiles.pA } });
     expect(mergeStyleProfiles(b2, 1)).toEqual(r1);
+  });
+});
+
+describe('weights 加权路径（DEC-2026-1117-05）', () => {
+  /** 与「双档案按贡献维数加权取整」同型的基准 fixture：主 pA 叙述温度 70（4 维画像）、辅 pB 56（3 维画像）。 */
+  function abProfiles(samplesA = false, samplesB = false, axesB?: Partial<Record<StyleAxis, number>>): Record<string, StyleProfileContent> {
+    const dimsA = { 节奏: 'A节奏', 对话: 'A对话', 描写: 'A描写', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 写作特点: 'B写作', 特色词汇: 'B词汇', 章节结构: 'B章节' } as Partial<Record<StyleDimension, string>>;
+    const poolA: StyleSample[] = [{ id: 'a0', text: 'xa0' }, { id: 'a1', text: 'xa1' }, { id: 'a2', text: 'xa2' }, { id: 'a3', text: 'xa3' }];
+    const poolB: StyleSample[] = [{ id: 'b0', text: 'xb0' }, { id: 'b1', text: 'xb1' }];
+    return {
+      pA: prof({ dims: dimsA, axes: { ...fullAxes, 叙述温度: 70 }, samples: samplesA ? poolA : [] }),
+      pB: prof({ dims: dimsB, axes: axesB ?? { ...fullAxes, 叙述温度: 56 }, samples: samplesB ? poolB : [] }),
+    };
+  }
+
+  const DIMS_SRC_3B = { 写作特点: 'pB', 特色词汇: 'pB', 章节结构: 'pB' };
+  const DIMS_SRC_ALL_B = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, 'pB']));
+
+  it('legacy 回归：mergeVersion=1 无 weights bundle 走贡献维数计权（主 4 维 70/辅 3 维 56 → 64）', () => {
+    // 手写字面量直喂（不经 buildStyleBundle，防 mergeVersion=2 污染）：无 weights 键 = legacy 路径
+    const legacyBundle: StyleBundleV2 = {
+      v: 2,
+      mergeVersion: 1,
+      boundAt: '2026-01-01T00:00:00.000Z',
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_3B },
+      profiles: abProfiles(true, true),
+    };
+    const m = mergeStyleProfiles(legacyBundle, 1);
+    expect(m.axes['叙述温度']).toBe(64);
+    const parsed = parseStyleBundle(JSON.stringify(legacyBundle));
+    expect(parsed?.weights).toBeUndefined();
+  });
+
+  it('legacy 回归：主保底 1 生效（七维全辅 wA=1/wB=7 → 58）', () => {
+    // pB 七维文本俱全 → 七维实际来源全为 pB（主零实际贡献）→ legacy 主保底 1
+    const legacyBundle: StyleBundleV2 = {
+      v: 2,
+      mergeVersion: 1,
+      boundAt: '2026-01-01T00:00:00.000Z',
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_ALL_B },
+      profiles: {
+        pA: prof({ dims: { ...fullDims }, axes: { ...fullAxes, 叙述温度: 70 } }),
+        pB: prof({ dims: { ...fullDims }, axes: { ...fullAxes, 叙述温度: 56 } }),
+      },
+    };
+    const m = mergeStyleProfiles(legacyBundle, 1);
+    expect(m.axes['叙述温度']).toBe(58);
+  });
+
+  it('加权六轴：weights {pA:70,pB:30} → (70×70+30×56)/100=65.8→66', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_3B },
+      profiles: abProfiles(),
+      weights: { pA: 70, pB: 30 },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.axes['叙述温度']).toBe(66);
+    expect(m.dims['写作特点']).toBe('B写作'); // 七维不受比例影响
+    expect(m.dims['节奏']).toBe('A节奏');
+  });
+
+  it('加权样本席位：70/30 → pA 2 席 pB 1 席', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_3B },
+      profiles: abProfiles(true, true),
+      weights: { pA: 70, pB: 30 },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    const ids = m.samples.map((s) => s.id);
+    expect(ids.filter((id) => id.startsWith('pA:'))).toHaveLength(2); // exact 2.1 → floor 2
+    expect(ids.filter((id) => id.startsWith('pB:'))).toHaveLength(1); // exact 0.9 → 余席 0.9>0.1 归 pB
+  });
+
+  it('加权且辅缺轴 → 权重重归一：pB 无叙述温度 → 该轴仅 pA 参与 → 70', () => {
+    const axesB = { ...fullAxes } as Partial<Record<StyleAxis, number>>;
+    delete axesB['叙述温度'];
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_3B },
+      profiles: abProfiles(false, false, axesB),
+      weights: { pA: 70, pB: 30 },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.axes['叙述温度']).toBe(70);
+  });
+
+  it('主保底废除：加权路径七维全辅 weights {50,50} → 63（legacy 同输入为 58）', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_ALL_B },
+      profiles: abProfiles(),
+      weights: { pA: 50, pB: 50 },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.axes['叙述温度']).toBe(63); // (70×50+56×50)/100=63，无主保底
+  });
+
+  it('weights 缺键/非法防御：{pA:100} 缺 pB → pB 权 0：六轴取 pA 原值 70、样本 3 席全 pA', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_3B },
+      profiles: abProfiles(true, true),
+      weights: { pA: 100 },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.axes['叙述温度']).toBe(70);
+    const ids = m.samples.map((s) => s.id);
+    expect(ids.filter((id) => id.startsWith('pA:'))).toHaveLength(3);
+    expect(ids.filter((id) => id.startsWith('pB:'))).toHaveLength(0);
+  });
+
+  it('weights 全非法（W=0）防御：{pA:0,pB:0} → 六轴不写入、样本顺延主→辅补满', () => {
+    const b = bundle({
+      primaryProfileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { ...DIMS_SRC_3B },
+      profiles: abProfiles(true, true),
+      weights: { pA: 0, pB: 0 },
+    });
+    const m = mergeStyleProfiles(b, 1);
+    expect(Object.keys(m.axes)).toHaveLength(0);
+    expect(m.samples.map((s) => s.id)).toEqual(['pA:a0', 'pA:a1', 'pB:b0']); // 顺延循环按主→辅补满
+  });
+
+  it('mergeVersion 与 weights 序列化门：带 weights → mergeVersion=2 且 JSON 含键、parse 回读；不带 → 无键 undefined；V1 → undefined', () => {
+    const withW = bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: {}, weights: { pA: 70, pB: 30 } });
+    expect(withW.mergeVersion).toBe(2);
+    const raw = JSON.stringify(withW);
+    expect(raw).toContain('"weights"');
+    expect(parseStyleBundle(raw)?.weights).toEqual({ pA: 70, pB: 30 });
+
+    const noW = bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: {} });
+    expect(JSON.stringify(noW)).not.toContain('"weights"');
+    expect(parseStyleBundle(JSON.stringify(noW))?.weights).toBeUndefined();
+
+    const v1raw = JSON.stringify({ profileId: 'p1', version: 1, rulesJson: '{"rulesText":"R"}', samplesJson: '[]', boundAt: '2026-01-02T00:00:00.000Z' });
+    expect(parseStyleBundle(v1raw)?.weights).toBeUndefined();
+  });
+
+  it('单档案加权 weights {p1:100}：输出与 legacy 单主 deep-equal（六轴原值/样本 3/dims 全主）', () => {
+    const p = prof({
+      dims: { ...fullDims },
+      axes: { ...fullAxes, 叙述温度: 70 },
+      samples: [{ id: 's0', text: 'x0' }, { id: 's1', text: 'x1' }, { id: 's2', text: 'x2' }, { id: 's3', text: 'x3' }],
+    });
+    const weighted = mergeStyleProfiles(bundle({ primaryProfileId: 'p1', profiles: { p1: p }, weights: { p1: 100 } }), 1);
+    const legacy = mergeStyleProfiles(bundle({ primaryProfileId: 'p1', profiles: { p1: p } }), 1);
+    expect(weighted).toEqual(legacy);
+    expect(weighted.samples).toHaveLength(3);
   });
 });
