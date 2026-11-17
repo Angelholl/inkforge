@@ -367,7 +367,8 @@ describe('BookDetailPage', () => {
     // 章号默认 = 末章(2)+1 = 3；下一章无章行 → 字数默认 3000
     const chNoInput = (await screen.findByLabelText('章号')) as HTMLInputElement;
     await waitFor(() => expect(chNoInput.value).toBe('3'));
-    expect((screen.getByLabelText('本章目标字数') as HTMLInputElement).value).toBe('3000');
+    // 字数随章号同步是 chNo 变更后的下一轮 effect（本用例章号切换段同型断言均已 waitFor）：同步断言会捕中间帧致偶发 flake
+    await waitFor(() => expect((screen.getByLabelText('本章目标字数') as HTMLInputElement).value).toBe('3000'));
 
     // 切到第 1 章 → 字数同步该章 targetChars=2500
     fireEvent.change(chNoInput, { target: { value: '1' } });
