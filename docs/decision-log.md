@@ -389,3 +389,23 @@
 **处置（主模型亲执）：** 服务端路由缺省 'chapters-md'→'txt'（routes.ts:965）+ exportBook 函数默认参同改（export.ts:26，docblock 默认标记同步）；详情页导出格式下拉默认 'txt'（BookDetailPage.tsx:490）；阅读页按钮文案「导出全书正文（Markdown）」→「导出全书正文（TXT）」（ChapterReaderPage.tsx:73）；README:38 口径更新。回归测试按「改默认值必带回归测试」纪律：export.test 新增「默认格式=txt」用例+首例改显式 chapters-md（md 文件名/# 标题语义钉死不丢）、api.test 缺省断言 files 全 .txt、ChapterReaderPage 用例按钮名适配。
 
 **验证链：** typecheck 全 workspace 0 错、lint 零输出、定向 export+api 11 绿+ChapterReader 5 绿、全量 server 317+web 98+shared 2=**417**（基线 416 只增不减）、web build 391.30kB 冒烟、audit --prod 零新增。GUI 未验证（owner 真实测试）。push：5456ae9..HEAD 收口推送（ls-remote 复核✓）。
+
+## DEC-2026-1118-02 [OWNER+主模型] UI 全面重塑「松烟」立项：撤 SubTrans 对标、现代化第一诉求（2026-11-18）
+
+**背景：** owner 判定现状 UI「整体风格不协调、严重割裂」，选择题四问全中（页面间不一致/气质不对味/布局与 IA/细节不精致）并追加「特别陈旧，像 1990-2010 年代作品，不够现代化」；会话约束=主模型独自完成，除设计师与评议员外不外派。现状勘探（隔离四件套 8791/5199+基线库副本+headless/CDP 截图 9 张）与 design-expert 只读设计卡（docs/design/ui-reshape-proposals-2026-11-18.md，514 行：审计 24 条+三方向完整规格+测试零改动通道）经主审抽查属实（裸 rounded border 71 处/ui.test 逐字钉 Button 串/App.test 钉 inkforge 文本节点/无快照测试）。
+
+**owner 拍板（AskUserQuestion 三问）：** D1 方向=A「松烟」（墨色 primary+炉火橙 accent，直译墨炉）；D2=捆绑 Noto Serif SC（选项字面为 SemiBold+Bold 两字重 4.4-6MB）；D4 书详情 IA=锚点分区（弃标签页）；D3 纸色 #F7F6F3 与 D5 橙/danger 邻近性按设计师推荐默认接受。D2 问项同时确认「对标与否不重要，重要的是现代化」——DEC-2026-1115-04 的 SubTrans 对标方针由此撤换，SubTrans 对标 spec（spec-button-subtrans-2026-1116 等）降级为历史参考，Button class 串语义仍被 ui.test 钉死继续有效。
+
+**decision-critic 评议回应（评议员 R1-R6+1 HIGH_RISK_OBJECTION+2 材料缺口，主模型逐项裁决）：**
+- **[HIGH_RISK_OBJECTION] 表单控件边界/焦点对比度系统性回归 → 采纳。** 数值亲算复核：line #E7E4DE 对白 1.27:1（现状 currentColor 边 ≈15:1）、focus ring primary/15 合成 1.35:1，均低于 3:1。修正=新增 --color-line-control #948E83（对白 3.25:1）专用于表单控件边框；焦点改 focus-visible:outline-2 outline-primary（15.6:1）；装饰线维持 #E7E4DE；hover 边框 ink/50。配套采纳评议员验证建议：新增 design/tokens.test.ts 纯函数对比度单测（正文 4.5/控件边界 3/徽标 4.5 阈值钉死），测试基线随之 +N 只增不减。
+- R1 其余：墨晕激活不可见→rail 左标加粗 3px（采纳）；disabled opacity-45 可读性→**复议维持**（ui.test 逐字钉串不可移除+WCAG 豁免 inactive 控件，登记已知取舍）；hover 弱反馈→Button base 加法追加 active:brightness-95（采纳）；Button font-medium vs 规格「按钮 600」→**复议维持 font-medium**（雅黑无 500/600 档，600 整字 Bold 过重，§2.7 该条款由本裁决取代）。
+- R2 字体：Georgia 先行致中西混排 old-style/lining 数字基线错位→**采纳 Noto-first**（display 栈 'Noto Serif SC', Georgia,…）；**D2 收窄为仅捆 600**（700 与设计规格「禁 700 中文标题」自相矛盾=纯死重 2.2MB；此为对 owner 选项字面的偏离裁决，完成通知明示、owner 可一行补回 700）；装后核验 fontsource @font-face 带 font-display:swap 无 local()（采纳）；OFL LICENSE 拷贝 public/fonts/ 随包分发（采纳）；安装包 35MB→约 37MB（登记）；本地 NotoSerifSC-VF 遮蔽验证偏差仅影响「不捆绑」分支，捆绑后不存在（登记）。
+- R3 协议：「class 名只增不改」改写为「**不改测试钉死字符串**」（采纳，测试未钉面可改）；无快照测试=无自动视觉回归护栏→以 tokens.test+双档截图自评部分补位（登记 residual）。
+- R4 反例四条全采纳：BooksPage 空态保留 Link 续写向导+「还没有书」文案；锚点纯文本 <a> 禁节名 aria-label（防 getByLabelText 撞车）；刷新图标钮 aria-label 逐字「刷新」；**IntersectionObserver 禁用**（jsdom 无此 API=720 行测试全 ReferenceError），滚动跟随改 scroll 监听+rAF 节流+getBoundingClientRect，首屏高亮首锚/触底高亮末锚。
+- R5：accent <18px 文字一律 accent-strong（采纳钉规则）；**warn 加深 #9A6A00→#8A6000**（warn-soft 上 4.05→4.79:1，评议员发现的真盲区 warn/danger protanopia 3.3 以「文字标签恒在场」缓解+tokens.test 钉）；逐徽标加图标→不采纳（文字即语义主载体，加图标=噪音）。
+- R6：aside 断点 xl→lg（Tauri 默认窗 1280 含边框后 xl 不触发——恰是现状 L3 缺陷根因，采纳）；scroll-mt-16 与条高截图校准（采纳）；锚点条不被 overflow 祖先包住（约束登记）；窄窗页顶进度条/窗口 minWidth（延后 backlog）。
+- 现代化缺口：全局 :focus-visible outline、scroll-behavior smooth+reduced-motion（采纳）；skeleton/toast（延后——toast 会破坏消息 getByText 测试面，登记 backlog）；appearance-none 自绘 select/去 number spinner（**复议延后**：原生 affordance 移除无完整自绘补偿=可用性倒退，整体自绘控件族另立项）；CVD 模拟截图（列 owner 实测观察项）。
+- 材料缺口（无渲染 mockup/分发范围/700 用途/WCAG 是否验收项）：以「批次早期截图自评+终期 1440×1000 与 1280×820 双档 9 张同机位对照+owner 真实测试门」替代 mockup 门；分发范围按本机桌面应用现状；WCAG-lite（对比度单测+键盘可见）纳入验证链。
+- 勘误登记：裸 border 实测 71 非 70；容器宽度六派非五派（max-w-3xl 两处）；报告「7/8 测试文件」表述不一致（以 §6.1 清单 8 文件为准）。
+
+**计划真值：** docs/plans/2026-11-18-ui-reshape-songyan.md（writing-plans 粒度+评议员修正案 v2 已并入）。执行=主模型亲执（owner 会话令），不外派。提交三段（基座/常规页/复杂页）。GUI 未验证（owner 真实测试）。执行留痕与验证链收口时补记。
