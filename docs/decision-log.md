@@ -353,3 +353,13 @@
 **三卡处置（计划真值 docs/plans/2026-11-17-chapter-title-and-mock-cleanup.md，主模型亲执）：** A 章题正则三分支——第X章节回（容忍「第 1 章」空格排版）|数字顿号「一、雪夜」（排顿号复现防「一、二、三」误切）|全/半角括号「（一）雪夜」；显式不支持半角点「1. 雪夜」（误伤「1.5 万」，样本再现再议）；防误判 18 组实证先行。B settingsSchema 删 INKFORGE_MOCK——zod strip 使 config.json 残留键成死数据、writeSettingsFile 下次保存顺带洗掉；env 通道保留（config.ts 不动）。C 仿写表单前置校验（空名/<200 字，文案对齐蒸馏面板）+反推章数 string 态提交钳 [1,50]、非法回退 12。
 
 **验证链：** typecheck 全绿；定向 NewBookPage 9/9 + config 11/11 + ImitationProfilesSection 5/5；全量 server 272/272 + web 85/85 + shared 2/2（基线 359 只增不减）；lint 零输出；build 冒烟 386.79kB；秘密扫描命中均为测试夹具占位值零新增真实凭据+audit 零漏洞。GUI 未验证（owner 真实测试）。
+
+## DEC-2026-1117-04 [OWNER] P3-2 瘦身收编 + 风格多选维度级杂糅 + 续写注入三拍板（2026-11-17）
+
+**背景：** owner 令本会话拍板两项悬置：P3-2 新书流程方向（唯一出处 DEC-2026-1117-03 留悬置，二义=收编撤入口 vs 保留入口补字数）与风格多选杂糅（DEC-2026-1116-01 ⑨ 曾移出本批立 0.3 设计稿，三先决=合并语义/快照结构/drift 基准）。code-reader 两卡调研事实：NewBookIdeaPage（/new 三步向导，入口 App.tsx:34）独有能力=全书一次性 suggestOutline 批量蓝图+逐章采用，targetChars 写死于 NewBookIdeaPage.tsx:89（服务端 chapters.ts:128/134 兜底同值 3000，去写死不改默认行为），详情页对同一章（同一 PUT blueprint API）的编辑已含可改字数（min 500）且另有风格绑定/人物下线/续写/导出/伏笔/运行监控；风格档案=结构化七维文本（节奏/对话/描写/情感基调/写作特点/特色词汇/章节结构）+六轴 0-100 数值+规则+术语+样本（0001_core.sql:40、shared StyleAnalysisDto），books.style_profile_id 单外键+绑定快照，详情页 StyleBindSelect 单选下拉（BookDetailPage.tsx:11-29），注入按槽预算截断（styleDims 600/styleRules 1000/fewShot 1500≈draft prompt 31%，config.ts:99-110），continue 模式完全不注入档案、声线锚定前 3 章现算指标（chapter.ts:183/121），全库无权重/混合预留。
+
+**owner 亲决（AskUserQuestion 三问）：** ①P3-2=**瘦身收编（保留入口缩职责）**——/new 向导保留并重定义为「建书+全书批量蓝图」专用：step2 撤全量 JSON textarea，只留逐章采用/弃用+标题+逐章 targetChars 编辑（默认 3000、min 500，修掉写死点），深度蓝图编辑归详情页独有，重叠从「两个编辑器」缩为「查看 vs 编辑」。②杂糅=**维度级拼装**——风格绑定改多选，七维各自独立勾选来源风格（默认跟随主风格），六轴按各风格实际贡献维度数加权平均（不设独立权重滑条），规则=主风格 rulesText 全量+辅风格去重补充，术语=主风格优先预算内并集，样本=fewShot 预算内按贡献维度数等比取样；构造上零冲突、dims 块长度≈单风格不膨胀。③续写口径=**续写也注入混合风格**——continue prompt=前章声线锚+混合风格块并存，并加一行指令「前文腔调优先，文风档案作质感参照」。
+
+**主模型随案钉细节（owner 可驳回）：** 绑定多选上限 4 档案（1 主+≤3 辅，超出再议）；主风格=勾选中显式指定的一枚，维度下拉选项=主风格+已勾辅风格；快照结构=books.style_snapshot_json 升级为拼装映射（主档案+逐维来源 profileId+平均后六轴+合并规则/术语/取样样本），档案重蒸不自动刷新绑定快照（沿用现行快照语义，需手动重绑）；向导逐章字数随 putBlueprint 落库不新增 API；0.3 设计稿三先决中合并语义/drift 基准就此了结，快照结构按本条钉细节落地。
+
+**执行留痕：** 本条拍板先归档；计划真值=docs/plans/2026-11-17-style-mixing-and-wizard-slim.md（code-planner 产出、writing-plans 粒度，owner 审后按 dispatch-discipline 派卡）；卡提交链与验证链收口时补记。
