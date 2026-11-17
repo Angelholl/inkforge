@@ -208,7 +208,7 @@
 
 **步骤**：
 - [ ] 实现常量与类型（如上 Produces 全文）
-- [ ] 实现 `normalizeDimsSource`：七维逐键——缺键/值空串/值 ∉ {primary∪aux} → primaryProfileId；恒返回七键全集
+- [ ] 实现 `normalizeDimsSource`：七维逐键——缺键/值空串/值 ∉ {primary∪aux} → primaryProfileId；恒返回七键全集（SM-04 执行留痕：钉死签名拿不到 aux 集合，实现取「仅 primary 合法」收窄；合法辅映射由 mergeStyleProfiles 按 {primary∪aux} 全集解析——规格「越权→归主」语义不变，越权值在 merge 第 1-2 步即归主；normalizeDimsSource 无生产消费方，docblock 已注限制）
 - [ ] 实现 `buildStyleBundle`：组装 `{v:2, mergeVersion: 1, boundAt: input.boundAt ?? new Date().toISOString(), ...}`
 - [ ] 实现 `parseStyleBundle`：raw 空/JSON.parse 抛错/缺 primaryProfileId → undefined；`raw` 含字符串键 `rulesJson` → V1 适配：单主 bundle（auxProfileIds=[], dimsSource={}, profiles[profileId]={version, metricsJson:'', rulesText/dims/axes/terms=JSON.parse(rulesJson) 逐键容错取 `rulesText?/dims?/axes?/terms?`，samples=JSON.parse(samplesJson) 容错 []}）；否则按 V2 形态直读
 - [ ] 实现 `loadStyleBundle`：book.styleProfileId=null → undefined；`parseStyleBundle(book.styleSnapshotJson)` 有值 → 返回；否则（快照缺/坏）回落 live 行——`getLatestProfile(db, book.styleProfileId)`，行 rules_json/samples_json 解析容错（沿 chapter.ts:186-197 语义），组装 buildStyleBundle(primary, [], {})；行缺失 → undefined

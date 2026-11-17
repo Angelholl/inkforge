@@ -2,7 +2,7 @@
  * 风格合并模块（DEC-2026-1117-04 规格 B）：把多档案 bundle 合并成单档案形态（MergedStyleProfile，与现单档案注入同形）。
  * 算法钉死（全部确定性，无随机）：
  * 0. 去重防御：auxProfileIds 滤除 primaryProfileId（同一档案不得双计权重与样本）。
- * 1. dimsSource = normalizeDimsSource(bundle.dimsSource, primaryProfileId)：七维逐键，缺键/空串/越权值 → primary。
+ * 1. 七维来源判定：缺键/空串/值 ∉ {主∪辅} → primary（merge 内按 ids 全集解析；normalizeDimsSource 导出为「仅主合法」收窄形态，签名不含辅集合，勿用于多档案归一）。
  * 2. dims[dim]：来源档案该维文本 trim 非空即用并记实际来源；来源不在 profiles 或文本空 → 回落主档案该维文本（实际来源=主）；仍空 → ''（实际来源=无）。
  * 3. 权重：w_p = |{dim : 实际来源 === p}|；主 w = max(w, 1) 保底；W = Σw。
  * 4. axes[axis]：参与集合 P = 该轴值为有限数字 且 w_p > 0 的档案；P 空 → 该轴不写入；否则 Math.round(Σ w_p·v / Σ w_p)。
