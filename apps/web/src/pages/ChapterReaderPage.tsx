@@ -56,7 +56,7 @@ export default function ChapterReaderPage() {
 
   const exportBook = async () => {
     const r = await api.exportBook(bookId);
-    setMsg(`已导出 ${r.files.length} 个文件至 data/exports/`);
+    setMsg(`已导出 ${r.files.length} 个文件至 ${r.outDir}`);
   };
 
   return (
@@ -65,13 +65,14 @@ export default function ChapterReaderPage() {
         ← 返回书页
       </Link>
       <h1 className="mt-2 text-2xl font-bold">第{no}章 正文</h1>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex items-center gap-2">
         <Button onClick={rollback}>
           回滚到当前所选
         </Button>
         <Button variant="primary" onClick={exportBook}>
-          导出 markdown
+          导出全书正文（Markdown）
         </Button>
+        <span className="text-xs text-muted">保存到本机 data/exports/，不自动下载</span>
       </div>
       {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
 

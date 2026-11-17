@@ -161,8 +161,9 @@ export const api = {
     req<{ ok: boolean }>(`/api/versions/${versionId}`, { method: 'DELETE', body: '{}' }),
   rollback: (versionId: string) =>
     req<{ ok: boolean; currentVersionId: string }>(`/api/versions/${versionId}/rollback`, { method: 'POST', body: '{}' }),
+  // outDir=服务端落盘目录绝对路径（D3 澄清：保存到本机 data/exports/，不自动下载）
   exportBook: (bookId: string, format?: ExportFormat) =>
-    req<{ files: string[] }>(`/api/books/${bookId}/export${format ? `?format=${format}` : ''}`, { method: 'POST', body: '{}' }),
+    req<{ files: string[]; outDir: string }>(`/api/books/${bookId}/export${format ? `?format=${format}` : ''}`, { method: 'POST', body: '{}' }),
   listForeshadowings: (bookId: string) => req<ForeshadowingDto[]>(`/api/books/${bookId}/foreshadowings`),
   createForeshadowing: (bookId: string, body: ForeshadowingCreateBody) =>
     req<ForeshadowingDto>(`/api/books/${bookId}/foreshadowings`, { method: 'POST', body: JSON.stringify(body) }),

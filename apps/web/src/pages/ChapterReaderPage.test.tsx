@@ -51,6 +51,7 @@ function mockFetch(opts: { deleteResp?: (id: string) => StubResp } = {}) {
     if (url.endsWith('/qc')) return stubResp({ attempts: [] });
     if (url.includes('/api/versions/')) return stubResp(FULL(url.split('/').pop() as string));
     if (url.includes('/versions')) return stubResp({ currentVersionId: 'v-current', versions: items });
+    if (url.endsWith('/api/books/b1/export')) return stubResp({ files: ['001-第一章.md'], outDir: 'X:\\mock\\data\\exports\\测试书' });
     return stubResp({ ok: true });
   });
   vi.stubGlobal('fetch', fn);
@@ -129,5 +130,14 @@ describe('ChapterReaderPage', () => {
     fireEvent.click(dels[1]);
     fireEvent.click(await screen.findByRole('button', { name: '确认删除' }));
     expect(await screen.findByText(/当前版本不可删除/)).toBeTruthy();
+  });
+
+  it('导出澄清：按钮「导出全书正文（Markdown）」+旁注；toast 报 outDir 绝对路径', async () => {
+    mockFetch();
+    renderPage();
+    const btn = screen.getByRole('button', { name: '导出全书正文（Markdown）' });
+    expect(screen.getByText('保存到本机 data/exports/，不自动下载')).toBeTruthy();
+    fireEvent.click(btn);
+    expect(await screen.findByText(/已导出 1 个文件至 X:\\mock\\data\\exports\\测试书/)).toBeTruthy();
   });
 });

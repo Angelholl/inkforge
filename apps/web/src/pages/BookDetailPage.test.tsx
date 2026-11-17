@@ -160,6 +160,20 @@ describe('BookDetailPage', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
   });
 
+  it('导出区说明行：保存位置说明可见（D3 澄清）', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('导出文件保存到本机 data/exports/，不自动下载')).toBeTruthy());
+  });
+
   it('书详情：保存设定调用 PUT meta 且人物卡增删可见', async () => {
     installFetchStub();
     render(

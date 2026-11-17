@@ -548,6 +548,7 @@ export default function BookDetailPage() {
         <Button variant="secondary" onClick={() => void exportNow()}>
           导出
         </Button>
+        <span className="w-full text-xs text-faint">导出文件保存到本机 data/exports/，不自动下载</span>
       </div>
       <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">

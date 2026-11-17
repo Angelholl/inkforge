@@ -70,12 +70,13 @@ describe('REST API', () => {
     expect(rb.json()).toMatchObject({ ok: true, currentVersionId: oldest.id });
   });
 
-  it('export 200 且文件落盘；search 命中', async () => {
+  it('export 200 且文件落盘（回传 outDir 绝对路径）；search 命中', async () => {
     const ex = await app.inject({ method: 'POST', url: `/api/books/${bookId}/export` });
     expect(ex.statusCode).toBe(200);
-    console.log('EXPORT_BODY', ex.body.slice(0, 400));
-    const files = (ex.json() as { files: string[] }).files;
-    expect(files.length).toBeGreaterThanOrEqual(1);
+    const body = ex.json() as { files: string[]; outDir: string };
+    expect(body.files.length).toBeGreaterThanOrEqual(1);
+    expect(path.isAbsolute(body.outDir)).toBe(true); // D3：toast 报位依据
+    expect(body.outDir).toContain('exports');
     const hits = await app.inject({ method: 'GET', url: `/api/books/${bookId}/search?q=${encodeURIComponent('章1段')}` });
     expect(hits.statusCode).toBe(200);
     expect((hits.json() as unknown[]).length).toBeGreaterThanOrEqual(1);

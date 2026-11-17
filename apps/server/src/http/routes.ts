@@ -968,7 +968,9 @@ ${repairPrompt(first.errors)}`))).text,
       return reply.code(400).send({ error: `format 须为 ${formats.join('/')}` });
     }
     const outDir = path.join(config.dataDir, 'exports', book.title.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 50));
-    reply.send(await exportBook(db, bookId, outDir, rawFormat as (typeof formats)[number]));
+    const result = await exportBook(db, bookId, outDir, rawFormat as (typeof formats)[number]);
+    // D3 澄清（DEC-2026-1117-05）：回传落盘目录绝对路径，前端 toast 报位
+    reply.send({ ...result, outDir: path.resolve(outDir) });
   });
 
   app.get('/api/books/:bookId/search', async (req, reply) => {
