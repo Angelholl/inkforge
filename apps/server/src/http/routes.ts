@@ -22,6 +22,7 @@ import { handleSse } from './sse';
 import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { saveStyleProfile } from '../style/analysis';
+import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } from '../style/merge';
 import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
 import type { DistillStyleDraftDto, StyleAnalysisDto } from '@inkforge/shared';
@@ -199,7 +200,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const { bookId } = req.params as { bookId: string };
     const book = booksRepo.getBook(db, bookId);
     if (!book) return reply.code(404).send({ error: 'not found' });
-    reply.send({ ...book, chapters: chaptersRepo.listChapters(db, bookId), runs: runsRepo.listRunsByBook(db, bookId) });
+    reply.send({ ...book, styleBinding: booksRepo.getBookStyleBinding(db, bookId), chapters: chaptersRepo.listChapters(db, bookId), runs: runsRepo.listRunsByBook(db, bookId) });
   });
 
   app.put('/api/books/:bookId/chapters/:chapterNo/blueprint', async (req, reply) => {
@@ -586,22 +587,27 @@ ${repairPrompt(first.errors)}`))).text,
     const body = parseBody(reply, styleBindSchema, req.body);
     if (!body) return;
     if (body.profileId === null) {
-      // 解绑：清档案引用与 persona 快照
-      booksRepo.setBookStyleProfile(db, bookId, null);
+      // 解绑：清主镜像、关联表与快照（binding=null 三处全清）
+      booksRepo.setBookStyleBinding(db, bookId, null, null);
       return reply.send({ ok: true, styleProfileId: null });
     }
-    const profile = db
-      .prepare('SELECT id, version, rules_json, samples_json FROM style_profiles WHERE id = ?')
-      .get(body.profileId) as { id: string; version: number; rules_json: string; samples_json: string } | undefined;
-    if (!profile) return reply.code(404).send({ error: 'profile not found' });
-    // persona 快照：绑定即复制档案 rules/samples（后续改档案不影响已绑定书，批次三）
-    booksRepo.setBookStyleProfile(db, bookId, body.profileId, {
-      profileId: profile.id,
-      version: profile.version,
-      rulesJson: profile.rules_json,
-      samplesJson: profile.samples_json,
-    });
-    reply.send({ ok: true, styleProfileId: body.profileId });
+    // legacy {profileId: 字符串} 归一单主七维全主；新 body 走 primary/aux/dimsSource
+    const primaryProfileId = typeof body.profileId === 'string' ? body.profileId : body.primaryProfileId!;
+    const auxProfileIds = typeof body.profileId === 'string' ? [] : (body.auxProfileIds ?? []);
+    const dimsSource = typeof body.profileId === 'string' ? {} : (body.dimsSource ?? {});
+    // 逐 id 存在性 + 内容冻结（容错解析：坏 JSON 降级空内容，对齐 polish.ts 语义，不整绑失败）
+    const profiles: Record<string, StyleProfileContent> = {};
+    for (const id of [primaryProfileId, ...auxProfileIds]) {
+      const row = db
+        .prepare('SELECT id, version, rules_json, samples_json, metrics_json FROM style_profiles WHERE id = ?')
+        .get(id) as { id: string; version: number; rules_json: string; samples_json: string; metrics_json: string } | undefined;
+      if (!row) return reply.code(404).send({ error: 'profile not found' });
+      profiles[id] = contentFromProfileRow(row);
+    }
+    // 绑定即组装 V2 bundle 冻结内容落快照（后续改档案不影响已绑定书），主镜像写 books.style_profile_id
+    const bundle = buildStyleBundle({ primaryProfileId, auxProfileIds, dimsSource, profiles });
+    booksRepo.setBookStyleBinding(db, bookId, { primaryProfileId, auxProfileIds, dimsSource }, JSON.stringify(bundle));
+    reply.send({ ok: true, styleProfileId: primaryProfileId });
   });
 
   // B4 裁决④：逐书文风示例开关（只控注入；抄用检测恒取绑定样本，见 pipeline/chapter.ts）
@@ -633,9 +639,7 @@ ${repairPrompt(first.errors)}`))).text,
   app.delete('/api/style-profiles/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!db.prepare('SELECT id FROM style_profiles WHERE id = ?').get(id)) return reply.code(404).send({ error: 'not found' });
-    const bound = db
-      .prepare('SELECT id, title FROM books WHERE style_profile_id = ? ORDER BY created_at')
-      .all(id) as Array<{ id: string; title: string }>;
+    const bound = booksRepo.listBooksBoundToProfile(db, id); // 主镜像 UNION 关联表并查（覆盖辅档案被绑场景）
     if (bound.length > 0) {
       return reply.code(409).send({ error: '该风格档案已被书绑定，请先解绑再删除', books: bound });
     }

@@ -69,12 +69,18 @@ describe('B7 persona 快照 + 版本视图', () => {
 
     const b1 = (await app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as { styleProfileId: string; styleSnapshotJson: string };
     expect(b1.styleProfileId).toBe(pid);
-    const snap = JSON.parse(b1.styleSnapshotJson) as { profileId: string; version: number; boundAt: string; rulesJson: string; samplesJson: string };
-    expect(snap.profileId).toBe(pid);
-    expect(snap.version).toBe(1);
+    const snap = JSON.parse(b1.styleSnapshotJson) as {
+      v: number;
+      primaryProfileId: string;
+      boundAt: string;
+      profiles: Record<string, { version: number; rulesText: string; samples: Array<{ id: string; text: string }> }>;
+    };
+    expect(snap.v).toBe(2);
+    expect(snap.primaryProfileId).toBe(pid);
     expect(snap.boundAt).toBeTruthy();
-    expect(snap.rulesJson).toContain('快照规则v1标记');
-    expect(snap.samplesJson).toContain('样本文本甲');
+    expect(snap.profiles[pid].version).toBe(1);
+    expect(snap.profiles[pid].rulesText).toBe('快照规则v1标记');
+    expect(snap.profiles[pid].samples[0].text).toBe('样本文本甲');
 
     const unbind = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/style`, payload: { profileId: null } });
     expect(unbind.statusCode).toBe(200);
@@ -95,9 +101,11 @@ describe('B7 persona 快照 + 版本视图', () => {
     await app.inject({ method: 'PUT', url: `/api/books/${bookId}/style`, payload: { profileId: pid1 } });
     const snap = JSON.parse(
       ((await app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as { styleSnapshotJson: string }).styleSnapshotJson,
-    ) as { version: number; rulesJson: string };
-    expect(snap.version).toBe(v1);
-    expect(snap.rulesJson).toContain('版本一规则');
+    ) as { v: number; primaryProfileId: string; profiles: Record<string, { version: number; rulesText: string }> };
+    expect(snap.v).toBe(2);
+    expect(snap.primaryProfileId).toBe(pid1);
+    expect(snap.profiles[pid1].version).toBe(v1);
+    expect(snap.profiles[pid1].rulesText).toContain('版本一规则');
 
     const versions = await app.inject({ method: 'GET', url: `/api/style-profiles/${pid1}/versions` });
     expect(versions.statusCode).toBe(200);
@@ -142,4 +150,26 @@ describe('B7 persona 快照 + 版本视图', () => {
     expect(captured[0]).toContain('快照v1注入标记'); // 快照优先
     expect(captured[0]).not.toContain('档案v2新规则');
   }, 30000);
+
+  it('重蒸产生新 id 不刷新绑定快照；辅档案冻结内容独立', async () => {
+    const src = '重蒸冻结源文本'.repeat(60);
+    const { id: p1, version: v1 } = saveStyleProfile(db, { name: '重蒸档案', source: src, analysis: emptyAnalysis(['重蒸v1规则']), samples: [{ id: 's0', text: '重蒸样本一' }] });
+    const bind = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/style`, payload: { profileId: p1 } });
+    expect(bind.statusCode).toBe(200);
+
+    // 同 source 再存 → 新 id 新版本；绑定书快照不刷新
+    const { id: p2 } = saveStyleProfile(db, { name: '重蒸档案', source: src, analysis: emptyAnalysis(['重蒸v2规则']), samples: [{ id: 's0', text: '重蒸样本二' }] });
+    expect(p2).not.toBe(p1);
+
+    const snap = JSON.parse(
+      ((await app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as { styleSnapshotJson: string }).styleSnapshotJson,
+    ) as { v: number; primaryProfileId: string; profiles: Record<string, { version: number; rulesText: string }> };
+    expect(snap.v).toBe(2);
+    expect(snap.primaryProfileId).toBe(p1);
+    expect(snap.profiles[p1].version).toBe(v1);
+    expect(snap.profiles[p1].rulesText).toBe('重蒸v1规则');
+    expect(snap.profiles[p2]).toBeUndefined(); // 新 id 不入快照
+
+    await app.inject({ method: 'PUT', url: `/api/books/${bookId}/style`, payload: { profileId: null } });
+  });
 });

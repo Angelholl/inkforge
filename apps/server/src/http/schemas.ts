@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { STYLE_DIMENSIONS } from '@inkforge/shared';
 
 export const createBookSchema = z.object({
   title: z.string().min(1),
@@ -50,9 +51,49 @@ export const importOriginalSchema = z.object({
   chapters: z.array(z.object({ title: z.string().min(1), content: z.string().min(1) })).min(1).max(500),
 });
 
-export const styleBindSchema = z.object({
-  profileId: z.string().min(1).nullable(), // null=解绑并清快照
-});
+export const styleBindSchema = z
+  .object({
+    profileId: z.string().min(1).nullable().optional(), // null=解绑并清快照；字符串=legacy 单绑（路由归一单主）
+    primaryProfileId: z.string().min(1).optional(),
+    auxProfileIds: z.array(z.string().min(1)).max(3, '风格档案最多绑定 4 个（1 主 + 3 辅）').optional(),
+    dimsSource: z.record(z.string(), z.string().min(1)).optional(),
+  })
+  .superRefine((v, ctx) => {
+    const hasBindingFields = v.primaryProfileId !== undefined || v.auxProfileIds !== undefined || v.dimsSource !== undefined;
+    // 规则 1：解绑请求不得携带绑定字段（规则 7：解绑无需主风格，放行）
+    if (v.profileId === null) {
+      if (hasBindingFields) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['profileId'], message: '解绑请求不得携带绑定字段' });
+      }
+      return;
+    }
+    // 规则 2：legacy 单绑与显式主档互斥；规则 3 例外放行（profileId 为字符串且其余字段全缺省 = legacy 合法单绑）
+    if (typeof v.profileId === 'string') {
+      if (v.primaryProfileId !== undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['profileId'], message: 'profileId 与 primaryProfileId 不可同时出现' });
+      }
+      return;
+    }
+    // 规则 3：绑定请求必须显式指定主风格
+    if (v.primaryProfileId === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['primaryProfileId'], message: '必须显式指定主风格' });
+      return;
+    }
+    // 规则 4：主辅重复（总档案数 >4 由 aux max(3) + 本条联合保证，见规则 6 文案挂在 max issue）
+    const aux = v.auxProfileIds ?? [];
+    if (aux.includes(v.primaryProfileId)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '主风格不可重复勾选' });
+    }
+    // 规则 5：dimsSource 键 ∈ 七维；值 ∈ 主∪辅
+    const allowed = new Set([v.primaryProfileId, ...aux]);
+    for (const [dim, src] of Object.entries(v.dimsSource ?? {})) {
+      if (!(STYLE_DIMENSIONS as readonly string[]).includes(dim)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `未知风格维度：${dim}` });
+      } else if (!allowed.has(src)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `维度来源必须在已勾选档案中：${dim}` });
+      }
+    }
+  });
 
 export const rewriteSelectionSchema = z.object({
   selection: z.string().min(1),

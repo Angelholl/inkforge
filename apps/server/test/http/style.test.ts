@@ -249,4 +249,100 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     const cleanup = await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` });
     expect(cleanup.statusCode).toBe(200); // 解绑后档案可删，不给后面的用例留脏引用
   });
+
+  it('多绑 body：1 主 2 辅 + dimsSource 落库，GET 回显 styleBinding，fewshot 归零', async () => {
+    const p1 = await newProfile('多绑主档');
+    const p2 = await newProfile('多绑辅档甲');
+    const p3 = await newProfile('多绑辅档乙');
+    const book = await newBook('多绑书');
+
+    // 先开后绑：绑定归零（B4 裁决④ 语义经 setBookStyleBinding 保持）
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style-fewshot`, payload: { on: true } });
+    const bind = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['对话']: p2, ['节奏']: p3 } },
+    });
+    expect(bind.statusCode).toBe(200);
+    expect((bind.json() as { ok: boolean; styleProfileId: string }).styleProfileId).toBe(p1);
+
+    const g = (await app.inject({ method: 'GET', url: `/api/books/${book.id}` })).json() as {
+      styleProfileId: string;
+      styleBinding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> };
+    };
+    expect(g.styleProfileId).toBe(p1);
+    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['对话']: p2, ['节奏']: p3 } });
+    const row = db.prepare('SELECT style_fewshot_on FROM books WHERE id = ?').get(book.id) as { style_fewshot_on: number };
+    expect(row.style_fewshot_on).toBe(0);
+
+    // 清理：解绑 + 删三档案，不留脏引用
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
+    for (const pid of [p1, p2, p3]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
+
+  it('多绑校验矩阵：超 4 档案/主不在勾选/维度来源越权/未知维度/主辅重复 → 400 人话', async () => {
+    const p1 = await newProfile('矩阵主档');
+    const p2 = await newProfile('矩阵辅档甲');
+    const p3 = await newProfile('矩阵辅档乙');
+    const p4 = await newProfile('矩阵辅档丙');
+    const p5 = await newProfile('矩阵辅档丁');
+    const book = await newBook('矩阵书');
+
+    const cases: Array<{ payload: Record<string, unknown>; msg: string }> = [
+      { payload: { primaryProfileId: p1, auxProfileIds: [p2, p3, p4, p5] }, msg: '风格档案最多绑定 4 个' },
+      { payload: { auxProfileIds: [p2] }, msg: '必须显式指定主风格' },
+      { payload: { primaryProfileId: p1, dimsSource: { ['对话']: p2 } }, msg: '维度来源必须在已勾选档案中' },
+      { payload: { primaryProfileId: p1, dimsSource: { ['语感']: p1 } }, msg: '未知风格维度' },
+      { payload: { primaryProfileId: p1, auxProfileIds: [p1] }, msg: '主风格不可重复勾选' },
+    ];
+    for (const c of cases) {
+      const r = await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: c.payload });
+      expect(r.statusCode, `payload ${JSON.stringify(c.payload)} 应 400`).toBe(400);
+      const err = (r.json() as { error: string }).error;
+      expect(err).toContain('请求参数不合法');
+      expect(err, `payload ${JSON.stringify(c.payload)} 应含文案「${c.msg}」`).toContain(c.msg);
+    }
+
+    for (const pid of [p1, p2, p3, p4, p5]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
+
+  it('legacy body {profileId} 兼容：等价单主七维全主，bundle v2 落库；辅档案被绑书 409 拦删', async () => {
+    const p1 = await newProfile('遗留主档');
+    const p2 = await newProfile('遗留辅档');
+    const b1 = await newBook('遗留单绑书');
+    const bind = await app.inject({ method: 'PUT', url: `/api/books/${b1.id}/style`, payload: { profileId: p1 } });
+    expect(bind.statusCode).toBe(200);
+
+    const g = (await app.inject({ method: 'GET', url: `/api/books/${b1.id}` })).json() as {
+      styleBinding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> };
+      styleSnapshotJson: string;
+    };
+    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [], dimsSource: {} }); // 七键缺省=全主，消费方归一
+    const snap = JSON.parse(g.styleSnapshotJson) as { v: number };
+    expect(snap.v).toBe(2);
+
+    // 辅档案被另一本书绑定 → DELETE 409（新并查覆盖关联表行）
+    const b2 = await newBook('辅档绑定书');
+    const bind2 = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${b2.id}/style`,
+      payload: { primaryProfileId: p1, auxProfileIds: [p2] },
+    });
+    expect(bind2.statusCode).toBe(200);
+    const del = await app.inject({ method: 'DELETE', url: `/api/style-profiles/${p2}` });
+    expect(del.statusCode).toBe(409);
+    const body = del.json() as { error: string; books: Array<{ id: string; title: string }> };
+    expect(body.error).toContain('已被书绑定');
+    expect(body.books.some((x) => x.id === b2.id)).toBe(true);
+
+    await app.inject({ method: 'PUT', url: `/api/books/${b1.id}/style`, payload: { profileId: null } });
+    await app.inject({ method: 'PUT', url: `/api/books/${b2.id}/style`, payload: { profileId: null } });
+    for (const pid of [p1, p2]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
 });
