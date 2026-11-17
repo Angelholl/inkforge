@@ -19,10 +19,10 @@ import { decideGate, type L1Report } from '../quality/gate';
 import { readScoreThreshold } from '../settings';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
-import { getLatestProfile } from '../style/distill';
-import { pickStyleSamples, renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
+import { getLatestProfile, type StyleSample } from '../style/distill';
+import { renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
+import { loadStyleBundle, mergeStyleProfiles, type MergedStyleProfile } from '../style/merge';
 import { computeStyleMetrics, type StyleMetrics } from '../style/metrics';
-import type { StyleSample } from '../style/distill';
 import { runSummarizeStep } from './summarize';
 
 const CLIQUES_PATH = process.env.INKFORGE_CLIQUES_PATH ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
@@ -106,13 +106,24 @@ export async function runChapterPipeline(
     if (cur) prevTexts.push(cur.content);
   }
   // continue 续写：以锚点前文为声线基准启用 style_drift（经既有 softMajor 门控，零新增放行）
-  // generate+绑定档案：voice-match 基准取档案 metrics 快照（损坏 JSON 容错 undefined，DEC-2026-1115-04 批次二 B6）
+  // DEC-2026-1117-04 裁决②③：素材统一走 loadStyleBundle + mergeStyleProfiles（continue 亦注入；
+  // 快照优先/回落 live 行逻辑整体收编进 loadStyleBundle；binding 缺关联表时按主镜像合成）
+  const binding = booksRepo.getBookStyleBinding(db, args.bookId)
+    ?? (book.styleProfileId ? { primaryProfileId: book.styleProfileId, auxProfileIds: [], dimsSource: {} } : null);
+  const bundle = binding ? loadStyleBundle(db, { styleProfileId: book.styleProfileId, styleSnapshotJson: book.styleSnapshotJson }) : undefined;
+  const merged: MergedStyleProfile | undefined = bundle ? mergeStyleProfiles(bundle, args.chapterNo) : undefined;
+  // generate+绑定档案：voice-match 基准取混合档案主 metrics 快照（空串/坏 JSON 回落主档案现行 metrics_json 再容错 → undefined，B6）
   let boundProfileMetrics: StyleMetrics | undefined;
-  if (book.styleProfileId && runMode === 'generate') {
-    const profile = getLatestProfile(db, book.styleProfileId);
-    if (profile) {
+  if (merged && runMode === 'generate') {
+    try {
+      boundProfileMetrics = JSON.parse(merged.primaryMetricsJson) as StyleMetrics;
+    } catch {
+      boundProfileMetrics = undefined;
+    }
+    if (!boundProfileMetrics) {
+      const profile = getLatestProfile(db, merged.primaryProfileId);
       try {
-        boundProfileMetrics = JSON.parse(profile.metrics_json) as StyleMetrics;
+        boundProfileMetrics = profile ? (JSON.parse(profile.metrics_json) as StyleMetrics) : undefined;
       } catch {
         boundProfileMetrics = undefined;
       }
@@ -174,40 +185,22 @@ export async function runChapterPipeline(
 
   try {
     // ── 风格注入素材（book 绑定档案时；0.1 挂机路径恒无档案 → 跳过）──
+    // DEC-2026-1117-04 裁决③：删除 `runMode !== 'continue'` 注入门——续写亦注入混合风格；
+    // dims/axes/rules/terms/samples 全部走合并形态（与现单档案同形流入既有槽）
     let styleRulesText = '';
     let styleTerms: StyleTermDto[] = [];
     let styleDims: Record<StyleDimension, string> | undefined;
     let styleAxes: Record<StyleAxis, number> | undefined;
     let styleSamples: StyleSample[] = [];
     let styleSampleIds: string[] = [];
-    if (book.styleProfileId && runMode !== 'continue') {
-      const profile = getLatestProfile(db, book.styleProfileId);
-      if (profile) {
-        // persona 快照优先（绑定时的档案副本，改档案不影响已绑定书），损坏/缺省回落档案现值
-        let rulesSource = profile.rules_json;
-        let samplesSource = profile.samples_json;
-        if (book.styleSnapshotJson) {
-          try {
-            const snap = JSON.parse(book.styleSnapshotJson) as { rulesJson?: string; samplesJson?: string };
-            if (snap.rulesJson) rulesSource = snap.rulesJson;
-            if (snap.samplesJson) samplesSource = snap.samplesJson;
-          } catch {
-            /* 损坏快照回落档案现值 */
-          }
-        }
-        const rulesData = JSON.parse(rulesSource) as {
-          rulesText?: string;
-          terms?: StyleTermDto[];
-          dims?: Record<StyleDimension, string>;
-          axes?: Record<StyleAxis, number>;
-        };
-        styleRulesText = rulesData.rulesText ?? '';
-        styleTerms = rulesData.terms ?? [];
-        styleDims = rulesData.dims;
-        styleAxes = rulesData.axes;
-        styleSamples = pickStyleSamples(JSON.parse(samplesSource) as StyleSample[], args.chapterNo);
-        styleSampleIds = styleSamples.map((x) => x.id);
-      }
+    if (merged) {
+      styleRulesText = merged.rulesText;
+      styleTerms = merged.terms;
+      styleDims = merged.dims;
+      // merged.axes 为 Partial 形态（merge 第 4 步 P 空不写入）；renderStyleDimsBlock 内部逐轴 typeof 守卫，Partial 安全
+      styleAxes = merged.axes as Record<StyleAxis, number>;
+      styleSamples = merged.samples;
+      styleSampleIds = styleSamples.map((x) => x.id);
     }
     // B1：七维六轴画像文本与 fewShot 块提前装配（draft 与 full 重写共用同一块；targeted 只补 styleRules 精简槽）
     const styleDimsText = styleDims && styleAxes ? renderStyleDimsBlock(styleDims, styleAxes, config.budgets.draft.styleDims) : '';
@@ -242,7 +235,7 @@ export async function runChapterPipeline(
             continuity: continuityText,
             prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
             fewShot: fewShotBlock,
-            task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }),
+            task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }) + (runMode === 'continue' ? '\n前文腔调优先，文风档案作质感参照。' : ''),
           },
           config.budgets.draft,
         ),

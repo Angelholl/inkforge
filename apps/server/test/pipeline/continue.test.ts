@@ -6,11 +6,25 @@ import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
 import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
-import { createBook, setBookStyleProfile } from '../../src/db/repositories/books';
+import { createBook, setBookFewshot, setBookStyleProfile } from '../../src/db/repositories/books';
 import { getChapter, importOriginalChapters, listVersions, upsertBlueprint } from '../../src/db/repositories/chapters';
 import { createRun, listSteps } from '../../src/db/repositories/runs';
 import { createDefaultMockProvider, makeMockDraft } from '../../src/llm/mock';
 import { runChapterPipeline } from '../../src/pipeline/chapter';
+import type { CompletionRequest, LlmProvider } from '../../src/llm/types';
+
+function capturing(inner: LlmProvider): { calls: Array<{ step: string; system: string; user: string }>; provider: LlmProvider } {
+  const calls: Array<{ step: string; system: string; user: string }> = [];
+  return {
+    calls,
+    provider: {
+      complete: async (req: CompletionRequest) => {
+        calls.push({ step: String((req.meta as { step?: string } | undefined)?.step ?? ''), system: req.system ?? '', user: req.user ?? '' });
+        return inner.complete(req);
+      },
+    },
+  };
+}
 
 const config = loadConfig({
   STRATA_BASE_URL: 'http://127.0.0.1:47831/v1',
@@ -20,6 +34,7 @@ const config = loadConfig({
 
 let db: Database;
 let dir: string;
+let bookId: string;
 
 beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-continue-'));
@@ -41,8 +56,8 @@ afterAll(() => {
 });
 
 describe('continue 模式管线', () => {
-  it('continue：绑定档案不注入风格且 l0 含 style_drift', async () => {
-    const bookId = createBook(db, { title: '续写测试书', description: '修真世界续写设定。' }).id;
+  it('continue：绑定档案注入风格块与样本 ids（fewshot 关不注入范例片段），l0 含 style_drift', async () => {
+    bookId = createBook(db, { title: '续写测试书', description: '修真世界续写设定。' }).id;
     // 2 章 original 种子（锚点正文）
     importOriginalChapters(db, {
       bookId,
@@ -80,8 +95,9 @@ describe('continue 模式管线', () => {
     });
 
     const run = createRun(db, { bookId, mode: 'continue', chapterScope: { from: 3, to: 3 }, maxRounds: 1 });
+    const cap = capturing(createDefaultMockProvider());
     await runChapterPipeline(
-      { db, provider: createDefaultMockProvider(), config, emit: () => {} },
+      { db, provider: cap.provider, config, emit: () => {} },
       { runId: run.id, bookId, chapterNo: 3 },
     );
 
@@ -90,11 +106,38 @@ describe('continue 模式管线', () => {
     const row = db.prepare('SELECT style_sample_ids_json FROM chapter_versions WHERE id = ?').get(draftVersion.id) as {
       style_sample_ids_json: string;
     };
-    expect(row.style_sample_ids_json).toBe('[]');
+    // B4 裁决④：ids 记录不看 fewshot 开关；merge 第 7 步 id 带 `${profileId}:` 命名空间前缀；
+    // 无快照回落 live 行（单主 bundle，池 3 条全归主配额），pickStyleSamples 池内轮转 chapterNo=3 → startIdx=2 → s3,s1,s2
+    expect(row.style_sample_ids_json).toBe('["mock-profile:s3","mock-profile:s1","mock-profile:s2"]');
+
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.system).toContain('RULES: 句长 10-20 字。');
+    expect(draft.user).toContain('前文腔调优先，文风档案作质感参照。');
+    expect(draft.user).not.toContain('【范例片段】');
 
     const qcStep = listSteps(db, run.id).find((s) => s.step === 'qc')!;
     const l0 = (qcStep.outputJson as { l0: { checks: Array<{ name: string }> } }).l0;
     expect(l0.checks.map((c) => c.name)).toContain('style_drift');
+  }, 30000);
+
+  it('continue 开 fewshot → user 注入【范例片段】样本块', async () => {
+    setBookFewshot(db, bookId, true);
+    const run = createRun(db, { bookId, mode: 'continue', chapterScope: { from: 3, to: 3 }, maxRounds: 1 });
+    const cap = capturing(createDefaultMockProvider());
+    await runChapterPipeline(
+      { db, provider: cap.provider, config, emit: () => {} },
+      { runId: run.id, bookId, chapterNo: 3 },
+    );
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.user).toContain('【范例片段】');
+    expect(draft.user).toContain('样本三');
+    // 开关不影响 ids 记录（B4 裁决④）：与用例一同值
+    const chapterId = getChapter(db, bookId, 3)!.id;
+    const draftVersion = listVersions(db, chapterId).find((v) => v.kind === 'draft')!;
+    const row = db.prepare('SELECT style_sample_ids_json FROM chapter_versions WHERE id = ?').get(draftVersion.id) as {
+      style_sample_ids_json: string;
+    };
+    expect(row.style_sample_ids_json).toBe('["mock-profile:s3","mock-profile:s1","mock-profile:s2"]');
   }, 30000);
 
   it('continue 无锚点 → 400 且先于 blueprint 校验', async () => {

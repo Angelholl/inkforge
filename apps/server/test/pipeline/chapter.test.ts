@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config';
 import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
-import { createBook } from '../../src/db/repositories/books';
+import { createBook, setBookStyleBinding } from '../../src/db/repositories/books';
+import { buildStyleBundle, type StyleProfileContent } from '../../src/style/merge';
 import { appendChapterVersion, getChapter, getCurrentVersion, listVersions, setCurrentVersion } from '../../src/db/repositories/chapters';
 import { listSteps } from '../../src/db/repositories/runs';
 import { createDefaultMockProvider, createMockProvider } from '../../src/llm/mock';
@@ -308,11 +309,89 @@ COMMENT: 节奏拖沓，需压缩。`;
     const plag = l0.checks.find((c) => c.name === 'plagiarism_ngram')!;
     expect(plag.pass).toBe(false);
     expect(plag.details).toContain('与参考文本重合');
-    // 样本 id 记录也不受开关影响（裁决④：只有注入这一件事受控）
+    // 样本 id 记录也不受开关影响（裁决④：只有注入这一件事受控）；merge 第 7 步 id 带 `${profileId}:` 命名空间前缀
     const rows = db
       .prepare('SELECT style_sample_ids_json FROM chapter_versions WHERE chapter_id = ?')
       .all('inj-ch-fewoff') as Array<{ style_sample_ids_json: string }>;
-    expect(rows.some((r) => JSON.parse(r.style_sample_ids_json).includes('s1'))).toBe(true);
+    expect(rows.some((r) => (JSON.parse(r.style_sample_ids_json) as string[]).some((id) => id.endsWith(':s1')))).toBe(true);
+  }, 60000);
+
+  it('混合档案：draft system 含辅档案维度文本与加权轴值，styleRules 为合并规则', async () => {
+    const bid = createBook(db, { title: '混合档案测试书', description: '混合档案注入测试设定。' }).id;
+    db.prepare(
+      "INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      'mix-ch',
+      bid,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '混合档案注入测试', beats: [], mustHaveBeats: [], bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+    const bundle = buildStyleBundle({
+      primaryProfileId: 'mix-main',
+      auxProfileIds: ['mix-aux'],
+      dimsSource: { 写作特点: 'mix-aux', 特色词汇: 'mix-aux', 章节结构: 'mix-aux' },
+      profiles: {
+        'mix-main': {
+          version: 1,
+          metricsJson: '{}',
+          rulesText: '主规则甲',
+          dims: { 节奏: '主节奏文本', 对话: '主对话文本', 描写: '主描写文本', 情感基调: '主情感基调文本' },
+          axes: { 叙述温度: 70 },
+          terms: [],
+          samples: [
+            { id: 's1', text: '混合主样本一' },
+            { id: 's2', text: '混合主样本二' },
+          ],
+        },
+        'mix-aux': {
+          version: 1,
+          metricsJson: '',
+          rulesText: '辅规则乙',
+          dims: { 写作特点: '辅写作特点文本', 特色词汇: '辅特色词汇文本', 章节结构: '辅章节结构文本' },
+          axes: { 叙述温度: 56 },
+          terms: [],
+          samples: [{ id: 'a1', text: '辅样本一' }],
+        },
+      } satisfies Record<string, StyleProfileContent>,
+    });
+    setBookStyleBinding(
+      db,
+      bid,
+      { primaryProfileId: 'mix-main', auxProfileIds: ['mix-aux'], dimsSource: { 写作特点: 'mix-aux', 特色词汇: 'mix-aux', 章节结构: 'mix-aux' } },
+      JSON.stringify(bundle),
+    );
+
+    // generate：混合注入（主 4 维 w=4 / 辅 3 维 w=3 → 叙述温度 (70*4+56*3)/7=64）
+    const runId = runFor(bid);
+    const cap = capturing(createDefaultMockProvider());
+    const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    expect(outcome.status).toBe('done');
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.system).toContain('【文风画像】');
+    expect(draft.system).toContain('主节奏文本');
+    expect(draft.system).toContain('辅写作特点文本');
+    expect(draft.system).toContain('辅章节结构文本');
+    expect(draft.system).toContain('（值 64）');
+    expect(draft.system).toContain('主规则甲');
+    expect(draft.system).toContain('辅规则乙');
+
+    // continue：同 bundle 仍注入混合风格 + task 段末尾追加指令行
+    const contRunId = `run-mix-cont-${Math.random().toString(36).slice(2)}`;
+    db.prepare("INSERT INTO runs(id, book_id, mode, chapter_scope_json, max_rounds, created_at) VALUES(?,?, 'continue', ?, 1, ?)").run(
+      contRunId,
+      bid,
+      JSON.stringify({ from: 1, to: 1 }),
+      new Date().toISOString(),
+    );
+    const capCont = capturing(createDefaultMockProvider());
+    const contOutcome = await runChapterPipeline({ db, provider: capCont.provider, config, emit: () => {} }, { runId: contRunId, bookId: bid, chapterNo: 1 });
+    expect(contOutcome.status).toBe('done');
+    const contDraft = capCont.calls.find((c) => c.step === 'draft')!;
+    expect(contDraft.system).toContain('【文风画像】');
+    expect(contDraft.user).toContain('前文腔调优先，文风档案作质感参照。');
   }, 60000);
 });
 
