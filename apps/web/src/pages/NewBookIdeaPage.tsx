@@ -23,6 +23,8 @@ export default function NewBookIdeaPage() {
   const [items, setItems] = useState<OutlineItemDto[]>([]);
   const [adopted, setAdopted] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<number | null>(null);
+  const [titles, setTitles] = useState<Record<number, string>>({});
+  const [chars, setChars] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -65,28 +67,15 @@ export default function NewBookIdeaPage() {
     });
   };
 
-  const editBlueprint = (n: number, raw: string) => {
-    setItems((prev) =>
-      prev.map((it) => {
-        if (it.chapterNo !== n) return it;
-        try {
-          return { ...it, blueprint: JSON.parse(raw) as OutlineItemDto['blueprint'] };
-        } catch {
-          return it; // 非法 JSON 暂不更新，保存前以最后合法值兜底
-        }
-      }),
-    );
-  };
-
   const saveAndContinue = async () => {
     setError('');
     setBusy(true);
     try {
       for (const it of items.filter((i) => adopted.has(i.chapterNo))) {
         await api.putBlueprint(bookId, it.chapterNo, {
-          title: `第${it.chapterNo}章`,
+          title: (titles[it.chapterNo] ?? '').trim() || `第${it.chapterNo}章`,
           blueprint: it.blueprint,
-          targetChars: 3000,
+          targetChars: Math.max(500, Math.trunc(chars[it.chapterNo] ?? 3000) || 3000),
         });
       }
       setStep('launch');
@@ -240,12 +229,25 @@ export default function NewBookIdeaPage() {
                   ))}
                 </ul>
                 {editing === it.chapterNo && (
-                  <textarea
-                    className="mt-2 w-full rounded border px-3 py-2 font-mono text-xs"
-                    rows={5}
-                    defaultValue={JSON.stringify(it.blueprint, null, 2)}
-                    onBlur={(e) => editBlueprint(it.chapterNo, e.target.value)}
-                  />
+                  <div className="mt-2 space-y-2">
+                    <input
+                      className="w-full rounded border px-3 py-2"
+                      aria-label={`第${it.chapterNo}章标题`}
+                      placeholder={`第${it.chapterNo}章`}
+                      onChange={(e) => setTitles((prev) => ({ ...prev, [it.chapterNo]: e.target.value }))}
+                    />
+                    <input
+                      className="w-32 rounded border px-3 py-2"
+                      type="number"
+                      min={500}
+                      step={100}
+                      aria-label={`第${it.chapterNo}章目标字数`}
+                      onChange={(e) => setChars((prev) => ({ ...prev, [it.chapterNo]: Number(e.target.value) }))}
+                    />
+                    <pre className="mt-2 rounded border bg-bg px-3 py-2 font-mono text-xs">
+                      {JSON.stringify(it.blueprint, null, 2)}
+                    </pre>
+                  </div>
                 )}
               </div>
             ))}

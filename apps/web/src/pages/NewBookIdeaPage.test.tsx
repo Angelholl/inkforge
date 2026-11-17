@@ -129,6 +129,12 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
     const saveBtn = screen.getByRole('button', { name: /保存蓝图并继续/ }) as HTMLButtonElement;
     expect(saveBtn.className).toContain('bg-primary');
     expect(saveBtn.className).toContain('h-ctl');
+    fireEvent.click(editBtn);
+    setInput(screen.getByLabelText('第1章标题') as HTMLInputElement, '启程');
+    setInput(screen.getByLabelText('第1章目标字数') as HTMLInputElement, '2500');
+    // step2 展开面板后全局不应存在任何 textarea（JSON 编辑已撤销，蓝图只读 pre 呈现）
+    expect(screen.getAllByText(/少年踏上旅途/).some((el) => el.tagName === 'PRE')).toBe(true);
+    expect(document.querySelectorAll('textarea').length).toBe(0);
     fireEvent.click(saveBtn);
     await waitFor(() => expect(screen.getByRole('button', { name: /发起生成/ })).toBeTruthy());
     const launchBtn = screen.getByRole('button', { name: /发起生成/ }) as HTMLButtonElement;
@@ -139,9 +145,12 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
     expect(puts).toHaveLength(2);
     expect(puts[0].url).toBe('/api/books/b1/chapters/1/blueprint');
     const put1 = JSON.parse(String((puts[0].init as RequestInit).body));
-    expect(put1.title).toBe('第1章');
-    expect(put1.targetChars).toBe(3000);
+    expect(put1.title).toBe('启程');
+    expect(put1.targetChars).toBe(2500);
     expect(put1.blueprint.goal).toBe('少年踏上旅途');
+    const put2 = JSON.parse(String((puts[1].init as RequestInit).body));
+    expect(put2.title).toBe('第2章');
+    expect(put2.targetChars).toBe(3000);
 
     fireEvent.click(screen.getByRole('button', { name: /发起生成/ }));
     await waitFor(() => expect(screen.getByText('运行页标记')).toBeTruthy());
@@ -154,5 +163,25 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
       fromChapter: 1,
       toChapter: 2,
     });
+  });
+
+  it('新书向导：逐章字数下限钳到 500', async () => {
+    const calls: Call[] = [];
+    vi.stubGlobal('fetch', stubFetch(calls));
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '下限钳制测书' } });
+    fireEvent.click(screen.getByRole('button', { name: '建书并生成蓝图' }));
+    await waitFor(() => expect(screen.getByText(/少年踏上旅途/)).toBeTruthy());
+
+    fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[0]);
+    setInput(screen.getByLabelText('第1章目标字数') as HTMLInputElement, '100');
+    fireEvent.click(screen.getByRole('button', { name: /保存蓝图并继续/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /发起生成/ })).toBeTruthy());
+
+    const puts = calls.filter((c) => /\/blueprint$/.test(c.url));
+    expect(puts).toHaveLength(2);
+    const put1 = JSON.parse(String((puts[0].init as RequestInit).body));
+    expect(put1.targetChars).toBe(500);
   });
 });
