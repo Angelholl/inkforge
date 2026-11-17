@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { API_BASE } from '../api/client';
 import StyleProfilesSection from './StyleProfilesSection';
 import { Button } from '../components/ui';
+import { textareaBase } from '../components/Field';
 
 export default function DistillPage() {
   const [distillTemplate, setDistillTemplate] = useState('');
@@ -42,16 +43,16 @@ export default function DistillPage() {
   };
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-2xl font-bold">蒸馏工作台</h1>
+    <main className="mx-auto max-w-5xl px-8 py-8">
+      <h1 className="text-xl font-semibold">蒸馏工作台</h1>
 
-      <section className="mt-10">
-        <h2 className="text-xl font-bold">蒸馏模板</h2>
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold">蒸馏模板</h2>
         <p className="mt-1 text-xs text-faint">
           蒸馏分析指令（DIM/AXIS/RULES 行协议）；留空恢复默认模板。可按题材调整侧重点，如「优先量化句长分布与对话占比」。
         </p>
         <textarea
-          className="mt-2 h-48 w-full rounded border p-3 font-mono text-xs"
+          className={`${textareaBase} mt-2 h-48 font-mono text-xs`}
           aria-label="蒸馏模板"
           placeholder="（空 = 使用默认模板）"
           value={distillTemplate}

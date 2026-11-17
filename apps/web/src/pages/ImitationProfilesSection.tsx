@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { Button } from '../components/ui';
+import { inputBase, inputNarrow, selectBase, textareaBase } from '../components/Field';
+import { EmptyState } from '../components/EmptyState';
 import type { ImitationDraftDto } from '@inkforge/shared';
 
 /** 拆解仿写档案分区（Pagekin 式）：analyze→预览→确认入库→列表→绑定书。draft 不入库，确认才落档案。 */
@@ -98,14 +100,14 @@ export default function ImitationProfilesSection() {
 
   return (
     <section className="mt-10">
-      <h2 className="text-xl font-bold">仿写档案（拆解仿写）</h2>
+      <h2 className="text-lg font-semibold">仿写档案（拆解仿写）</h2>
       <p className="mt-1 text-xs text-faint">参考样本只用于结构拆解与蓝图反推；drafter 不注入参考正文（防抄用红线）。</p>
 
       <section className="mt-4">
-        <h2 className="font-semibold">仿写档案列表</h2>
+        <h2 className="text-base font-semibold">仿写档案列表</h2>
         <ul className="mt-2 space-y-2">
           {profiles.map((p) => (
-            <li key={p.id} className="rounded border px-4 py-3">
+            <li key={p.id} className="rounded-card border border-line bg-surface px-4 py-3">
               <div className="flex items-center gap-3">
                 <span className="font-medium">{p.name}</span>
                 <span className="text-xs text-muted">v{p.version}</span>
@@ -128,7 +130,7 @@ export default function ImitationProfilesSection() {
               </div>
               <div className="mt-2 flex items-center gap-2 text-sm">
                 <select
-                  className="rounded border px-2 py-1"
+                  className={selectBase}
                   aria-label={`绑定书-${p.name}`}
                   value={bindBook[p.id] ?? ''}
                   onChange={(e) => setBindBook({ ...bindBook, [p.id]: e.target.value })}
@@ -146,16 +148,20 @@ export default function ImitationProfilesSection() {
               </div>
             </li>
           ))}
-          {profiles.length === 0 && <li className="text-sm text-muted">暂无仿写档案，先用下方表单拆解一个。</li>}
+          {profiles.length === 0 && (
+            <li>
+              <EmptyState title="还没有仿写档案" hint="粘贴 ≥200 字参考正文，从下方表单拆解第一个。" />
+            </li>
+          )}
         </ul>
       </section>
 
       <section className="mt-8">
-        <h2 className="font-semibold">拆解新档案</h2>
+        <h2 className="text-base font-semibold">拆解新档案</h2>
         <div className="mt-2 space-y-2">
-          <input className="w-full rounded border px-3 py-2" placeholder="仿写档案名称" aria-label="仿写档案名称" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={inputBase} placeholder="仿写档案名称" aria-label="仿写档案名称" value={name} onChange={(e) => setName(e.target.value)} />
           <textarea
-            className="w-full rounded border px-3 py-2 text-sm"
+            className={textareaBase}
             placeholder="粘贴参考作品正文（去空白后需 ≥200 字；服务端按 8×2000 字抽样做结构拆解）"
             rows={10}
             aria-label="仿写样本"
@@ -169,7 +175,7 @@ export default function ImitationProfilesSection() {
               min={1}
               max={50}
               aria-label="仿写反推章数"
-              className="ml-2 w-20 rounded border px-2 py-1"
+              className={`${inputNarrow} ml-2 w-20`}
               value={chapterCount}
               onChange={(e) => setChapterCount(e.target.value)}
             />
@@ -180,7 +186,7 @@ export default function ImitationProfilesSection() {
         </div>
 
         {draft && (
-          <div className="mt-4 rounded border bg-bg p-3">
+          <div className="mt-4 rounded-card border border-line bg-bg p-3">
             <h3 className="text-sm font-semibold">草稿预览（未入库）</h3>
             <div className="mt-2 text-sm">
               <div className="font-medium">结构拆解（{draft.structure.length} 条）</div>
@@ -190,7 +196,7 @@ export default function ImitationProfilesSection() {
                 ))}
               </ul>
               <div className="mt-2 font-medium">文风规则</div>
-              <pre className="mt-1 whitespace-pre-wrap rounded p-2 text-xs text-ink" style={{ background: '#F3F4F6' }}>
+              <pre className="mt-1 whitespace-pre-wrap rounded-ctl bg-surface p-2 text-xs text-ink border border-line">
                 {draft.style.rulesText || '（无规则行）'}
               </pre>
               <div className="mt-2 font-medium">蓝图反推（{draft.blueprint.length} 章）</div>

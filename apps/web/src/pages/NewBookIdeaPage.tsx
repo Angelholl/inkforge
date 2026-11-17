@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { api } from '../api/client';
 import type { OutlineItemDto } from '@inkforge/shared';
 import { Button } from '../components/ui';
+import { checkboxBase, inputBase, inputNarrow, textareaBase } from '../components/Field';
 
 type Step = 'setup' | 'review' | 'launch';
 
@@ -101,28 +102,28 @@ export default function NewBookIdeaPage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-bold">新书</h1>
+    <main className="mx-auto max-w-3xl px-8 py-8">
+      <h1 className="text-xl font-semibold">新书</h1>
       <p className="mt-1 text-sm text-muted">① 设定 → ② 蓝图审阅 → ③ 发起生成（全新成书，生成模式注入风格档案）</p>
-      {error && <p className="mt-4 whitespace-pre-line rounded border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-4 whitespace-pre-line rounded-card border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       {step === 'setup' && (
         <div className="mt-6 space-y-3">
           <input
-            className="w-full rounded border px-3 py-2"
+            className={inputBase}
             placeholder="书名"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
           <textarea
-            className="w-full rounded border px-3 py-2"
+            className={textareaBase}
             rows={8}
             placeholder="世界观 / 规则（越具体越好）"
             value={worldview}
             onChange={(e) => setWorldview(e.target.value)}
           />
           <textarea
-            className="w-full rounded border px-3 py-2"
+            className={textareaBase}
             rows={4}
             placeholder="全书剧情大纲（可选）：分卷 / 关键转折 / 结局走向"
             value={outlineText}
@@ -140,10 +141,10 @@ export default function NewBookIdeaPage() {
               </Button>
             </div>
             {cards.map((c, i) => (
-              <div key={i} className="rounded border px-3 py-2">
+              <div key={i} className="rounded-card border border-line bg-surface px-3 py-2">
                 <div className="flex items-center gap-2">
                   <input
-                    className="w-40 rounded border px-2 py-1"
+                    className={`${inputNarrow} w-40`}
                     placeholder="姓名"
                     aria-label={`人物卡姓名${i + 1}`}
                     value={c.name}
@@ -162,7 +163,7 @@ export default function NewBookIdeaPage() {
                   </Button>
                 </div>
                 <textarea
-                  className="mt-1 w-full rounded border px-2 py-1 text-sm"
+                  className={`${textareaBase} mt-1`}
                   rows={2}
                   placeholder="人物设定（身份 / 性格 / 目标…）"
                   aria-label={`人物卡设定${i + 1}`}
@@ -180,7 +181,7 @@ export default function NewBookIdeaPage() {
             </label>
             <input
               id="new-book-chapter-count"
-              className="w-24 rounded border px-3 py-2"
+              className={`${inputNarrow} w-24`}
               type="number"
               min={1}
               max={50}
@@ -203,10 +204,11 @@ export default function NewBookIdeaPage() {
         <div className="mt-6">
           <div className="space-y-3">
             {items.map((it) => (
-              <div key={it.chapterNo} className="rounded border px-4 py-3">
+              <div key={it.chapterNo} className="rounded-card border border-line bg-surface px-4 py-3">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
+                    className={checkboxBase}
                     aria-label={`采用第${it.chapterNo}章`}
                     checked={adopted.has(it.chapterNo)}
                     onChange={() => toggle(it.chapterNo)}
@@ -231,20 +233,20 @@ export default function NewBookIdeaPage() {
                 {editing === it.chapterNo && (
                   <div className="mt-2 space-y-2">
                     <input
-                      className="w-full rounded border px-3 py-2"
+                      className={inputBase}
                       aria-label={`第${it.chapterNo}章标题`}
                       placeholder={`第${it.chapterNo}章`}
                       onChange={(e) => setTitles((prev) => ({ ...prev, [it.chapterNo]: e.target.value }))}
                     />
                     <input
-                      className="w-32 rounded border px-3 py-2"
+                      className={`${inputNarrow} w-32`}
                       type="number"
                       min={500}
                       step={100}
                       aria-label={`第${it.chapterNo}章目标字数`}
                       onChange={(e) => setChars((prev) => ({ ...prev, [it.chapterNo]: Number(e.target.value) }))}
                     />
-                    <pre className="mt-2 rounded border bg-bg px-3 py-2 font-mono text-xs">
+                    <pre className="mt-2 rounded-ctl border border-line bg-bg px-3 py-2 font-mono text-xs">
                       {JSON.stringify(it.blueprint, null, 2)}
                     </pre>
                   </div>

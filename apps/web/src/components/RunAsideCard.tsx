@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { useRunEvents } from '../hooks/useRunEvents';
-import { Badge, Card, Console, runStatusTone, type ConsoleLine } from './ui';
+import { Badge, Card, Console, isInflightStatus, runStatusTone, type ConsoleLine } from './ui';
 import type { RunDto, RunStepDto } from '@inkforge/shared';
 
 const ACTIVE = new Set(['queued', 'running', 'paused']);
@@ -31,6 +31,7 @@ export default function RunAsideCard({ runs }: { runs: RunDto[] }) {
           控制台
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${live.connected ? 'bg-ok' : 'bg-faint'}`} />
           {latest ? `run ${latest.id.slice(0, 8)}` : '无活动 run'}
+          {latest && isInflightStatus(latest.status) && <span className="ember-dot bg-accent" aria-label="运行中" />}
         </div>
         <Console lines={lines} className="max-h-72" />
       </div>

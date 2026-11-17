@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/client';
 import { Button } from '../components/ui';
+import { inputBase, inputNarrow, textareaBase } from '../components/Field';
 
 // 章题行三分支（owner 反馈：（一）/一、等形态拆章无法识别）：
 // ① 第X章/节/回（容忍「第 1 章」空格排版）；② 数字顿号「一、雪夜」（排顿号复现，防「一、二、三」误切）；
@@ -126,16 +127,16 @@ export default function NewBookPage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-bold">新建小说（续写）</h1>
+    <main className="mx-auto max-w-3xl px-8 py-8">
+      <h1 className="text-xl font-semibold">新建小说（续写）</h1>
       <p className="mt-1 text-sm text-muted">① 建书 → ② 导入原文 → ③ 到书详情页设定剧情/人物/字数并发起续写</p>
-      {error && <pre className="mt-4 whitespace-pre-wrap rounded border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</pre>}
+      {error && <pre className="mt-4 whitespace-pre-wrap rounded-card border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</pre>}
 
       {wiz.step === 1 && (
         <div className="mt-6 space-y-3">
-          <input className="w-full rounded border px-3 py-2" placeholder="书名" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className={inputBase} placeholder="书名" value={title} onChange={(e) => setTitle(e.target.value)} />
           <textarea
-            className="w-full rounded border px-3 py-2"
+            className={textareaBase}
             placeholder="简介 / 世界观（可选；导入后也可在书详情页编辑）"
             rows={3}
             value={description}
@@ -150,7 +151,7 @@ export default function NewBookPage() {
       {wiz.step === 2 && (
         <div className="mt-6 space-y-3">
           <textarea
-            className="w-full rounded border px-3 py-2 font-mono text-sm"
+            className={`${textareaBase} font-mono`}
             placeholder="粘贴全文，或选择本地 txt/md 文件"
             rows={12}
             value={rawText}
@@ -177,7 +178,7 @@ export default function NewBookPage() {
             />
             <label
               htmlFor="import-original-file"
-              className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed px-3 py-6 text-sm text-muted hover:border-primary hover:bg-primary-soft/40"
+              className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed border-line px-3 py-6 text-sm text-muted transition-colors hover:border-line-strong hover:bg-primary-soft/40"
             >
               <span>点击选择本地 txt / md 文件（自动识别 UTF-8 / GBK 编码）</span>
               {fileInfo && <span className="text-xs font-medium text-primary-strong">{fileInfo}</span>}
@@ -194,14 +195,14 @@ export default function NewBookPage() {
           {parsed.length > 0 && (
             <ul className="space-y-2" aria-label="拆章预览">
               {parsed.map((c, i) => (
-                <li key={i} className="rounded border px-3 py-2 text-sm">
+                <li key={i} className="rounded-card border border-line bg-surface px-3 py-2 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <input
-                      className="flex-1 rounded border px-2 py-1"
+                      className={`${inputNarrow} flex-1`}
                       value={c.title}
                       onChange={(e) => setParsed(parsed.map((p, k) => (k === i ? { ...p, title: e.target.value } : p)))}
                     />
-                    <span className="text-faint">{c.content.length} 字</span>
+                    <span className="text-faint tabular-nums">{c.content.length} 字</span>
                     <Button variant="quiet" tone="danger" size="sm" onClick={() => removeChapter(i)}>
                       删除
                     </Button>

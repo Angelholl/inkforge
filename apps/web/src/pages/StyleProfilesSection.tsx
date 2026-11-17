@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorBody, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
+import { inputBase, inputNarrow, textareaBase } from '../components/Field';
+import { EmptyState } from '../components/EmptyState';
 import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAnalysisDto, type StyleProfileDto } from '@inkforge/shared';
 import ImitationProfilesSection from './ImitationProfilesSection';
 import BookSamplePicker from './BookSamplePicker';
@@ -233,13 +235,13 @@ export default function StyleProfilesSection() {
 
   return (
     <section className="mt-10">
-      <h2 className="text-xl font-bold">风格档案</h2>
+      <h2 className="text-lg font-semibold">风格档案</h2>
 
       <section className="mt-6">
-        <h2 className="font-semibold">档案列表</h2>
+        <h2 className="text-base font-semibold">档案列表</h2>
         <ul className="mt-2 space-y-2">
           {(profiles ?? []).map((p: StyleProfileDto) => (
-            <li key={p.id} className="rounded border px-4 py-3">
+            <li key={p.id} className="rounded-card border border-line bg-surface px-4 py-3">
               <div className="font-medium">{p.name}</div>
               <div className="mt-1 flex items-center gap-3 text-xs text-muted">
                 <span className="min-w-0">
@@ -289,17 +291,21 @@ export default function StyleProfilesSection() {
               )}
             </li>
           ))}
-          {(profiles ?? []).length === 0 && <li className="text-sm text-muted">暂无档案，先用下方表单蒸馏一个。</li>}
+          {(profiles ?? []).length === 0 && (
+            <li>
+              <EmptyState title="还没有风格档案" hint="粘贴或导入 ≥200 字风格样本，从下方表单蒸馏第一个。" />
+            </li>
+          )}
         </ul>
       </section>
 
       <section className="mt-8">
-        <h2 className="font-semibold">蒸馏新档案（蒸馏 → 预览编辑 → 确认入库）</h2>
+        <h2 className="text-base font-semibold">蒸馏新档案（蒸馏 → 预览编辑 → 确认入库）</h2>
         {phase === 'form' ? (
           <div className="mt-2 space-y-2">
-            <input className="w-full rounded border px-3 py-2" placeholder="档案名称" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className={inputBase} placeholder="档案名称" value={name} onChange={(e) => setName(e.target.value)} />
             <textarea
-              className="w-full rounded border px-3 py-2 text-sm"
+              className={textareaBase}
               placeholder="粘贴风格样本正文（去空白后需 ≥200 字）"
               rows={10}
               value={text}
@@ -327,7 +333,7 @@ export default function StyleProfilesSection() {
               />
               <label
                 htmlFor="import-sample-file"
-                className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed px-3 py-6 text-sm text-muted hover:border-primary hover:bg-primary-soft/40"
+                className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed border-line px-3 py-6 text-sm text-muted transition-colors hover:border-line-strong hover:bg-primary-soft/40"
               >
                 <span>点击选择本地 txt / md 文件（自动识别 UTF-8 / GBK 编码）</span>
                 {fileInfo && <span className="text-xs font-medium text-primary-strong">{fileInfo}</span>}
@@ -336,9 +342,9 @@ export default function StyleProfilesSection() {
             <BookSamplePicker onImport={setText} />
             <p className="text-xs text-muted">采样参数（一般保持默认即可）：段数=从原文均匀抽取多少段送 AI 分析，越多越全面也越慢；温度=分析随机度，越低越稳定。</p>
             <div className="flex gap-2">
-              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样段数（4-20）"
+              <input type="number" className={`${inputNarrow} w-40`} aria-label="采样段数（4-20）"
                 min={4} max={20} placeholder="采样段数（4-20）" value={maxSegments} onChange={(e) => setMaxSegments(e.target.value)} />
-              <input type="number" className="w-40 rounded border px-3 py-2" aria-label="采样温度（0-1）"
+              <input type="number" className={`${inputNarrow} w-40`} aria-label="采样温度（0-1）"
                 min={0} max={1} step="0.1" placeholder="采样温度（0-1）" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
             </div>
             <Button variant="primary" size="md" loading={busy} onClick={() => void distill()}>
@@ -347,14 +353,14 @@ export default function StyleProfilesSection() {
           </div>
         ) : (
           draft && (
-            <div className="mt-2 space-y-3 rounded border bg-bg p-3">
+            <div className="mt-2 space-y-3 rounded-card border border-line bg-bg p-3">
               <h3 className="text-sm font-semibold">草稿预览编辑（未入库）</h3>
               <div>
                 <div className="text-sm font-medium">七维</div>
                 {STYLE_DIMENSIONS.map((dim) => (
                   <label key={dim} className="mt-1 flex items-center gap-2 text-xs">
                     <span className="w-16 shrink-0 text-muted">{dim}</span>
-                    <input className="flex-1 rounded border px-2 py-1" aria-label={`维度-${dim}`} value={draft.analysis.dims[dim] ?? ''} onChange={(e) => setDim(dim, e.target.value)} />
+                    <input className={`${inputBase} flex-1`} aria-label={`维度-${dim}`} value={draft.analysis.dims[dim] ?? ''} onChange={(e) => setDim(dim, e.target.value)} />
                   </label>
                 ))}
               </div>
@@ -369,7 +375,7 @@ export default function StyleProfilesSection() {
                         min={0}
                         max={100}
                         aria-label={`轴-${axis}`}
-                        className="w-16 rounded border px-1 py-1"
+                        className={`${inputNarrow} w-16`}
                         value={draft.analysis.axes[axis] ?? 0}
                         onChange={(e) => setAxis(axis, Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
                       />
@@ -380,7 +386,7 @@ export default function StyleProfilesSection() {
               <div>
                 <div className="text-sm font-medium">规则（每行一条）</div>
                 <textarea
-                  className="mt-1 w-full rounded border px-2 py-1 text-xs"
+                  className={`${textareaBase} mt-1`}
                   rows={4}
                   aria-label="规则编辑"
                   value={draft.analysis.rules.join('\n')}
@@ -390,7 +396,7 @@ export default function StyleProfilesSection() {
               <div>
                 <div className="text-sm font-medium">术语表（每行「术语：说明」）</div>
                 <textarea
-                  className="mt-1 w-full rounded border px-2 py-1 text-xs"
+                  className={`${textareaBase} mt-1`}
                   rows={3}
                   aria-label="术语编辑"
                   value={(draft.analysis.terms ?? []).map((t) => `${t.term}：${t.note}`).join('\n')}

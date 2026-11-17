@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, API_BASE, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
+import { fieldLabel, inputBase, numberBase } from '../components/Field';
+import { SectionHeader } from '../components/Section';
 
 type SettingsResponse = {
   strataBaseUrl?: string;
@@ -8,6 +10,7 @@ type SettingsResponse = {
   hasApiKey?: boolean;
 };
 
+/** 设置页（DEC-2026-1118-02）：两栏式表单行（Windows 11 设置形态），label 左列 160px；行为零改动。 */
 export default function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -97,10 +100,10 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-2xl font-bold">设置</h1>
+    <main className="mx-auto max-w-2xl px-8 py-8">
+      <h1 className="text-xl font-semibold">设置</h1>
       {connError && (
-        <p className="mt-4 rounded border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">服务未连接</p>
+        <p className="mt-4 rounded-card border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">服务未连接</p>
       )}
       <form
         className="mt-6 space-y-4"
@@ -109,38 +112,38 @@ export default function SettingsPage() {
           void save();
         }}
       >
-        <div>
-          <label htmlFor="settings-base-url" className="block text-sm font-medium">
+        <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-3">
+          <label htmlFor="settings-base-url" className={fieldLabel}>
             本地端点地址
           </label>
           <input
             id="settings-base-url"
-            className="mt-1 w-full rounded border px-3 py-2"
+            className={inputBase}
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://api.example.com/v1"
           />
         </div>
-        <div>
-          <label htmlFor="settings-api-key" className="block text-sm font-medium">
+        <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-3">
+          <label htmlFor="settings-api-key" className={fieldLabel}>
             API Key
           </label>
           <input
             id="settings-api-key"
             type="password"
-            className="mt-1 w-full rounded border px-3 py-2"
+            className={inputBase}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={hasApiKey ? '已保存，留空保持不变' : '输入 API Key'}
           />
         </div>
-        <div>
-          <label htmlFor="settings-model" className="block text-sm font-medium">
+        <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-3">
+          <label htmlFor="settings-model" className={fieldLabel}>
             模型名
           </label>
           <input
             id="settings-model"
-            className="mt-1 w-full rounded border px-3 py-2"
+            className={inputBase}
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="模型名称"
@@ -151,10 +154,10 @@ export default function SettingsPage() {
         </Button>
       </form>
       <section className="mt-8">
-        <h2 className="text-lg font-semibold">质量</h2>
+        <SectionHeader title="质量" size="lg" />
         <div className="mt-3 space-y-3">
-          <div>
-            <label htmlFor="settings-score-threshold" className="block text-sm font-medium">
+          <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-3">
+            <label htmlFor="settings-score-threshold" className={fieldLabel}>
               入库分阈值 OVERALL（1-10，默认 8.0）
             </label>
             <input
@@ -163,7 +166,7 @@ export default function SettingsPage() {
               min={1}
               max={10}
               step={0.5}
-              className="mt-1 w-full rounded border px-3 py-2"
+              className={numberBase}
               value={scoreThreshold}
               onChange={(e) => setScoreThreshold(e.target.value)}
             />
@@ -180,8 +183,6 @@ export default function SettingsPage() {
       </section>
       {message && <p className="mt-4 text-sm text-ok">{message}</p>}
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
-
-
     </main>
   );
 }
