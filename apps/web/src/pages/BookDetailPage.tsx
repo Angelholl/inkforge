@@ -16,6 +16,7 @@ import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, Style
  * ③ 0 席钳底：从当前最大席（平手同序）挪 1，循环至全部 ≥1（≤4 档案 Σ=100 必终止）。
  */
 export function normalizeWeights(values: Record<string, number>, orderedIds: string[]): Record<string, number> {
+  if (orderedIds.length === 0) return {}; // 空勾选：调用方有守卫，此为纯函数自防（除零）
   const clamped = orderedIds.map((id) => {
     const v = Math.trunc(Number(values[id]));
     return Number.isFinite(v) && v >= 1 ? v : 1;
