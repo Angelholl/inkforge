@@ -7,7 +7,7 @@
 **规格**：真值=docs/decision-log.md#DEC-2026-1117-04（owner 亲决，2026-11-17，勿重开）+ 本计划「实现级钉死清单」一节（主模型钉细节，owner 可驳回）。
 
 ## 全局约束（逐条精确值）
-1. **测试基线只增不减**：现全量 server 272 + web 85 + shared 2 = **359**；本计划预计新增 server 23（migrate 1 + repositories 2 + merge 13 + http 4 + pipeline 3）+ web 3（向导 1 + 详情页 2）→ 预计全量 ≈385，下限 359；既有断言仅允许计划内列明的适配（user_version 数字、快照 V1→V2 形态断言、向导 PUT body 断言、continue 用例一改名+style_sample_ids_json `'[]'`→`'["s3","s1","s2"]'` 按 B4 裁决④ ids 不看开关），一律不得改删来「变绿」。
+1. **测试基线只增不减**：现全量 server 272 + web 85 + shared 2 = **359**；本计划预计新增 server 30（migrate 1 + repositories 2 + merge 20 + http 4 + pipeline 3）+ web 4（向导 1 + 详情页 3）→ 预计全量 ≈393，下限 359；既有断言仅允许计划内列明的适配（user_version 数字、快照 V1→V2 形态断言、向导 PUT body 断言、continue 用例一改名+style_sample_ids_json `'[]'`→`'["mock-profile:s3","mock-profile:s1","mock-profile:s2"]'` 按 B4 裁决④ ids 不看开关 + critic 4.5 id 命名空间 `${profileId}:`），一律不得改删来「变绿」。
 2. **验证链硬序**：静态检查 → 定向测试 → 全量测试 → 冒烟 → 安全深扫比基线（零新增才放行）；任一环失败即停。工具命令从根 package.json / 各 app package.json 读实：`pnpm typecheck`、`pnpm lint`、`pnpm --filter @inkforge/server exec vitest run <文件>`（定向）、`pnpm -r --if-present run test`（全量）、`pnpm --filter @inkforge/web build`（冒烟）、`pnpm audit --prod`（安全）。
 3. **GUI 不做自动化目验**：涉及 GUI 的提交信息注明「GUI 未验证（owner 真实测试）」。
 4. **迁移卡面惯例**：user_version 硬编码点全库销号（全库 Grep 实数 **9 处**，明细见 Task-02）+ 迁移文件头带回滚注释 + 测试内两处旧库回滚块补 DROP。
@@ -68,7 +68,7 @@
 
 **Interfaces**：
 - Consumes：migrate() 顺序语义（apps/server/src/db/migrate.ts:11-27，user_version=9 库自动补跑 0010）
-- Produces：表 `book_style_profiles(book_id TEXT NOT NULL REFERENCES books(id), profile_id TEXT NOT NULL, is_primary INTEGER NOT NULL DEFAULT 0, dims_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, UNIQUE(book_id, profile_id))` + 索引 `idx_book_style_profiles_book`、`idx_book_style_profiles_profile`；存量回填（旧绑定→is_primary=1、七维全归主=dims_json '{}'）
+- Produces：表 `book_style_profiles(book_id TEXT NOT NULL REFERENCES books(id), profile_id TEXT NOT NULL, is_primary INTEGER NOT NULL DEFAULT 0, dims_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, UNIQUE(book_id, profile_id))` + 索引 `idx_book_style_profiles_book`、`idx_book_style_profiles_profile`、`ux_book_style_profiles_primary`（部分唯一：每书至多一枚主行，critic 2.1 附议采纳）；存量回填（旧绑定→is_primary=1、七维全归主=dims_json '{}'，`INSERT OR IGNORE` 重跑幂等）
 
 **依赖**：无
 
@@ -77,7 +77,7 @@
   ```sql
   -- 0010：风格多选维度级拼装（DEC-2026-1117-04）：book_style_profiles 关联表（引用真相）
   -- books.style_profile_id 保留为主风格镜像；dims_json '{}' = 七维全归主。
-  -- 回滚：DROP TABLE IF EXISTS book_style_profiles; DROP INDEX IF EXISTS idx_book_style_profiles_book; DROP INDEX IF EXISTS idx_book_style_profiles_profile;（user_version 不回退，旧代码零影响）
+  -- 回滚：DROP TABLE IF EXISTS book_style_profiles; DROP INDEX IF EXISTS idx_book_style_profiles_book; DROP INDEX IF EXISTS idx_book_style_profiles_profile; DROP INDEX IF EXISTS ux_book_style_profiles_primary;（user_version 不回退，旧代码零影响）
   CREATE TABLE IF NOT EXISTS book_style_profiles(
     book_id TEXT NOT NULL REFERENCES books(id),
     profile_id TEXT NOT NULL,
@@ -88,7 +88,8 @@
   );
   CREATE INDEX IF NOT EXISTS idx_book_style_profiles_book ON book_style_profiles(book_id);
   CREATE INDEX IF NOT EXISTS idx_book_style_profiles_profile ON book_style_profiles(profile_id);
-  INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, created_at)
+  CREATE UNIQUE INDEX IF NOT EXISTS ux_book_style_profiles_primary ON book_style_profiles(book_id) WHERE is_primary=1;
+  INSERT OR IGNORE INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, created_at)
     SELECT id, style_profile_id, 1, '{}', created_at FROM books WHERE style_profile_id IS NOT NULL;
   ```
 - [ ] migrate.test.ts：4 处 `toBe(9)` → `toBe(10)`（:33、:83、:95、:125）；:29 用例标题「user_version=9」→「user_version=10」；:49 注释「0003-0009」→「0003-0010」（:48 同）；两处旧库回滚块各补一行 `db.exec('DROP TABLE IF EXISTS book_style_profiles');`（v2 块 :63 `DROP TABLE IF EXISTS style_sources` 之后、v4 块 :117 同位置）——否则重迁 CREATE 撞 UNIQUE/已存在（T8A/T10A/T11A 三次踩坑，DEC 记录在案）
@@ -119,7 +120,7 @@
   ```
 - 保留 `setBookStyleProfile`（books.ts:102-116）签名不变，docblock 改注「遗留：仅写主镜像不写关联表（测试兜底路径用）；生产绑定走 setBookStyleBinding」
 
-**依赖**：Task-02
+**依赖**：Task-02（派发级合并：0010 迁移+本任务+Task-04 合为一张卡一次提交=SM-02——消掉「0010 已落盘而 deleteBook 清理行未落」的 FK 窗口，窗口内删已绑书 500，critic 2.1 采纳）
 
 **步骤**：
 - [ ] 实现三函数（books.ts，`setBookStyleProfile` 后插入）：`setBookStyleBinding` 用 `db.transaction`：①`UPDATE books SET style_profile_id=?, style_snapshot_json=?, style_fewshot_on=0, updated_at=? WHERE id=?`（binding=null 时三参皆 null——沿 B4 裁决④ 重绑/解绑归零 fewshot，books.ts:110 同款 SQL）；②`DELETE FROM book_style_profiles WHERE book_id=?`；③binding 非空 → 主行（is_primary=1）先 INSERT、辅行按 `auxProfileIds` 绑定序逐行 INSERT（is_primary=0）；`const ts = new Date().toISOString()` 事务内取一次全行复用（逐行现取会毫秒漂移、行序不可靠），每行 `dims_json = JSON.stringify(binding.dimsSource)`（全量映射逐行同值）、`created_at = ts`。`getBookStyleBinding`：`SELECT profile_id, is_primary, dims_json FROM book_style_profiles WHERE book_id=? ORDER BY is_primary DESC, rowid ASC`（rowid=插入序=绑定序，auxProfileIds 返回序由此保证——merge 算法「辅按绑定序」依赖此序） → 无行 null；主行=is_primary=1 首行、auxProfileIds=其余按序、dimsSource=JSON.parse(主行 dims_json)。`listBooksBoundToProfile`：`SELECT id, title FROM books WHERE style_profile_id = ? UNION SELECT b.id, b.title FROM book_style_profiles r JOIN books b ON b.id = r.book_id WHERE r.profile_id = ? ORDER BY title`（UNION 自动去重主镜像行）
@@ -179,6 +180,7 @@
   }
   export interface StyleBundleV2 {
     v: 2;
+    mergeVersion: number; // 恒 1；parse 缺省容忍=1——bundle 冻结的是内容非合并语义，算法演进时给已绑书留判别门（critic 1.3）
     boundAt: string;
     primaryProfileId: string;
     auxProfileIds: string[];
@@ -197,6 +199,7 @@
   export function buildStyleBundle(input: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string>; profiles: Record<string, StyleProfileContent>; boundAt?: string }): StyleBundleV2
   export function parseStyleBundle(raw: string | null | undefined): StyleBundleV2 | undefined
   export function loadStyleBundle(db: Database, book: { styleProfileId: string | null; styleSnapshotJson: string | null }): StyleBundleV2 | undefined
+  export function contentFromProfileRow(row: { version: number; rules_json: string; samples_json: string; metrics_json: string }): StyleProfileContent // 缺键/坏 JSON 容错：rulesText→''、dims/axes→{}、terms→[]、samples→[]（对齐 polish.ts:52-66 容错语义，critic 1.2；loadStyleBundle 与 PUT 组装两处复用）
   export function normalizeDimsSource(dimsSource: Record<string, string>, primaryProfileId: string): Record<StyleDimension, string>
   export function mergeStyleProfiles(bundle: StyleBundleV2, chapterNo: number): MergedStyleProfile
   ```
@@ -206,17 +209,18 @@
 **步骤**：
 - [ ] 实现常量与类型（如上 Produces 全文）
 - [ ] 实现 `normalizeDimsSource`：七维逐键——缺键/值空串/值 ∉ {primary∪aux} → primaryProfileId；恒返回七键全集
-- [ ] 实现 `buildStyleBundle`：组装 `{v:2, boundAt: input.boundAt ?? new Date().toISOString(), ...}`
+- [ ] 实现 `buildStyleBundle`：组装 `{v:2, mergeVersion: 1, boundAt: input.boundAt ?? new Date().toISOString(), ...}`
 - [ ] 实现 `parseStyleBundle`：raw 空/JSON.parse 抛错/缺 primaryProfileId → undefined；`raw` 含字符串键 `rulesJson` → V1 适配：单主 bundle（auxProfileIds=[], dimsSource={}, profiles[profileId]={version, metricsJson:'', rulesText/dims/axes/terms=JSON.parse(rulesJson) 逐键容错取 `rulesText?/dims?/axes?/terms?`，samples=JSON.parse(samplesJson) 容错 []}）；否则按 V2 形态直读
 - [ ] 实现 `loadStyleBundle`：book.styleProfileId=null → undefined；`parseStyleBundle(book.styleSnapshotJson)` 有值 → 返回；否则（快照缺/坏）回落 live 行——`getLatestProfile(db, book.styleProfileId)`，行 rules_json/samples_json 解析容错（沿 chapter.ts:186-197 语义），组装 buildStyleBundle(primary, [], {})；行缺失 → undefined
 - [ ] 实现 `mergeStyleProfiles`（模块 docblock 钉死算法，全部确定性无随机）：
+  0. 去重防御：`auxProfileIds = bundle.auxProfileIds.filter(id => id !== primaryProfileId)`（bundle 可能被手工/旧数据污染，同一档案不得双计权重与样本，critic 4.7）
   1. `dimsSource = normalizeDimsSource(bundle.dimsSource, bundle.primaryProfileId)`
-  2. dims[dim] = `profiles[dimsSource[dim]].dims[dim]` trim 后非空即用；来源 id 不在 profiles 表内（bundle 损坏防御）或该维文本空 → 回落主档案该维文本；仍空 → ''
-  3. 权重：`w_p = |{dim ∈ 七维 : dimsSource[dim]===p}|`；主风格 `w = max(w, 1)`（规格 B 保底）；W=Σw
-  4. axes[axis]（六轴逐个）：取「该轴值为有限数字」的参与档案集合 P；P 空 → 该轴不写入结果（renderStyleDimsBlock inject.ts:64 自滤）；否则 `Math.round(Σ_{p∈P} w_p·axes_p[axis] / Σ_{p∈P} w_p)`
-  5. rulesText：主 rulesText **原样全量**；辅按绑定序逐档案逐行（`rulesText.split('\n')` trim 非空），与已收行 trim 相等判重跳过；追加前置条件 `累计长度 + 1 + 行长 ≤ RULES_TOTAL_BUDGET(400)` 不满足则整档案终止（主超 400 → 不追任何辅行）
+  2. dims[dim] = 来源档案文本 trim 非空即用并记**实际来源**；来源 id 不在 profiles 表内（bundle 损坏防御）或该维文本空 → 回落主档案该维文本（实际来源=主）；仍空 → ''（实际来源=无）
+  3. 权重（规格原文「实际贡献维度数」按此落实，critic 4.3）：`w_p = |{dim : 第 2 步实际来源 === p}|`；主风格 `w = max(w, 1)`（规格 B 保底）；W=Σw
+  4. axes[axis]（六轴逐个）：参与集合 P = 「该轴值为有限数字」**且 `w_p > 0`** 的档案（防 ΣW=0 产 NaN，critic 4.2）；P 空 → 该轴不写入结果（renderStyleDimsBlock inject.ts:64 自滤）；否则 `Math.round(Σ_{p∈P} w_p·axes_p[axis] / Σ_{p∈P} w_p)`
+  5. rulesText：主 rulesText **原样全量**（不做预算截断，1000 槽截断归 assembler）；辅按绑定序逐档案逐行（`rulesText.split('\n')` trim 非空），与已收行 trim 相等判重跳过；追加前置条件 `累计长度 + 1 + 行长 ≤ RULES_TOTAL_BUDGET(400)`——不满足则 **break 当前辅档案的行循环、继续下一辅档案**（语义钉死唯一，critic 4.1；主超 400 时任何辅行自然进不进）
   6. terms：主全收；辅按绑定序逐条 `term.trim()` 相等判同跳过；总数达 `TERMS_MAX(10)` 停
-  7. samples：席位分配=最大余数法配 `SAMPLE_QUOTA(3)`——`raw_p = 3·w_p/W`，`floor` 后按小数余降序补足 3（平手：主先、再按 auxProfileIds 绑定序）；配额 > 池量的档案空缺席位按「主→辅绑定序」向尚有样本档案顺延补齐；每档案内部 `pickStyleSamples(pool, chapterNo, quota_p)`（inject.ts:5-13 轮转，quota 0 → 空数组）；拼接顺序=主在前辅按绑定序；全池空 → []
+  7. samples：席位分配=最大余数法配 `SAMPLE_QUOTA(3)`——`raw_p = 3·w_p/W`，`floor` 后按小数余降序补足 3（平手：主先、再按 auxProfileIds 绑定序）；**顺延循环（钉死，critic 4.4）：`while 总席位<3 且存在「尚有未取样本」的档案：按主→辅绑定序给每个尚有未取样本的档案 +1 席，重复至补满或全池取尽`**；每档案内部 `pickStyleSamples(pool, chapterNo, quota_p)`（inject.ts:5-13 轮转，quota 0 → 空数组）；**合并样本 id 命名空间：输出 `{ ...s, id: `${profileId}:${s.id}` }`**（蒸馏 id 为档案内局部编号跨档案会撞、provenance 失真，critic 4.5；map 新对象不改池内原对象）；拼接顺序=主在前辅按绑定序；全池空 → []
   8. `primaryMetricsJson = profiles[primary]?.metricsJson ?? ''`
 - [ ] 单测（merge.test.ts，纯 fixture 直喂、零 LLM 零 db，13 例全列）：
   - `it('单主档案：七维全主、六轴原值、样本配额 3'）` dimsSource={} → normalize 全主；axes 原值逐轴相等；samples.length===3
@@ -227,12 +231,19 @@
   - `it('主 rulesText 超 400：全量保留且不补辅'）`
   - `it('术语并集主优先、上限 10 条'）` 主 8 条 + 辅 4 条（其中 2 条同名）→ 10 条、前 8 条为主原样、第 9-10 为辅新条
   - `it('样本席位最大余数法：wA=4/wB=3 → A2+B1'）` 断言按 samples.id 前缀计数 A 池 2 条、B 池 1 条
-  - `it('样本逐章轮转：chapterNo=1 → [s0,s1]，chapterNo=2 → [s1,s2]'）` A 池 4 条 quota 2
+  - `it('样本逐章轮转：chapterNo=1 → [pA:s0,pA:s1]，chapterNo=2 → [pA:s1,pA:s2]'）` A 池 4 条 quota 2（id 含 `${profileId}:` 命名空间前缀，critic 4.5）
   - `it('辅样本不足 → 空缺席位顺延主池补满 3'）` B 池 0 条 → 3 条全 A
   - `it('V1 旧快照适配：单主七维全主、注入形状齐备'）` raw={profileId:'p1',version:1,rulesJson:'{"rulesText":"R","dims":{},"axes":{},"terms":[]}',samplesJson:'[{"id":"s0","text":"t"}]',boundAt:...} → merged.rulesText==='R'、samples.length===1、dimsSource 全 'p1'
   - `it('损坏快照 JSON → undefined'）` parseStyleBundle('not-json{') === undefined
   - `it('normalizeDimsSource：缺键/越权值/空串全归主'）` {对话:'pX'} → 七键全 'p1'
-- [ ] 验证：`pnpm --filter @inkforge/server exec vitest run test/style/merge.test.ts` 期望 `13 passed`；`pnpm --filter @inkforge/server typecheck` exit 0
+  - `it('实际贡献计权：辅映射维文本空回落主 → 权归主、辅零贡献不参与轴'）` 主 4 维文本非空 70；辅映射其余 3 维但文本全空、axes 全 56 → 回落主后 w主=7 w辅=0 → 各轴取主原值
+  - `it('轴参与需 w>0：主缺该轴且其余档案均零贡献 → 该轴不写入结果'）` 主 axes 无『叙述温度』键、唯一有值档案 w=0 → 结果 axes 不含该键
+  - `it('规则多辅：B 行超预算 break、C 短行仍可补入'）` 主 300 字 + 辅B 新行 120（300+1+120>400 break B）+ 辅C 新行 60（300+1+60≤400 收）→ rulesText.length===361
+  - `it('样本顺延多轮循环：A 池 1/B 池 0/C 池 5 → A1+C2'）` 权重 A3B2C2 → 席位 A1B1C1；B 空池缺 1 席 → 循环按主→辅序扫描 C +1 → 断言 A 池 1 条、C 池 2 条
+  - `it('辅列表含主去重：同一档案不双计权重与样本'）` auxProfileIds 含 primaryProfileId → 输出与纯主绑定 deep-equal
+  - `it('contentFromProfileRow：坏 JSON/缺键降级空内容不抛'）` rules_json 'not-json{'、samples_json 'x'、metrics_json '' → rulesText ''/dims {}/axes {}/terms []/samples []，version 透传（critic 1.2 硬化：chapter 现状坏 JSON 整章 fail，改后降级不注入）
+  - `it('确定性：同输入两次 deep-equal + profiles 键序置换输出不变'）` mergeStyleProfiles(bundle, 2) 两次调用 deep-equal；JSON 键序洗牌后的同内容 bundle → 输出 deep-equal
+- [ ] 验证：`pnpm --filter @inkforge/server exec vitest run test/style/merge.test.ts` 期望 `20 passed`（原 13+critic 补 7）；`pnpm --filter @inkforge/server typecheck` exit 0
 
 ### Task-06 绑定 API：zod schema + PUT 改造 + 409 并查 + GET 回显
 **文件**：
@@ -266,7 +277,7 @@
   5. `dimsSource` 键 ∉ STYLE_DIMENSIONS → 「未知风格维度：<键>」；值 ∉ {primary ∪ aux} → 「维度来源必须在已勾选档案中：<键>」
   6. 总档案数（primary+aux 去重后）>4 由 aux≤3（zod max(3)）+ 规则 4 联合保证；文案「风格档案最多绑定 4 个（1 主 + 3 辅）」挂在 auxProfileIds 超限 issue 上
   7. 解绑（规则 1 放行）无需主风格——规则 3 仅约束绑定请求
-- [ ] 改 PUT（routes.ts:583-605）：404 book 守卫保留（:585）；parseBody 换新 schema；`body.profileId === null` → `booksRepo.setBookStyleBinding(db, bookId, null, null)` 回 `{ok:true, styleProfileId:null}`（保留 :588-591 语义）；legacy `typeof body.profileId === 'string'` → 归一 `{primaryProfileId: body.profileId, auxProfileIds: [], dimsSource: {}}`；否则用 primaryProfileId/auxProfileIds/dimsSource。逐 id 存在性：`SELECT id, version, rules_json, samples_json, metrics_json FROM style_profiles WHERE id = ?` 任一缺 → `404 {error:'profile not found'}`（沿用 :596 文案）。内容解析容错沿 chapter.ts:198-210 语义（rules_json 缺键→空串/空对象、samples_json 坏→[]），组装 `buildStyleBundle({primaryProfileId, auxProfileIds, dimsSource, profiles})` → `booksRepo.setBookStyleBinding(db, bookId, binding, JSON.stringify(bundle))` → 回 `{ok:true, styleProfileId: primary}`
+- [ ] 改 PUT（routes.ts:583-605）：404 book 守卫保留（:585）；parseBody 换新 schema；`body.profileId === null` → `booksRepo.setBookStyleBinding(db, bookId, null, null)` 回 `{ok:true, styleProfileId:null}`（保留 :588-591 语义）；legacy `typeof body.profileId === 'string'` → 归一 `{primaryProfileId: body.profileId, auxProfileIds: [], dimsSource: {}}`；否则用 primaryProfileId/auxProfileIds/dimsSource。逐 id 存在性：`SELECT id, version, rules_json, samples_json, metrics_json FROM style_profiles WHERE id = ?` 任一缺 → `404 {error:'profile not found'}`（沿用 :596 文案）。内容解析容错=**新增硬化**（复用 contentFromProfileRow（Task-05），对齐 polish.ts:52-66 容错语义，**非 chapter.ts 现状**——现状坏 JSON 整章 fail，改后降级空内容不注入，critic 1.2），组装 `buildStyleBundle({primaryProfileId, auxProfileIds, dimsSource, profiles})` → `booksRepo.setBookStyleBinding(db, bookId, binding, JSON.stringify(bundle))` → 回 `{ok:true, styleProfileId: primary}`
 - [ ] 改 GET（routes.ts:198-203）：`reply.send({ ...book, styleBinding: booksRepo.getBookStyleBinding(db, bookId), chapters: ..., runs: ... })`
 - [ ] 改 409 反查（routes.ts:636-638）：换 `booksRepo.listBooksBoundToProfile(db, id)`（主镜像+关联表并查；覆盖删辅档案场景），:639-641 文案与结构不变
 - [ ] style.test.ts 新增（server +3）：沿 :168-184 newProfile/newBook helper——
@@ -303,10 +314,10 @@
   ```
   （规格 C：**删除 `runMode !== 'continue'` 门**——continue 亦注入；fewShot 门 `book.styleFewshotOn`（:216）不动；快照优先/回落逻辑整体收编进 loadStyleBundle；**:296 抄用检测 referenceTexts 的 `runMode === 'generate'` 门原位保留——continue 不做抄用检测，执行者不得顺手扩**）
 - [ ] continue 指令行（:233-250 draft slots）：`task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }) + (runMode === 'continue' ? '\n前文腔调优先，文风档案作质感参照。' : '')`——精确一行、句号结尾、置于任务段末尾
-- [ ] polish.ts :41-80：原绑定档案素材块替换为 `const binding = ...; const bundle = loadStyleBundle(db, { styleProfileId: book.styleProfileId, styleSnapshotJson: book.styleSnapshotJson }); const merged = bundle ? mergeStyleProfiles(bundle, args.chapterNo) : undefined;`——`terms = merged.terms`；`referenceTexts = merged.samples.slice((args.chapterNo-1) % max(1,len), +3)`（原 :67-73 逻辑换源）；`voiceRefMetrics` = `JSON.parse(merged.primaryMetricsJson)` 容错 → 空坏回落 `getLatestProfile(db, merged.primaryProfileId).metrics_json` 再容错（generate 同基准语义：声线锚=主风格）；merged 为 undefined → 三者维持现行空缺省（:43-45 原样）
+- [ ] polish.ts :41-80：素材块抽成导出纯函数 `export function polishBenchmarks(db: Database, book: { styleProfileId: string | null; styleSnapshotJson: string | null }, chapterNo: number): { voiceRefMetrics: StyleMetrics | undefined; referenceTexts: string[] | undefined; terms: StyleTermDto[] }`（管线消费其返回值；内部 binding 回落合成/loadStyleBundle/mergeStyleProfiles 与 chapter 同构），`terms = merged.terms`；**`referenceTexts = merged.samples.map((s) => s.text)` 直接取，不再二次轮转**（轮转已在 merge 第 7 步完成，critic 4.6；空数组→undefined）；`voiceRefMetrics` = `JSON.parse(merged.primaryMetricsJson)` 容错 → 空坏回落 `getLatestProfile(db, merged.primaryProfileId).metrics_json` 再容错（generate 同基准语义：声线锚=主风格）；merged 为 undefined → 三者维持现行空缺省（:43-45 原样）
 - [ ] chapter.test.ts 新增（server +1）：`it('混合档案：draft system 含辅档案维度文本与加权轴值，styleRules 为合并规则'）`——沿 :229-240 capturing harness + repo 直绑（setBookStyleBinding + buildStyleBundle 手工 bundle：主 dims 节奏/对话/描写/情感基调 4 维（文本如 '主节奏文本' 每维非空）、axes['叙述温度']=70；辅 dims 其余 3 维（写作特点/特色词汇/章节结构，每维非空）、axes['叙述温度']=56；rulesText 主 '主规则甲' + 辅 '辅规则乙'）→ 断言 draft.system 含 '主节奏文本'（主维）与辅维文本、含 '（值 64）'（算式：wA=4 wB=3 → (70*4+56*3)/7=448/7=64）含 '主规则甲' 与 '辅规则乙'；`runMode='continue'` 同 bundle 再跑 → draft.system 仍含【文风画像】且 user 含 '前文腔调优先，文风档案作质感参照。'
-- [ ] continue.test.ts 适配+新增（server +1）：用例一 :44-98 改名 `it('continue：绑定档案注入风格块与样本 ids（fewshot 关不注入范例片段），l0 含 style_drift'）`——:93 断言改 `style_sample_ids_json === '["s3","s1","s2"]'`：门删除后 continue 走 loadStyleBundle 无快照回落 mock-profile live 行，池 3 条全归主配额，`pickStyleSamples(pool, chapterNo=3, 3)` 轮转 startIdx=(3-1)%3=2 → s3,s1,s2；**ids 记录不看 fewshot 开关（B4 裁决④，chapter.ts:214 注释），不得保留 '[]' 迁就旧文案**（此适配已列全局约束①）；provider 包一层捕获 draft prompt（capture harness 形态沿 chapter.test.ts:229-240）追加断言：`system` 含 'RULES: 句长 10-20 字。'（styleRules 稳定槽进 system）、`user` 含 '前文腔调优先，文风档案作质感参照。' 且不含 '【范例片段】'（fewshot 默认关）；l0 style_drift 断言保留；新增 `it('continue 开 fewshot → user 注入【范例片段】样本块'）`——setBookFewshot(db, bookId, true) 后重跑，断言 `user` 含 '【范例片段】' 与 '样本三'（fewShot 属 volatile 槽走 user、与 ids 同池轮转），`style_sample_ids_json` 与用例一同值（开关不影响 ids 记录）
-- [ ] polish.test.ts 新增（server +1）：`it('polish 基准走合并档案：术语注入含辅术语，任务文本含【术语表】'）`——手工 bundle 主 terms [] + 辅 terms [{term:'灵力',note:'代指法力'}] → 跑 runPolishChapter（既有 harness）→ 抓 task 断言含 '灵力：代指法力'
+- [ ] continue.test.ts 适配+新增（server +1）：用例一 :44-98 改名 `it('continue：绑定档案注入风格块与样本 ids（fewshot 关不注入范例片段），l0 含 style_drift'）`——:93 断言改 `style_sample_ids_json === '["mock-profile:s3","mock-profile:s1","mock-profile:s2"]'`（id 带 `${profileId}:` 命名空间前缀，merge 第 7 步）：门删除后 continue 走 loadStyleBundle 无快照回落 mock-profile live 行，池 3 条全归主配额，`pickStyleSamples(pool, chapterNo=3, 3)` 轮转 startIdx=(3-1)%3=2 → s3,s1,s2；**ids 记录不看 fewshot 开关（B4 裁决④，chapter.ts:214 注释），不得保留 '[]' 迁就旧文案**（此适配已列全局约束①）；provider 包一层捕获 draft prompt（capture harness 形态沿 chapter.test.ts:229-240）追加断言：`system` 含 'RULES: 句长 10-20 字。'（styleRules 稳定槽进 system）、`user` 含 '前文腔调优先，文风档案作质感参照。' 且不含 '【范例片段】'（fewshot 默认关）；l0 style_drift 断言保留；新增 `it('continue 开 fewshot → user 注入【范例片段】样本块'）`——setBookFewshot(db, bookId, true) 后重跑，断言 `user` 含 '【范例片段】' 与 '样本三'（fewShot 属 volatile 槽走 user、与 ids 同池轮转），`style_sample_ids_json` 与用例一同值（开关不影响 ids 记录）
+- [ ] polish.test.ts 新增（server +1）：`it('polishBenchmarks：合并档案基准——术语并集含辅、referenceTexts 直取 merged.samples 无二次轮转'）`——直喂手工 bundle（主 terms []/samples 2 条/metricsJson '{}'，辅 terms [{term:'灵力',note:'代指法力'}]/samples 1 条，chapterNo=2）：断言返回 terms 含 '灵力' 条、referenceTexts deep-equal merged.samples 的 text 序列（3 条、轮转已在 merge 内完成不得再 slice）、voiceRefMetrics 可解析；再跑 runPolishChapter（既有 harness）抓 task 断言含 '灵力：代指法力'（注入面）
 - [ ] 回归确认（零改动项）：generate-drift.test.ts（setBookStyleProfile 无快照 → loadStyleBundle 回落 live 行链）期望原样绿；style-snapshot.test.ts 用例三（快照优先注入标记）期望原样绿
 - [ ] 验证：`pnpm --filter @inkforge/server exec vitest run test/pipeline/chapter.test.ts test/pipeline/continue.test.ts test/http/polish.test.ts test/pipeline/generate-drift.test.ts` 期望全绿（含既有场景一至五 prompt 稳定性用例）；`pnpm --filter @inkforge/server typecheck` exit 0
 
@@ -323,17 +334,18 @@
 **依赖**：Task-04、Task-06（回显字段在，UI 才有回显初值；测试用 fetch stub 不起真服务端，可在 Task-06 后随时做）
 
 **步骤**：
-- [ ] BookDetailPage.tsx :11-29 整段替换为 StyleBindPanel：本地 state `checked: string[]`（勾选序）、`primary: string`、`dims: Record<string,string>`；初值由 props.binding 归一（null → 空）；
+- [ ] BookDetailPage.tsx :11-29 整段替换为 StyleBindPanel：本地 state `checked: string[]`（勾选序）、`primary: string`、`dims: Record<string,string>`、`touched: Set<string>`（用户显式改过的维度键）；初值由 props.binding 归一（null → 空）；**换主风格时：dims 中值===旧主且不在 touched 的键 → 改指新主**（critic 2.4：否则七键初值永远指旧主）；
   - 勾选列表：`profiles.map → <input type="checkbox" aria-label={\`风格档案勾选-${p.name}\`} checked={checked.includes(p.id)} onChange>`；上限 4：未勾且 `checked.length>=4` → `disabled` + `title="最多绑定 4 个（1 主 + 3 辅）"`（规格 B 精确上限）
   - 主风格：`<select aria-label="主风格">` 选项=勾选中档案（`{p.name}（v{p.version}）`），`primary` 初值=`binding?.primaryProfileId ?? checked[0]`
   - 七维来源：`STYLE_DIMENSIONS.map(d => <select aria-label={\`维度来源-${d}\`}>)` 选项=主+已勾辅，初值=`binding?.dimsSource[d] ?? primary`
-  - 「保存绑定」Button → `onBind({ primaryProfileId: primary, auxProfileIds: checked.filter(id => id !== primary), dimsSource: dims })`（dims 补齐七键：未显式改的键=primary）；「解绑」Button → `onBind({ profileId: null })`
+  - 「保存绑定」Button **disabled={!primary || checked.length===0}**（防发 primaryProfileId:'' 吃 400，critic 2.4）→ `onBind({ primaryProfileId: primary, auxProfileIds: checked.filter(id => id !== primary), dimsSource: dims })`（dims 补齐七键：未显式改的键=primary）；「解绑」Button → `onBind({ profileId: null })`
   - 勾选变化时 `primary` 若失勾 → 自动回落 `checked[0] ?? ''`；`dims` 中失勾档案的键回落主
-- [ ] :474 调用点替换：`<StyleBindPanel binding={book?.styleBinding ?? null} profiles={Array.isArray(profiles) ? profiles : []} onBind={bindStyle} />`（:175-184 bindStyle fn 签名改 `(body: StyleBindBody)`，消息文案保留原句）；:294 chip `book?.styleProfileId` 保留（主镜像语义）；:481 提示语改为「续写也注入混合风格：前文腔调优先，文风档案作质感参照。」
+- [ ] :474 调用点替换：**书加载完成才挂载、换书强制重建** `{book ? <StyleBindPanel key={book.id} binding={book.styleBinding ?? null} profiles={Array.isArray(profiles) ? profiles : []} onBind={bindStyle} /> : null}`（critic 2.4：页面无 loading 守卫，面板 useState 初值首帧捕 null、GET 到达后不会重算，已绑书会显示成未绑）；:175-184 bindStyle fn 签名改 `(body: StyleBindBody)`，消息文案保留原句，**保存成功消息追加一行「绑定保存后文风示例开关已归零」（沿 books.ts:110 重绑归零语义，显性化不静默）**；:294 chip 改 `已绑定 N 个（主：<档案名>）` 形态（N=主+辅数，多选下只报主易误导，critic 2.4）；:481 提示语改为「续写也注入混合风格：前文腔调优先，文风档案作质感参照。」
 - [ ] client.ts :202-203：注释补「body 支持多选形态（primaryProfileId/auxProfileIds/dimsSource）与 legacy {profileId}」，函数签名不动
-- [ ] BookDetailPage.test.tsx 新增 describe（web +2，stub fetch 形态沿 :57-83）：book fixture 加 `styleBinding: null`、`styleFewshotOn: false`、`styleProfileId: null`——
+- [ ] BookDetailPage.test.tsx 新增 describe（web +3，stub fetch 形态沿 :57-83）：book fixture 加 `styleBinding: null`、`styleFewshotOn: false`、`styleProfileId: null`——
   - `it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 七键 dimsSource'）` 勾 p1、p2 → 主风格 select 值 'p1' → `维度来源-对话` 选 'p2' → 点「保存绑定」→ 断言 PUT `/api/books/b1/style` body deep-equal `{primaryProfileId:'p1', auxProfileIds:['p2'], dimsSource:{节奏:'p1',对话:'p2',描写:'p1',情感基调:'p1',写作特点:'p1',特色词汇:'p1',章节结构:'p1'}}`
   - `it('上限 4：第 5 个档案勾选框 disabled；解绑发 {profileId:null}'）` stub 回 5 档案 → 勾满 4 → 第 5 个 checkbox `disabled===true`；点「解绑」→ PUT body equals `{profileId:null}`
+  - `it('已绑书初值渲染：binding 非空 → 勾选/主风格/七维值全部落对'）` book stub 首帧 undefined 次帧回真书（验挂载时机）+ `styleBinding:{primaryProfileId:'p1',auxProfileIds:['p2'],dimsSource:{对话:'p2'}}` → 断言 p1/p2 档案 checkbox 均 checked、`主风格` select 值 'p1'、`维度来源-对话` 值 'p2'、`维度来源-节奏` 值 'p1'、保存按钮 enabled（critic 2.4：两条 null-binding 用例测不到初值同步）
 - [ ] 验证：`pnpm --filter @inkforge/web exec vitest run src/pages/BookDetailPage.test.tsx src/pages/NewBookIdeaPage.test.tsx` 期望全绿；`pnpm --filter @inkforge/web typecheck` exit 0
 - [ ] GUI 未验证（owner 真实测试）——提交信息注明
 
@@ -349,7 +361,7 @@
 **步骤**：
 - [ ] 静态：`pnpm typecheck` 期望全 workspace exit 0；`pnpm lint` 期望零输出
 - [ ] 定向（各任务步骤已跑）复核一遍：`pnpm --filter @inkforge/server exec vitest run test/db test/style test/http/style.test.ts test/http/style-snapshot.test.ts test/pipeline` 期望全绿
-- [ ] 全量：`pnpm -r --if-present run test` 期望 server 295 passed（272+23）、web 88 passed（85+3）、shared 2 passed——**合计 385 ≥ 基线 359，逐包数核对只增不减**
+- [ ] 全量：`pnpm -r --if-present run test` 期望 server 302 passed（272+30）、web 89 passed（85+4）、shared 2 passed——**合计 393 ≥ 基线 359，逐包数核对只增不减；各卡报数一律增量口径，绝对数与卡面不符先核对口径、不得改测试凑数（critic 2.2）**
 - [ ] 冒烟：`pnpm --filter @inkforge/web build` 期望 exit 0（产物体积与基线同数量级即可）
 - [ ] 安全比基线：`pnpm audit --prod` 期望零新增漏洞；提交前秘密扫描沿提交五步（secret 扫描→Conventional 中文提交→三查），正文 `verify: typecheck 0 错/定向 N 绿/全量 385/冒烟 build OK/audit 0`；永不 --no-verify、永不 git add -A、只 commit 不 push
 - [ ] GUI 行：涉及 NewBookIdeaPage/BookDetailPage 的提交信息注明「GUI 未验证（owner 真实测试）」
@@ -374,6 +386,8 @@
 2. **步骤唯一可写**：每步一个动作+可核对结果；无 TBD/「适当处理」死行；测试步均带测试名+精确断言值+规格数值；验证步均带精确命令+期望输出。✓（自查修正：Task-07 加权 fixture 与算式对齐——主 4 维 70/辅 3 维 56 → 448/7=64 断言『（值 64）』；Task-06 校验规则 3 原表述会误杀 legacy body，已改为「profileId 为 undefined 且 primary 缺省才报错，字符串=legacy 放行」并拆出规则 7；Task-01 去掉规格外 20000 上限，只保留 min 500+NaN 兜底）
 3. **类型一致**：StyleBindBody 四字段/StyleBindingDto 三字段/StyleBundleV2/MergedStyleProfile 前后文一致；setBookStyleBinding(dimsSource: Record<string,string>) 与 Dto 一致；GET 回显 `styleBinding` 键名在 routes/DTO/UI 三处一致。✓
 4. **隐含输入容错**：损坏快照 JSON（parseStyleBundle→undefined→回落 live 行/live 行坏→空内容）、辅档案缺轴值（重归一）、辅样本池空（顺延补齐）、dimsSource 越权值（归主）、主 rulesText 超 400（不补辅）、fewshot 开关门（不动）、8K styleDims=0（assembler 截 0 沿用）——各配测试或在算法步钉死。✓
-5. **比例**：server 23 / web 3 增量与各任务「预计新增」逐项可加总核对（1+2+13+4+3=23；1+2=3）；改动量与验收粒度成比例，merge 纯函数 13 例占大头（算法风险集中处），管线/UI 各 2-4 例聚焦规格断言。✓
+5. **比例**：server 30 / web 4 增量与各任务「预计新增」逐项可加总核对（3+20+4+2+1=30；1+3=4）；改动量与验收粒度成比例，merge 纯函数 20 例占大头（算法风险集中处），管线/UI 各 2-4 例聚焦规格断言。✓
 
 **主模型复核轮（2026-11-17，就地修，共 5 处）：** ①continue 用例一 ids 断言 `'[]'`→`'["s3","s1","s2"]'`（B4 裁决④ ids 不看开关，chapter.ts:214 实证）；②Task-03 绑定行 ts 事务内单值+`ORDER BY is_primary DESC, rowid`（毫秒漂移会乱辅绑定序，merge 算法依赖）；③Task-01 蓝图区断言改 step2 全局 textarea 计数=0（原 aria-label 前缀断言与 DOM 现状不对位）；④Task-07 钉死 :296 抄用检测 generate 门原位保留（continue 不做抄用检测，防执行者顺手扩）；⑤Task-05 dims 来源 id 不在 profiles 表内→归主防御。复核另经代码实证：renderStyleDimsBlock 轴行格式 `…（值 64）` 与断言兼容（inject.ts:65）、styleDims/styleRules 均 stable 槽进 system（assembler.ts:64-91）、fewShot 属 volatile 走 user、polish 术语进 taskText `【术语表】` 格式 `term：note`（polish.ts:88）、generate voiceRef 现读 live metrics（chapter.ts:111-119，改 merged 冻结值+回落链等价）。
+
+**decision-critic 评议轮（2026-11-17，总立场=有条件支持；主审回应=全部采纳，就地修）：** [HIGH_RISK_OBJECTION] 2.1 迁移窗口（app.ts:34/worker main.ts:15 启动无条件 migrate——0010 落盘即被下次服务启动应用；SM-02→SM-03 间 deleteBook 无清理行、删已绑书 500）→采纳：SM-02/03 并卡一次提交+派发前主审 VACUUM INTO 生产库快照+回填 INSERT OR IGNORE 幂等+ux_book_style_profiles_primary 部分唯一索引。[MATERIAL_CONFLICT] 1.2「samples_json 坏→[] 沿 chapter 现状」不实（chapter 坏 JSON 走外层 catch 整章 fail）→措辞改「新增硬化（对齐 polish.ts:52-66）」+contentFromProfileRow 纯函数用例；2.2 卡面绝对计数在任何顺序下互斥→全卡改增量口径。[MINOR] 全采纳：快照冻结粒度以 D1 为准+mergeVersion 字段（critic 1.3）、merge 算法钉死七处（实际贡献计权 4.3/轴分母 w>0 4.2/规则 break 语义 4.1/顺延循环 4.4/样本 id 命名空间 4.5/辅含主去重 4.7/确定性 meta 测）、polish 取消二次轮转+抽 polishBenchmarks 纯函数（4.6）、SM-08 面板挂载时机+key 重建/换主重映射/保存禁用/chip 多选语义/fewshot 归零显性化+初值渲染用例（2.4）、卡面补退回点（2.5）。critic 两语义问主审钉死：向导 step3 发起生成保留（导流非编辑面）；主零贡献时样本 0 席合意（完成通知知会 owner 可驳回）。continue 注入 fewshot 样本但不做抄用检测=既有缺口本次不扩，列「已知接受项」。
