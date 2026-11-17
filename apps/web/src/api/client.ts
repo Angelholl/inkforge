@@ -199,6 +199,7 @@ export const api = {
     req<{ ok: boolean; styleFewshotOn: boolean }>(`/api/books/${bookId}/style-fewshot`, { method: 'PUT', body: JSON.stringify({ on }) }),
   summarizeChapter: (bookId: string, chapterNo: number) =>
     req<{ ok: boolean }>(`/api/books/${bookId}/chapters/${chapterNo}/summarize`, { method: 'POST', body: '{}' }),
+  // body 支持多选形态（primaryProfileId/auxProfileIds/dimsSource）与 legacy {profileId}；服务端对保存的绑定归零 fewshot 开关
   bindStyle: (bookId: string, body: StyleBindBody) =>
     req<{ ok: boolean; styleProfileId: string }>(`/api/books/${bookId}/style`, { method: 'PUT', body: JSON.stringify(body) }),
   rewriteSelection: (versionId: string, selection: string, instruction: string) =>

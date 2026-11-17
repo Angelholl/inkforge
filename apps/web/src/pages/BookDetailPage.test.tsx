@@ -115,7 +115,9 @@ function installStyleStub() {
         return jsonResponse({ ok: true, styleFewshotOn: fewshot });
       }
       if (u.endsWith('/api/books/b1/style') && init?.method === 'PUT') {
-        bound = (JSON.parse(String(init.body)) as { profileId: string | null }).profileId;
+        // body 双形态：多选 {primaryProfileId} 与 legacy {profileId}
+        const parsed = JSON.parse(String(init.body)) as { profileId?: string | null; primaryProfileId?: string };
+        bound = parsed.profileId ?? parsed.primaryProfileId ?? null;
         return jsonResponse({ ok: true, styleProfileId: bound });
       }
       if (u.endsWith('/api/style-profiles')) {
@@ -289,29 +291,25 @@ describe('BookDetailPage', () => {
     );
   };
 
-  it('解绑不再被短路（回归缺陷⑦）：先绑 sp1 再选「（未绑定）」→ PUT /style body {profileId:null}', async () => {
+  it('解绑不再被短路（回归缺陷⑦）：先绑 sp1 再点「解绑」→ PUT /style body {profileId:null}', async () => {
     installStyleStub();
     stylePage();
-    const sel = (await screen.findByLabelText('风格档案绑定')) as HTMLSelectElement;
-    expect(sel.value).toBe('');
-    // option 来自异步查询：过早 change 到不存在的 option 会被浏览器吞掉（value 回 ''，不发 onChange）
-    await waitFor(() => expect(screen.getByRole('option', { name: /测试档案/ })).toBeTruthy());
-
-    fireEvent.change(sel, { target: { value: 'sp1' } });
+    const cb = (await screen.findByLabelText('风格档案勾选-测试档案')) as HTMLInputElement;
+    expect(cb.checked).toBe(false);
+    fireEvent.click(cb);
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
     await waitFor(() =>
       expect(
         calls.some(
           (c) =>
             c.url.endsWith('/api/books/b1/style') &&
             c.init?.method === 'PUT' &&
-            JSON.parse(String(c.init?.body)).profileId === 'sp1',
+            JSON.parse(String(c.init?.body)).primaryProfileId === 'sp1',
         ),
       ).toBe(true),
     );
-    // refetch 回读绑定态：不先绑就直接从 '' 选 '' 的话，React 的 value tracking 不会触发 onChange，用例会假绿
-    await waitFor(() => expect((screen.getByLabelText('风格档案绑定') as HTMLSelectElement).value).toBe('sp1'));
-
-    fireEvent.change(sel, { target: { value: '' } });
+    // refetch 回读绑定态（styleProfileId=sp1）后仍可解绑：解绑必须真发出去（缺陷⑦）
+    fireEvent.click(screen.getByRole('button', { name: '解绑' }));
     await waitFor(() =>
       expect(
         calls.some(
@@ -328,9 +326,8 @@ describe('BookDetailPage', () => {
   it('逐书文风示例开关：绑定后出现 checkbox，勾选发 PUT style-fewshot {on:true} 并回读 checked', async () => {
     installStyleStub();
     stylePage();
-    const sel = await screen.findByLabelText('风格档案绑定');
-    await waitFor(() => expect(screen.getByRole('option', { name: /测试档案/ })).toBeTruthy());
-    fireEvent.change(sel, { target: { value: 'sp1' } });
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-测试档案'));
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
 
     const cb = await waitFor(() => {
       const el = screen.queryByLabelText('文风示例注入');
@@ -467,5 +464,112 @@ describe('BookDetailPage', () => {
     });
     expect(JSON.parse(String(revivePut.init?.body))).toEqual({ offlineFromChapter: null });
     await waitFor(() => expect(screen.getByLabelText('下线章号-张三')).toBeTruthy());
+  });
+});
+
+describe('StyleBindPanel（风格多选绑定面板）', () => {
+  const BIND_PROFILES = [
+    { id: 'p1', name: '风格A', version: 1, createdAt: '2026-11-13T08:00:00Z', metrics: {}, sourcePath: 'inline:p1' },
+    { id: 'p2', name: '风格B', version: 2, createdAt: '2026-11-13T08:00:00Z', metrics: {}, sourcePath: 'inline:p2' },
+    { id: 'p3', name: '风格C', version: 1, createdAt: '2026-11-13T08:00:00Z', metrics: {}, sourcePath: 'inline:p3' },
+    { id: 'p4', name: '风格D', version: 1, createdAt: '2026-11-13T08:00:00Z', metrics: {}, sourcePath: 'inline:p4' },
+    { id: 'p5', name: '风格E', version: 1, createdAt: '2026-11-13T08:00:00Z', metrics: {}, sourcePath: 'inline:p5' },
+  ];
+
+  function installBindStub(opts: { bookOverride?: Record<string, unknown>; firstFrameUndefined?: boolean }) {
+    let served = false;
+    const base = { ...book, styleProfileId: null, styleFewshotOn: false, styleBinding: null };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/api/books/b1/style') && init?.method === 'PUT') {
+          return jsonResponse({ ok: true, styleProfileId: 'p1' });
+        }
+        if (u.endsWith('/api/style-profiles')) return jsonResponse(BIND_PROFILES);
+        if (u.endsWith('/api/books/b1/characters')) return jsonResponse([]);
+        if (u.includes('/api/books/b1')) {
+          // 首帧 undefined 次帧真书：验「书加载完成才挂载面板」（critic 2.4）
+          if (opts.firstFrameUndefined && !served) {
+            served = true;
+            return jsonResponse(undefined);
+          }
+          return jsonResponse({ ...base, ...opts.bookOverride });
+        }
+        return jsonResponse({});
+      }),
+    );
+  }
+
+  function renderPanel(): void {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 七键 dimsSource', async () => {
+    installBindStub({});
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
+    fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
+    expect((screen.getByLabelText('主风格') as HTMLSelectElement).value).toBe('p1');
+    fireEvent.change(screen.getByLabelText('维度来源-对话'), { target: { value: 'p2' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body))).toEqual({
+      primaryProfileId: 'p1',
+      auxProfileIds: ['p2'],
+      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
+    });
+  });
+
+  it('上限 4：第 5 个档案勾选框 disabled；解绑发 {profileId:null}', async () => {
+    installBindStub({});
+    renderPanel();
+    for (const name of ['风格A', '风格B', '风格C', '风格D']) {
+      fireEvent.click(await screen.findByLabelText(`风格档案勾选-${name}`));
+    }
+    const fifth = screen.getByLabelText('风格档案勾选-风格E') as HTMLInputElement;
+    expect(fifth.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '解绑' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: null });
+  });
+
+  it('已绑书初值渲染：binding 非空 → 勾选/主风格/七维值全部落对', async () => {
+    installBindStub({
+      firstFrameUndefined: true,
+      bookOverride: {
+        styleProfileId: 'p1',
+        styleFewshotOn: false,
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: { 对话: 'p2' } },
+      },
+    });
+    renderPanel();
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/api/books/b1') && !c.url.includes('characters'))).toBe(true));
+    // 首帧 book undefined：面板不得挂载（critic 2.4 挂载时机）
+    expect(screen.queryByLabelText('主风格')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: '刷新' }));
+    await waitFor(() => expect((screen.getByLabelText('主风格') as HTMLSelectElement).value).toBe('p1'));
+    expect((screen.getByLabelText('风格档案勾选-风格A') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('风格档案勾选-风格B') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('维度来源-对话') as HTMLSelectElement).value).toBe('p2');
+    expect((screen.getByLabelText('维度来源-节奏') as HTMLSelectElement).value).toBe('p1');
+    expect((screen.getByRole('button', { name: '保存绑定' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

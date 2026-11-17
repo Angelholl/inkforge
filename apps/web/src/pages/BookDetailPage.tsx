@@ -6,25 +6,143 @@ import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
 import { Badge, Button, Chip } from '../components/ui';
-import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleProfileDto } from '@inkforge/shared';
+import { STYLE_DIMENSIONS } from '@inkforge/shared';
+import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
 
-function StyleBindSelect({ currentProfileId, onBind }: { currentProfileId: string | null; onBind: (profileId: string | null) => void }) {
-  const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
-  const list = Array.isArray(profiles) ? profiles : [];
+/** 风格绑定面板（多选拼装）：档案勾选（上限 4）+ 主风格 + 七维来源，保存经 onBind 发多选 body，解绑发 {profileId:null}。 */
+function StyleBindPanel({
+  binding,
+  profiles,
+  onBind,
+}: {
+  binding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> } | null;
+  profiles: StyleProfileDto[];
+  onBind: (body: StyleBindBody) => void;
+}) {
+  // 初值由 props.binding 归一（null → 空）；面板只在书加载完成后挂载 + key 重建，首帧不会捕 null
+  const [checked, setChecked] = useState<string[]>(() => (binding ? [binding.primaryProfileId, ...binding.auxProfileIds] : []));
+  const [primary, setPrimary] = useState<string>(() => binding?.primaryProfileId ?? '');
+  const [dims, setDims] = useState<Record<string, string>>(() => {
+    const base: Record<string, string> = {};
+    for (const d of STYLE_DIMENSIONS) base[d] = binding?.dimsSource?.[d] ?? binding?.primaryProfileId ?? '';
+    return base;
+  });
+  // 用户显式改过的维度键：换主风格时这些键不跟随重映射
+  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+
+  const profileOf = (id: string) => profiles.find((p) => p.id === id);
+  // 主+已勾辅（主排首）＝七维 select 的选项序
+  const ordered = [primary, ...checked.filter((id) => id !== primary)].filter(Boolean);
+
+  const toggle = (p: StyleProfileDto) => {
+    if (checked.includes(p.id)) {
+      // 失勾：主失勾回落 checked[0]；dims 中失勾档案的键回落主
+      const next = checked.filter((id) => id !== p.id);
+      const np = primary === p.id ? (next[0] ?? '') : primary;
+      setChecked(next);
+      setPrimary(np);
+      setDims((prev) => {
+        const out = { ...prev };
+        for (const d of STYLE_DIMENSIONS) if (out[d] === p.id || (out[d] === primary && !touched.has(d))) out[d] = np;
+        return out;
+      });
+    } else {
+      if (checked.length >= 4) return; // 上限 4（1 主 + 3 辅）
+      setChecked([...checked, p.id]);
+      if (!primary) {
+        setPrimary(p.id);
+        setDims((prev) => {
+          const out = { ...prev };
+          for (const d of STYLE_DIMENSIONS) if (!touched.has(d) && !out[d]) out[d] = p.id;
+          return out;
+        });
+      }
+    }
+  };
+
+  const changePrimary = (v: string) => {
+    setPrimary(v);
+    // 换主重映射：值===旧主且未 touched 的键改指新主（否则七键初值永远指旧主，critic 2.4）
+    setDims((prev) => {
+      const out = { ...prev };
+      for (const d of STYLE_DIMENSIONS) if (!touched.has(d) && out[d] === primary) out[d] = v;
+      return out;
+    });
+  };
+
+  const save = () => {
+    // dims 补齐七键：未显式改的键 = 主
+    const dimsSource: Record<string, string> = {};
+    for (const d of STYLE_DIMENSIONS) dimsSource[d] = dims[d] || primary;
+    onBind({ primaryProfileId: primary, auxProfileIds: checked.filter((id) => id !== primary), dimsSource });
+  };
+
   return (
-    <select
-      aria-label="风格档案绑定"
-      className="rounded border px-2 py-1"
-      value={currentProfileId ?? ''}
-      onChange={(e) => onBind(e.target.value === '' ? null : e.target.value)}
-    >
-      <option value="">（未绑定）</option>
-      {list.map((p: StyleProfileDto) => (
-        <option key={p.id} value={p.id}>
-          {p.name}（v{p.version}）
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {profiles.map((p) => {
+          const isOn = checked.includes(p.id);
+          const full = !isOn && checked.length >= 4;
+          return (
+            <label key={p.id} className="flex items-center gap-1" title={full ? '最多绑定 4 个（1 主 + 3 辅）' : undefined}>
+              <input
+                type="checkbox"
+                aria-label={`风格档案勾选-${p.name}`}
+                checked={isOn}
+                disabled={full}
+                onChange={() => toggle(p)}
+              />
+              {p.name}（v{p.version}）
+            </label>
+          );
+        })}
+      </div>
+      <select aria-label="主风格" className="rounded border px-2 py-1" value={primary} onChange={(e) => changePrimary(e.target.value)}>
+        {primary === '' && <option value="">（未选主风格）</option>}
+        {checked.map((id) => {
+          const p = profileOf(id);
+          if (!p) return null;
+          return (
+            <option key={id} value={id}>
+              {p.name}（v{p.version}）
+            </option>
+          );
+        })}
+      </select>
+      <div className="flex flex-wrap items-center gap-2">
+        {STYLE_DIMENSIONS.map((d) => (
+          <label key={d} className="flex items-center gap-1">
+            {d}
+            <select
+              aria-label={`维度来源-${d}`}
+              className="rounded border px-2 py-1"
+              value={dims[d] ?? ''}
+              onChange={(e) => {
+                setDims({ ...dims, [d]: e.target.value });
+                setTouched(new Set(touched).add(d));
+              }}
+            >
+              {ordered.map((id) => {
+                const p = profileOf(id);
+                if (!p) return null;
+                return (
+                  <option key={id} value={id}>
+                    {p.name}（v{p.version}）
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        ))}
+      </div>
+      {/* 无主或零勾选禁用保存：防发 primaryProfileId:'' 吃 400（critic 2.4） */}
+      <Button variant="primary" disabled={!primary || checked.length === 0} onClick={save}>
+        保存绑定
+      </Button>
+      <Button variant="secondary" onClick={() => onBind({ profileId: null })}>
+        解绑
+      </Button>
+    </div>
   );
 }
 
@@ -172,11 +290,11 @@ export default function BookDetailPage() {
     setMsg(`整书已入队 run ${r.runId}`);
   };
 
-  const bindStyle = async (profileId: string | null): Promise<void> => {
+  const bindStyle = async (body: StyleBindBody): Promise<void> => {
     try {
-      await api.bindStyle(bookId, { profileId });
-      // 解绑必须真发出去（缺陷⑦）：文案也分两条，别让人以为还是「绑定」
-      setMsg(profileId === null ? '风格档案已解绑（persona 快照一并清除）' : '风格档案已绑定');
+      await api.bindStyle(bookId, body);
+      // 解绑必须真发出去（缺陷⑦）：文案分两条；保存成功显性化 fewshot 归零，不静默
+      setMsg(body.profileId === null ? '风格档案已解绑（persona 快照一并清除）' : '风格档案已绑定；绑定保存后文风示例开关已归零');
       void refetch();
     } catch (e) {
       setMsg(`绑定失败：${(e as Error).message}`);
@@ -291,7 +409,12 @@ export default function BookDetailPage() {
         {/* 详情 chip 条（D2） */}
         <Chip active>章节 {book?.chapters.length ?? 0}</Chip>
         <Chip active={doneCount > 0}>完成 {doneCount}</Chip>
-        {book?.styleProfileId && <Chip active>文风已绑</Chip>}
+        {book?.styleProfileId && (
+          <Chip active>
+            已绑定 {(book.styleBinding?.auxProfileIds.length ?? 0) + 1} 个（主：
+            {(Array.isArray(profiles) ? profiles : []).find((p) => p.id === book.styleProfileId)?.name ?? book.styleProfileId}）
+          </Chip>
+        )}
         {book?.imitationProfileId && <Chip active>仿写已绑</Chip>}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
@@ -470,15 +593,18 @@ export default function BookDetailPage() {
 
       <section className="mt-6">
         <h2 className="font-semibold">风格档案</h2>
-        <div className="mt-2 flex items-center gap-2 text-sm">
-          <StyleBindSelect currentProfileId={book?.styleProfileId ?? null} onBind={bindStyle} />
-          {book?.styleProfileId && (
-            <span className="text-muted">
-              已绑定：{(Array.isArray(profiles) ? profiles : []).find((p) => p.id === book.styleProfileId)?.name ?? book.styleProfileId}
-            </span>
-          )}
+        <div className="mt-2">
+          {/* 书加载完成才挂载 + 换书 key 重建（critic 2.4）：防 useState 初值首帧捕 null 永不重算 */}
+          {book ? (
+            <StyleBindPanel
+              key={book.id}
+              binding={book.styleBinding ?? null}
+              profiles={Array.isArray(profiles) ? profiles : []}
+              onBind={(body) => void bindStyle(body)}
+            />
+          ) : null}
         </div>
-        <p className="mt-1 text-xs text-faint">续写（continue）模式不注入风格，仅生成模式生效。</p>
+        <p className="mt-1 text-xs text-faint">续写也注入混合风格：前文腔调优先，文风档案作质感参照。</p>
         {book?.styleProfileId && (
           <div className="mt-2">
             <label htmlFor="book-style-fewshot" className="flex items-center gap-2 text-sm font-medium">
