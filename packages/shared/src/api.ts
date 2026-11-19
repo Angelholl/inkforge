@@ -507,8 +507,8 @@ export interface SettingsImportApplyBody {
 
 export interface SettingsImportApplyResult {
   bookId: string;
-  /** 整篇 MD 归档路径（data/imports/<bookId>-settings.md） */
-  sourcePath: string;
+  /** 整篇 MD 归档路径（data/imports/<bookId>-settings.md）；归档失败=null（warnings 说明） */
+  sourcePath: string | null;
   /** 拍板②：文风节成功导入=档案 id；跳过/失败=null（warnings 说明） */
   styleProfileId: string | null;
   /** apply 期警示（文风步跳过/失败等） */

@@ -58,10 +58,20 @@ export function acquireLock(
           if (age <= staleMs) throw new SingleInstanceError(pid);
           // pid 被复用给无关活进程，但锁已无人续鲜 → 走陈旧接管
         }
+        // 死 pid / 陈旧锁接管：rename 原子夺走（2026-11-20 审计收敛）。
+        // 旧实现 unlinkSync 非原子：A unlink→建新锁后，B 若也已判陈旧，其 unlink 会删掉
+        // A 的新锁而非陈旧锁 → A/B 双持锁 → 双 worker 并发跑队列。rename 只可能有一个
+        // 进程成功，其余 ENOENT 回环重看；持有者复活竞态由 staleMs≫touchMs 余量兜底。
         try {
-          fs.unlinkSync(lockPath); // 死 pid / 陈旧锁接管
+          fs.renameSync(lockPath, `${lockPath}.stale`);
         } catch (e2) {
-          if ((e2 as NodeJS.ErrnoException).code !== 'ENOENT') throw e2;
+          if ((e2 as NodeJS.ErrnoException).code === 'ENOENT') continue; // 已被其他接管者夺走 → 重看
+          throw e2;
+        }
+        try {
+          fs.unlinkSync(`${lockPath}.stale`); // 旧锁清理 best-effort；残留无害（下次接管 rename 覆盖）
+        } catch {
+          /* ignore */
         }
         continue;
       }

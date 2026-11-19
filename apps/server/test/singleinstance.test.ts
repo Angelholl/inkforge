@@ -64,4 +64,36 @@ describe('acquireLock 心跳锁', () => {
     const lock = acquireLock(dir, 'service.pid', { staleMs: 15_000, touchMs: 2_000 });
     lock.release();
   });
+
+  // rename 原子接管回归（2026-11-20 审计：unlink 非原子可致并发接管者双持锁）
+  it('陈旧接管后无 .stale 残留，锁内容为接管者 pid', () => {
+    const dir = tmpDir();
+    const lockPath = path.join(dir, 'service.pid');
+    fs.writeFileSync(lockPath, String(process.pid));
+    backdate(lockPath, 60_000);
+    const lock = acquireLock(dir, 'service.pid', { staleMs: 15_000, touchMs: 2_000 });
+    expect(fs.readFileSync(lockPath, 'utf8').trim()).toBe(String(process.pid));
+    expect(fs.existsSync(`${lockPath}.stale`)).toBe(false);
+    lock.release();
+  });
+
+  it('上次接管残留的 .stale 文件不阻塞新建锁', () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, 'service.pid.stale'), '999999');
+    const lock = acquireLock(dir, 'service.pid', { staleMs: 15_000, touchMs: 2_000 });
+    expect(fs.readFileSync(path.join(dir, 'service.pid'), 'utf8').trim()).toBe(String(process.pid));
+    lock.release();
+  });
+
+  it('陈旧锁 + 残留 .stale → rename 覆盖残留完成接管', () => {
+    const dir = tmpDir();
+    const lockPath = path.join(dir, 'service.pid');
+    fs.writeFileSync(lockPath, String(process.pid));
+    backdate(lockPath, 60_000);
+    fs.writeFileSync(`${lockPath}.stale`, '999999');
+    const lock = acquireLock(dir, 'service.pid', { staleMs: 15_000, touchMs: 2_000 });
+    expect(fs.readFileSync(lockPath, 'utf8').trim()).toBe(String(process.pid));
+    expect(fs.existsSync(`${lockPath}.stale`)).toBe(false);
+    lock.release();
+  });
 });

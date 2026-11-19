@@ -253,3 +253,33 @@ describe('POST /api/settings-import/apply（文风分析失败 canned）', () =>
     expect(profiles).toEqual([]);
   });
 });
+
+describe('POST /api/settings-import/apply（归档失败降级，2026-11-20 审计回归）', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await makeApp('');
+    // data/imports 位置预置同名普通文件 → mkdir/writeFile 必失败
+    fs.writeFileSync(path.join(h.dir, 'imports'), 'not a directory');
+  });
+  afterAll(() => teardown(h));
+
+  it('归档失败 → 仍 201 建书 + warning + sourcePath null（阻断「500 后重试→重复建书」路径）', async () => {
+    const draft = await previewDraft(h.app, COMPENDIUM);
+    const r = await h.app.inject({
+      method: 'POST',
+      url: '/api/settings-import/apply',
+      payload: { content: COMPENDIUM, draft: { ...draft, title: '归档降级书', importStyle: false } },
+    });
+    expect(r.statusCode).toBe(201);
+    const res = r.json() as { bookId: string; sourcePath: string | null; warnings: string[] };
+    expect(res.sourcePath).toBe(null);
+    expect(res.warnings.some((w) => w.includes('归档失败'))).toBe(true);
+
+    // 书真实在库（201 而非 500，owner 重试不再建重复书）
+    const book = await h.app.inject({ method: 'GET', url: `/api/books/${res.bookId}` });
+    expect(book.statusCode).toBe(200);
+    expect((book.json() as { title: string }).title).toBe('归档降级书');
+    // imports 占位文件未被破坏（无半成品目录/空壳文件）
+    expect(fs.statSync(path.join(h.dir, 'imports')).isFile()).toBe(true);
+  });
+});

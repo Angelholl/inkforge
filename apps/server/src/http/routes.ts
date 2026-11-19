@@ -236,13 +236,21 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     } catch (e) {
       return reply.code(500).send({ error: `设定导入落库失败：${(e as Error).message}` });
     }
-    // 整篇 MD 归档（沿 data/exports 先例；未映射节信息兜底）
-    const importDir = path.join(config.dataDir, 'imports');
-    await fs.promises.mkdir(importDir, { recursive: true });
-    const sourcePath = path.join(importDir, `${bookId}-settings.md`);
-    await fs.promises.writeFile(sourcePath, body.content, 'utf8');
-    // 文风步（拍板②）：建书+归档之后执行，失败不回滚建书
+    // 文风步（拍板②）与归档共用警示通道
     const warnings: string[] = [];
+    // 整篇 MD 归档（沿 data/exports 先例；未映射节信息兜底）。书已建成（事务已提交），
+    // 归档失败降级 warning 而非 500：500 会让 owner 误以为建书失败而重试 → 重复建书
+    //（2026-11-20 审计发现，同文风步「失败不回滚建书」先例）
+    const importDir = path.join(config.dataDir, 'imports');
+    const sourcePath = path.join(importDir, `${bookId}-settings.md`);
+    let archived = true;
+    try {
+      await fs.promises.mkdir(importDir, { recursive: true });
+      await fs.promises.writeFile(sourcePath, body.content, 'utf8');
+    } catch (e) {
+      archived = false;
+      warnings.push(`设定集原文归档失败：${(e as Error).message}（书已建成，原文请自行留存）`);
+    }
     let styleProfileId: string | null = null;
     const styleText = d.styleSection.trim();
     if (d.importStyle && styleText !== '') {
@@ -278,7 +286,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const volumes = d.outlineTree.volumes;
     reply.code(201).send({
       bookId,
-      sourcePath,
+      sourcePath: archived ? sourcePath : null,
       styleProfileId,
       warnings,
       counts: {
