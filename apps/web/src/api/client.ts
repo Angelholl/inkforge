@@ -14,6 +14,8 @@ import type {
   ImitationAnalyzeBody,
   ImitationDraftDto,
   ImitationProfileDto,
+  PlotDraftDto,
+  PlotProfileDto,
   ForeshadowingDto,
   ForeshadowingCreateBody,
   ForeshadowingUpdateBody,
@@ -144,6 +146,19 @@ export const api = {
     req<{ ok: boolean }>(`/api/imitation-profiles/${id}`, { method: 'DELETE', body: '{}' }), // 空体会被 Fastify 拒（沿 deleteBook 先例）
   bindImitation: (bookId: string, profileId: string | null) =>
     req<{ ok: boolean; imitationProfileId: string | null }>(`/api/books/${bookId}/imitation`, {
+      method: 'PUT',
+      body: JSON.stringify({ profileId }),
+    }),
+  // 剧情蒸馏（DEC-2026-1120-03）：五方法沿仿写同构
+  analyzePlot: (body: { name: string; text: string }) =>
+    req<{ draft: PlotDraftDto }>('/api/plot-profiles/analyze', { method: 'POST', body: JSON.stringify(body) }),
+  savePlotProfile: (draft: PlotDraftDto) =>
+    req<{ id: string }>('/api/plot-profiles', { method: 'POST', body: JSON.stringify({ draft }) }),
+  listPlotProfiles: () => req<PlotProfileDto[]>('/api/plot-profiles'),
+  deletePlotProfile: (id: string) =>
+    req<{ ok: boolean }>(`/api/plot-profiles/${id}`, { method: 'DELETE', body: '{}' }), // 空体会被 Fastify 拒（沿 deleteBook 先例）
+  bindPlot: (bookId: string, profileId: string | null) =>
+    req<{ ok: boolean; plotProfileId: string | null }>(`/api/books/${bookId}/plot`, {
       method: 'PUT',
       body: JSON.stringify({ profileId }),
     }),

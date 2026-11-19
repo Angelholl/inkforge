@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { API_BASE } from '../api/client';
 import StyleProfilesSection from './StyleProfilesSection';
+import PlotProfilesSection from './PlotProfilesSection';
 import { Button } from '../components/ui';
 import { textareaBase } from '../components/Field';
 
@@ -70,6 +71,7 @@ export default function DistillPage() {
       </section>
 
       <StyleProfilesSection />
+      <PlotProfilesSection />
     </main>
   );
 }

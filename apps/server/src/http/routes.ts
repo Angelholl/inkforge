@@ -19,8 +19,10 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
+import { analyzePlot } from '../plot';
+import * as plotRepo from '../db/repositories/plot';
 import { saveStyleProfile } from '../style/analysis';
 import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } from '../style/merge';
 import * as distillJobRepo from '../style/distill-job';
@@ -238,6 +240,12 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       const p = imitationRepo.getImitationProfile(db, book.imitationProfileId);
       return p ? `【参考作品结构拆解】\n${p.structure.join('\n')}` : '';
     })();
+    // 剧情参考（DEC-2026-1120-03）：绑定剧情档案时并列注入 planner 槽；drafter 不注入（红线同上）
+    const plotBrief = (() => {
+      if (!book.plotProfileId) return '';
+      const p = plotRepo.getPlotProfile(db, book.plotProfileId);
+      return p ? `【剧情参考】\n${p.structure.join('\n')}` : '';
+    })();
 
     const taskText = renderBlueprintTask({
       chapterNo,
@@ -251,6 +259,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       { name: 'hardRules', content: PLANNER_HARD_RULES, budgetChars: b.hardRules, stable: true, keep: 'head' as const },
       { name: 'continuity', content: continuityText, budgetChars: b.continuity, stable: false, keep: 'head' as const },
       ...(imitationBrief ? [{ name: 'imitationStructure', content: imitationBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
+      ...(plotBrief ? [{ name: 'plotReference', content: plotBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'head' as const },
       { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },
     ];
@@ -809,6 +818,45 @@ ${repairPrompt(first.errors)}`))).text,
     }
     booksRepo.setBookImitation(db, bookId, body.profileId);
     reply.send({ ok: true, imitationProfileId: body.profileId });
+  });
+
+  // ── 剧情蒸馏（DEC-2026-1120-03）：五端点沿仿写同构；注入面=blueprint-suggest planner 槽 plotReference ──
+  app.post('/api/plot-profiles/analyze', async (req, reply) => {
+    const body = parseBody(reply, plotAnalyzeSchema, req.body);
+    if (!body) return;
+    try {
+      const draft = await analyzePlot({ db, provider }, body);
+      reply.send({ draft });
+    } catch (e) {
+      reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  app.post('/api/plot-profiles', async (req, reply) => {
+    const body = parseBody(reply, plotSaveSchema, req.body);
+    if (!body) return;
+    const saved = plotRepo.savePlotProfile(db, body.draft);
+    reply.code(201).send(saved);
+  });
+
+  app.get('/api/plot-profiles', async () => plotRepo.listPlotProfiles(db));
+
+  app.delete('/api/plot-profiles/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!plotRepo.deletePlotProfile(db, id)) return reply.code(404).send({ error: 'not found' });
+    reply.send({ ok: true });
+  });
+
+  app.put('/api/books/:bookId/plot', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, plotBindSchema, req.body);
+    if (!body) return;
+    if (body.profileId !== null && !plotRepo.getPlotProfile(db, body.profileId)) {
+      return reply.code(404).send({ error: 'profile not found' });
+    }
+    booksRepo.setBookPlotProfile(db, bookId, body.profileId);
+    reply.send({ ok: true, plotProfileId: body.profileId });
   });
 
   app.post('/api/books/:bookId/chapters/:chapterNo/summarize', async (req, reply) => {

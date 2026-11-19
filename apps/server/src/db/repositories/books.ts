@@ -10,6 +10,8 @@ export interface Book {
   /** persona 快照（bindStyle 时复制档案 rules/samples，后续改档案不影响已绑定书） */
   styleSnapshotJson: string | null;
   imitationProfileId: string | null;
+  /** 剧情档案绑定（DEC-2026-1120-03）：blueprint-suggest planner 槽注入【剧情参考】 */
+  plotProfileId: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入，抄用检测不受影响 */
   styleFewshotOn: boolean;
   createdAt: string;
@@ -29,13 +31,14 @@ interface BookRow {
   style_profile_id: string | null;
   style_snapshot_json: string | null;
   imitation_profile_id: string | null;
+  plot_profile_id: string | null;
   style_fewshot_on: number;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, plotProfileId: r.plot_profile_id, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
@@ -51,6 +54,7 @@ export function createBook(
     styleProfileId: null,
     styleSnapshotJson: null,
     imitationProfileId: null,
+    plotProfileId: null,
     styleFewshotOn: false,
     createdAt: now,
     updatedAt: now,
@@ -187,6 +191,15 @@ export function listBooksBoundToProfile(db: Database, profileId: string): Array<
 /** 仿写档案绑定/解绑（profileId=null 解绑；存在性守卫由路由层做 404）。 */
 export function setBookImitation(db: Database, bookId: string, profileId: string | null): void {
   db.prepare('UPDATE books SET imitation_profile_id = ?, updated_at = ? WHERE id = ?').run(
+    profileId,
+    new Date().toISOString(),
+    bookId,
+  );
+}
+
+/** 剧情档案绑定（DEC-2026-1120-03）：沿 setBookImitation 同构。 */
+export function setBookPlotProfile(db: Database, bookId: string, profileId: string | null): void {
+  db.prepare('UPDATE books SET plot_profile_id = ?, updated_at = ? WHERE id = ?').run(
     profileId,
     new Date().toISOString(),
     bookId,

@@ -218,6 +218,25 @@ export const imitationBindSchema = z.object({
   profileId: z.string().min(1).nullable(),
 });
 
+// 剧情蒸馏（DEC-2026-1120-03）：PLOT 行协议草稿，沿仿写 schema 同构
+export const plotAnalyzeSchema = z.object({
+  name: z.string().min(1),
+  text: z.string().min(1),
+});
+
+export const plotSaveSchema = z.object({
+  draft: z.object({
+    name: z.string().min(1),
+    sourcePath: z.string().min(1),
+    sourceHash: z.string().min(8),
+    structure: z.array(z.string().min(1)).min(1).max(10),
+  }),
+});
+
+export const plotBindSchema = z.object({
+  profileId: z.string().min(1).nullable(),
+});
+
 export const polishSchema = z.object({
   chapterFrom: z.number().int().positive(),
   chapterTo: z.number().int().positive(),

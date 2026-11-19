@@ -429,6 +429,30 @@ export interface ImitationBindBody {
   profileId: string | null;
 }
 
+/** 剧情蒸馏草稿（DEC-2026-1120-03）：PLOT 行协议结构拆解，draft 不入库，确认才落档案。 */
+export interface PlotDraftDto {
+  name: string;
+  sourcePath: string;
+  sourceHash: string;
+  structure: string[];
+}
+
+export interface PlotProfileDto {
+  id: string;
+  name: string;
+  sourcePath: string;
+  structure: string[];
+  createdAt: string;
+}
+
+export interface PlotSaveBody {
+  draft: PlotDraftDto;
+}
+
+export interface PlotBindBody {
+  profileId: string | null;
+}
+
 /** 蒸馏后台 job（B5）：status=done 时 result 非空；failed 时 error 是给人看的文案。 */
 export interface DistillJobDto {
   id: string;
