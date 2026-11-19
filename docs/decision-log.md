@@ -435,3 +435,15 @@
 **计划与执行：** 计划真值=docs/plans/2026-11-19-run-content-link.md（code-planner 产出七任务，主审审查通过；关键核实：RunDto 已含 chapterScope+bookId 无需扩类型）。执行=三卡串行（ZCode Agent code-Executor 通道，同工作树 ≤1 卡红线）：卡1=Task-01/02/03 后端契约（ea33ebe/aa50293/8ed14ff）、卡2=Task-04/05 前端交互（781766d/8219c61）、卡3=Task-06/07 内容展开（34fe3ad/620d1b9）。三卡主审逐卡验收：diff 对卡面范围零超界、实现与计划逐字一致；卡2 两处实测偏差合理（测试章号 effect 时序守卫 findByDisplayValue('3') 带注释、EventSource stub 改每测试重挂抗 afterEach unstubAllGlobals），断言与文案逐字未动。
 
 **验证链（主审亲跑）：** lint 零输出、typecheck 全 workspace 0 错、全量测试 server 328+web 113+shared 2=**443**（基线 428 只增不减，+15=端点 5+提示 1+运行卡 6+仪表盘 3）、build:web 401.01kB 冒烟、安全深扫 secret 零真实新增（命中 2 处均为测试本地 mock 占位符沿既有先例）+audit --prod 零漏洞。推送前 code-review 双轴（Standards 轴：0 硬违规+7 条 judgement call，RunAsideCard 按钮组/展开容器 Duplicated Code 提取留待触碰时顺手重构；Spec 轴：七任务零缺失零越界零错实现）。推送：55bea54..620d1b9（v2rayN 代理挂，git 走 -c http.proxy= 直连），ls-remote 复核✓。**GUI 未验证（owner 真实测试）**点位：①书详情发起续写→提示含「查看运行面板→」可点跳运行面板；②运行卡活动行「暂停/取消」、paused 行「继续」生效后列表刷新（invalidateQueries ['book',bookId]+4s 轮询兜底）；③完成态「查看第N章→」跳章节阅读页；④运行卡 done 态「产物」展开 run 版本正文/「收起产物」；⑤仪表盘步行行「正文」展开该步版本正文、「版本已删」行不变；⑥操作失败错误文案（如暂停已完成 run 显「暂停失败：run is done」）。Backlog：Standards 轴 judgement call（按钮组 action 映射、展开容器共享组件、msg+queuedRunId 状态合并）。
+
+## DEC-2026-1119-02 run 永远卡 queued：worker.lock 陈旧锁 pid 复用 → 心跳锁修复（2026-11-19）
+
+**背景：** owner 报告运行 3a08a47a 永远停在 queued（两个前序 run 被取消也均 started_at=null）。根因链实证：①worker 被硬杀从不释放 worker.lock（`worker/main.ts:33-34` finally 不 release，supervisor.stop 直接 kill 无清理路径）——陈旧锁是常态；②锁探测只看 pid 存活不验身份（`procprobe.ts:2-10` process.kill(pid,0)，EPERM 也算活）；③下午 17:14 的 worker（node pid=1356）死后，20:46 系统把 pid 1356 复用给无关进程（`ta.bat label serve` 的 cmd.exe，与 inkforge 无关）；④22:50 晚间会话 server 正常起、spawn worker 撞锁 → `[worker] fatal: another instance holds lock (pid=1356)` exit(1) → supervisor 无限退避重启每次撞同一把锁 → 队列循环（`worker/main.ts:28` runQueueLoop）永远不存在 → 一切 run 永远 queued，且 worker 崩溃对 UI/DB 零暴露（stdio 只进被最小化的 server 控制台、无文件日志、onMessage 未接）。现场复现：带故障 DB 重启 dev server 即见 fatal 循环；删陈旧锁后 supervisor 下次重试自动接管、3a08a47a 立即 queued→running→done（步链 draft→qc→rewrite×3→summarize→finalize 全 done，终产物版本 abe159df）。
+
+**拍板（主模型，bug 修复级选型未走 critic）：** 心跳锁。`acquireLock(dataDir, file?, opts?)` 持有者每 touchMs（默认 2s）touch 锁 mtime（unref 间隔，ENOENT 自停）；探测侧 pid 活着但锁 mtime 超 staleMs（默认 15s）→ 视为陈旧接管。被否方案：身份探测（需 koffi 原生调用查映像名，重且跨平台差）；仅优雅释放补 release（救不了硬杀，本次事故正是硬杀）。风险自知：持有者真活着但停表 >15s（调试断点/休眠边界）会被误接管，由 run_steps 租约（30s 心跳+takeoverStaleSteps）兜底防双执行；service.pid 同获修复（server 主进程同函数）。
+
+**实现：** 仅改 `apps/server/src/singleinstance.ts`（+31/-4）+ 新增 `apps/server/test/singleinstance.test.ts`（回归 4 例：pid 活但 mtime 超龄→接管；pid 活且新鲜→仍拒；心跳按 touchMs 续鲜；死 pid 接管不回退）。调用点零改动（worker/main.ts:12、index.ts:19 默认值即生效）。临时处置（当时）：删陈旧 worker.lock 文件即解锁（未动用户 20:46 起的无关 cmd.exe 1356）。
+
+**验证链（主模型亲跑）：** lint 零输出、typecheck 全 workspace 0 错、全量测试 server 332+web 113+shared 2=**447**（基线 443 只增不减，+4=锁回归）、server 起服冒烟（health ok+worker 干净拿锁+心跳 mtime 4s 前进两次实证）、secret 扫描零命中+audit --prod 零漏洞。事故 run 已收口：第 7 章生成完成。**GUI 未验证（owner 真实测试）**点位：书详情发起生成/续写 → 运行卡应正常 queued→running（不再永久 queued）。
+
+**Backlog 登记：** worker 崩溃/重启对 UI 零暴露——supervisor onMessage 通道已支持但 index.ts 未接、无文件日志，worker fatal 循环时用户只见「一直 queued」无诊断线索（本次排障靠 DB+进程法证）；建议后续接 SSE 事件或落文件日志。
