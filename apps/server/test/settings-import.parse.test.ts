@@ -203,4 +203,155 @@ describe('parseSettingsCompendium', () => {
     expect(w.warnings.some((x) => x.includes('50'))).toBe(true);
     expect(w.outlineItems).toHaveLength(200);
   });
+
+  // ── v3 形态适配（DEC-2026-1120-04 追加裁决：结构重排/矩阵扩容/精炼前置）──
+  const V3_FIXTURE = `# 《示例新作》长篇 · 扩写设定集（v3）
+
+> 定位一句话：多线穿插的都市群像连载。
+
+## 1. 原文解剖
+
+### 1.5 悬置线清单
+
+贼眼邻居／未完成的拜访／远行两人未归／怀上的孩子生父是谁
+
+## 3. 世界观
+
+虚构港市，年代约 2003。
+
+## 4. 规则体系
+
+1. **借口律**：每场戏必须有借口。
+
+## 5. 人物圣经
+
+### 5.2 常驻中圈
+
+| 人物 | 档案 | 边与场次 |
+| --- | --- | --- |
+| 老王（王仲良，52，中介） | 占位档案 | ×主角 5 |
+| 阿珍（38，业主） | 占位档案二 | ×主角 3 |
+
+## 6. 大纲
+
+### 6.1 结构总说
+
+多线穿插，不切卷。
+
+### 6.2 故事线池
+
+| 线 | 内容 | 常驻拍点型 |
+| --- | --- | --- |
+| L1 蜜月线 | 林家、钓船 | 婚后回访 |
+
+### 6.3 阶段总表
+
+**阶段A 「结婚那年」**（2003）
+| 章 | 标题 | 线 | 落地 |
+| --- | --- | --- | --- |
+| 1 | 第一夜 | L10 | H（开场钩子） |
+| 2 | 坦白局 | L10 | L（框架确立） |
+
+**阶段B 「新家第一年」**（2004）
+| 章 | 标题 | 线 | 落地 |
+| --- | --- | --- | --- |
+| 3 | 借宿 | L4 | H（车站接人） |
+| 4 | 客房事件 | L4 | L |
+
+### 6.4 穿插示范（阶段A 章序全表）
+
+| 章 | 标题 | 线 | 落地 |
+| --- | --- | --- | --- |
+| 1 | 第一夜 | L10 | H（开场钩子） |
+| 2 | 坦白局 | L10 | L（框架确立） |
+| 3 | 借宿 | L4 | H（车站接人） |
+| 5 | 尾声 | L3 | L（收束） |
+
+### 6.5 剧情引擎库
+
+| 引擎 | 来源类型 | 用法 |
+| --- | --- | --- |
+| 婆媳同住季 | 家庭伦理剧 | 长辈线 |
+
+## 8. 关系发生矩阵
+
+| 边 | 场数 | 首场 | 后续分布 |
+| --- | --- | --- | --- |
+| 主角×老王 | 5 | A·4 | A·5/7/12 |
+| 主角×阿珍 | 3 | B·2 | B·4/6 |
+`;
+
+  it('v3 description：全文精炼前置（定位句起头、文档序、表格压行、无 markdown 残留、<16000 零警示）', () => {
+    const d = parseSettingsCompendium(V3_FIXTURE);
+    expect(d.description).toContain('定位一句话：多线穿插的都市群像连载');
+    expect(d.description).toContain('虚构港市');
+    expect(d.description).toContain('借口律');
+    expect(d.description).toContain('阶段A 「结婚那年」');
+    expect(d.description).toContain('老王（王仲良，52，中介）');
+    expect(d.description).toContain('主角×老王');
+    expect(d.description.indexOf('定位一句话')).toBeLessThan(d.description.indexOf('虚构港市'));
+    expect(d.description).not.toContain('#');
+    expect(d.description).not.toContain('**');
+    expect(d.description).not.toContain('`[前置注]`');
+    expect(d.description.length).toBeLessThan(16000);
+    expect(d.warnings).toEqual([]);
+  });
+
+  it('v3 人物卡：无粗体表格首格成卡（括号注记判定），边与场次并入设定', () => {
+    const d = parseSettingsCompendium(V3_FIXTURE);
+    expect(d.characters.map((c) => c.name)).toEqual(['老王', '阿珍']);
+    expect(d.characters[0].baseSetting).toContain('×主角 5');
+    expect(d.characters[1].baseSetting).toContain('（38，业主）');
+  });
+
+  it('v4 大纲树：粗体阶段行建卷、表格逐章行成卡、示范重复章跨树去重、子节新章挂子节题卷、线池/引擎表不成卡', () => {
+    const d = parseSettingsCompendium(V3_FIXTURE);
+    expect(d.outlineTree.volumes.map((v) => v.title)).toEqual(['阶段A 「结婚那年」', '阶段B 「新家第一年」', '穿插示范']);
+    const volA = d.outlineTree.volumes[0];
+    expect(volA.body).toBe('2003');
+    expect(volA.stages[0].cards.map((c) => c.chapterFrom)).toEqual([1, 2]);
+    expect(volA.stages[0].cards[0]).toMatchObject({ title: '第一夜', chapterFrom: 1, chapterTo: 1, body: 'H（开场钩子）' });
+    expect(d.outlineTree.volumes[1].stages[0].cards.map((c) => c.chapterFrom)).toEqual([3, 4]);
+    // 6.4 示范表：1/2/3 重复去重，新章 5 挂「穿插示范」子节题卷
+    const demo = d.outlineTree.volumes[2];
+    expect(demo.stages[0].cards.map((c) => c.chapterFrom)).toEqual([5]);
+    const allCards = d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(allCards).toHaveLength(5);
+  });
+
+  it('v3 outline：阶段单元行+矩阵节精炼追加', () => {
+    const d = parseSettingsCompendium(V3_FIXTURE);
+    expect(d.outline).toContain('阶段A 「结婚那年」');
+    expect(d.outline).toContain('主角×老王');
+    expect(d.outline).toContain('主角×阿珍');
+    expect(d.outline).not.toContain('|');
+  });
+
+  it('v3 伏笔：无编号 ／ 短语串回退逐条', () => {
+    const d = parseSettingsCompendium(V3_FIXTURE);
+    expect(d.foreshadowings.map((f) => f.description)).toEqual(['贼眼邻居', '未完成的拜访', '远行两人未归', '怀上的孩子生父是谁']);
+    expect(d.foreshadowings.every((f) => f.plantedCh === 1)).toBe(true);
+  });
+
+  it('v3 outlineItems：表格章行逐章预填、goal=落地格、章号升序去重', () => {
+    const d = parseSettingsCompendium(V3_FIXTURE);
+    expect(d.outlineItems.map((i) => i.chapterNo)).toEqual([1, 2, 3, 4, 5]);
+    expect(d.outlineItems[0].blueprint.goal).toBe('H（开场钩子）');
+    expect(d.chapterTitles['1']).toBe('第一夜');
+    expect(d.chapterTitles['3']).toBe('借宿');
+  });
+
+  it('v3 兼容：｜分隔章行仍成卡且线标签小体丢弃（旧穿插示范形态）', () => {
+    const legacy = [
+      '# 《旧排书》',
+      '## 6. 总大纲',
+      '### 卷一 《题》',
+      '**阶段A 「开局」**（2003）',
+      '25 车站接人(L4)｜26 饭桌试探(L4)｜27 同学会(L2)',
+    ].join('\n');
+    const d = parseSettingsCompendium(legacy);
+    const cards = d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(cards.map((c) => c.title)).toEqual(['车站接人', '饭桌试探', '同学会']);
+    expect(cards[0]).toMatchObject({ chapterFrom: 25, body: '' });
+  });
 });
