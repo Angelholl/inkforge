@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { countChars } from '@inkforge/shared';
-import type { ChapterBlueprint, ChapterKind, ChapterStatus } from '@inkforge/shared';
+import type { ChapterBlueprint, ChapterKind, ChapterStatus, RunVersionItemDto } from '@inkforge/shared';
 import type { Database } from '../open';
 import { syncFts } from './fts';
 
@@ -266,6 +266,29 @@ export function listVersions(db: Database, chapterId: string): VersionListItemDt
 export function getVersion(db: Database, versionId: string): ChapterVersion | undefined {
   const row = db.prepare('SELECT * FROM chapter_versions WHERE id = ?').get(versionId) as VersionRow | undefined;
   return row ? toVersion(row) : undefined;
+}
+
+export function listVersionsByRun(db: Database, runId: string): RunVersionItemDto[] {
+  const rows = db
+    .prepare(
+      `SELECT v.id, v.chapter_id, c.chapter_no, v.kind, v.word_count, v.content, v.created_at,
+              CASE WHEN c.current_version_id = v.id THEN 1 ELSE 0 END AS is_current
+       FROM chapter_versions v
+       JOIN chapters c ON c.id = v.chapter_id
+       WHERE v.run_id = ?
+       ORDER BY c.chapter_no ASC, v.created_at ASC, v.rowid ASC`,
+    )
+    .all(runId) as Array<{ id: string; chapter_id: string; chapter_no: number; kind: string; word_count: number; content: string; created_at: string; is_current: number }>;
+  return rows.map((r) => ({
+    versionId: r.id,
+    chapterId: r.chapter_id,
+    chapterNo: r.chapter_no,
+    kind: r.kind as ChapterKind,
+    wordCount: r.word_count,
+    content: r.content,
+    isCurrent: r.is_current === 1,
+    createdAt: r.created_at,
+  }));
 }
 
 /** 该版本是否被「活 run」（queued/running/paused）的某步引用为产物（B2 删除守卫）。 */

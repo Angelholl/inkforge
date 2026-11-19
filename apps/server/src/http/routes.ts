@@ -519,6 +519,13 @@ ${repairPrompt(first.errors)}`))).text,
     reply.send({ ...run, steps: runsRepo.listSteps(db, runId) });
   });
 
+  // run 产物版本（C 方案③）：run_id 反查 chapter_versions，正文内联；未知 run 404
+  app.get('/api/runs/:runId/versions', async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    if (!runsRepo.getRun(db, runId)) return reply.code(404).send({ error: 'not found' });
+    reply.send({ runId, versions: chaptersRepo.listVersionsByRun(db, runId) });
+  });
+
   app.get('/api/runs/:runId/events', async (req, reply) => {
     const { runId } = req.params as { runId: string };
     handleSse(req, reply, runId, {
