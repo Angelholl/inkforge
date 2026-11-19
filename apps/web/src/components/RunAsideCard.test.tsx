@@ -93,3 +93,74 @@ describe('RunAsideCard', () => {
     await screen.findByText('暂停失败：run is done');
   });
 });
+
+describe('RunAsideCard 产物展开', () => {
+  const outVersions = {
+    runId: 'r-run-out1',
+    versions: [
+      { versionId: 'v-2', chapterId: 'c1', chapterNo: 1, kind: 'final', wordCount: 8, content: '第二版正文内容。', isCurrent: true, createdAt: '2026-11-19T00:00:02Z' },
+      { versionId: 'v-1', chapterId: 'c1', chapterNo: 1, kind: 'draft', wordCount: 7, content: '第一版正文内容。', isCurrent: false, createdAt: '2026-11-19T00:00:01Z' },
+    ],
+  };
+  const doneRuns: RunDto[] = [{ ...base, id: 'r-run-out1', status: 'done', chapterScope: { from: 1, to: 1 } }];
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    calls.length = 0;
+    pauseStatus = 200;
+  });
+
+  function installVersionsStub(versions: { runId: string; versions: unknown[] }) {
+    installFetchStub();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/api/runs/r-run-out1/versions')) return jsonResponse(versions);
+        return jsonResponse({});
+      }),
+    );
+  }
+
+  function renderDoneCard(rs: RunDto[]) {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b9']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<RunAsideCard runs={rs} bookId="b9" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it('done 态点「产物」展开 run 版本正文；非 done 态无产物入口', async () => {
+    installVersionsStub(outVersions);
+    renderDoneCard(runs);
+    expect(screen.queryByRole('button', { name: '产物' })).toBeNull();
+    cleanup();
+    renderDoneCard(doneRuns);
+    fireEvent.click(screen.getByRole('button', { name: '产物' }));
+    await screen.findByText('第二版正文内容。');
+    await screen.findByText('第一版正文内容。');
+    expect(screen.getByText('第1章 · final · 8字 · 当前')).toBeTruthy();
+  });
+
+  it('再点「收起产物」正文消失', async () => {
+    installVersionsStub(outVersions);
+    renderDoneCard(doneRuns);
+    fireEvent.click(screen.getByRole('button', { name: '产物' }));
+    await screen.findByText('第二版正文内容。');
+    fireEvent.click(screen.getByRole('button', { name: '收起产物' }));
+    expect(screen.queryByText('第二版正文内容。')).toBeNull();
+  });
+
+  it('空产物 run → 「该 run 没有产物版本」', async () => {
+    installVersionsStub({ runId: 'r-run-out1', versions: [] });
+    renderDoneCard(doneRuns);
+    fireEvent.click(screen.getByRole('button', { name: '产物' }));
+    await screen.findByText('该 run 没有产物版本');
+  });
+});

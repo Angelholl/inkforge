@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRunEvents } from '../hooks/useRunEvents';
 import { api, apiErrorText } from '../api/client';
 import { Badge, Button, Card, Console, isInflightStatus, runStatusTone, type ConsoleLine } from './ui';
@@ -25,6 +25,12 @@ export default function RunAsideCard({ runs, bookId }: { runs: RunDto[]; bookId:
   const latest = runs.find((r) => ACTIVE.has(r.status)) ?? runs[0];
   const live = useRunEvents(latest?.id ?? null);
   const lines = consoleLines(live.run?.status, live.steps);
+  const [showOutput, setShowOutput] = useState(false);
+  const { data: runVersions } = useQuery({
+    queryKey: ['run-versions', latest?.id],
+    queryFn: () => api.getRunVersions(latest!.id),
+    enabled: showOutput && latest?.status === 'done',
+  });
 
   return (
     <Card className="space-y-3">
@@ -76,6 +82,26 @@ export default function RunAsideCard({ runs, bookId }: { runs: RunDto[]; bookId:
         </div>
         <Console lines={lines} className="max-h-72" />
       </div>
+      {latest?.status === 'done' && (
+        <div>
+          <Button size="sm" variant="quiet" onClick={() => setShowOutput((v) => !v)}>
+            {showOutput ? '收起产物' : '产物'}
+          </Button>
+          {showOutput && (
+            <div className="mt-2 space-y-2">
+              {(runVersions?.versions ?? []).length === 0 && <p className="text-xs text-faint">该 run 没有产物版本</p>}
+              {(runVersions?.versions ?? []).map((v) => (
+                <div key={v.versionId} className="rounded-ctl border border-line bg-surface p-2">
+                  <p className="text-xs text-muted">
+                    第{v.chapterNo}章 · {v.kind} · {v.wordCount}字{v.isCurrent ? ' · 当前' : ''}
+                  </p>
+                  <div className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap text-xs">{v.content}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
