@@ -112,6 +112,23 @@ export interface RunStepDto {
   outputJson?: object;
 }
 
+/** run 产物版本项（C 方案③）：run_id 反查 chapter_versions，正文内联（区别于 VersionListItemDto 不带正文）；isCurrent=该章 current 指针指向此版本。 */
+export interface RunVersionItemDto {
+  versionId: string;
+  chapterId: string;
+  chapterNo: number;
+  kind: ChapterKind;
+  wordCount: number;
+  content: string;
+  isCurrent: boolean;
+  createdAt: string;
+}
+
+export interface RunVersionsDto {
+  runId: string;
+  versions: RunVersionItemDto[];
+}
+
 export interface HealthDto {
   ok: true;
   version: string;
@@ -124,6 +141,8 @@ export interface ReportStepDto {
   usage: { promptTokens: number; completionTokens: number };
   /** 该步产物版本已被硬删（报表仍按 outputJson 记账） */
   versionDeleted?: boolean;
+  /** 产物版本 id（版本被硬删后仍保留原 id 供墓碑对照；前端配合 /api/runs/:runId/versions 做正文展开） */
+  versionId?: string;
 }
 
 export interface ReportChapterDto {

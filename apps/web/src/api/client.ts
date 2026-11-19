@@ -38,6 +38,7 @@ import type {
   UpdateCharacterBody,
   SettingsQualityDto,
   VersionQcDto,
+  RunVersionsDto,
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
@@ -148,6 +149,7 @@ export const api = {
     }),
   createRun: (body: CreateRunBody) => req<{ runId: string }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   getRun: (runId: string) => req<RunWithStepsDto>(`/api/runs/${runId}`),
+  getRunVersions: (runId: string) => req<RunVersionsDto>(`/api/runs/${runId}/versions`),
   cancelRun: (runId: string) => req<{ ok: boolean }>(`/api/runs/${runId}/cancel`, { method: 'POST', body: '{}' }),
   pauseRun: (runId: string) => req<{ ok: boolean }>(`/api/runs/${runId}/pause`, { method: 'POST', body: '{}' }),
   resumeRun: (runId: string) => req<{ ok: boolean }>(`/api/runs/${runId}/resume`, { method: 'POST', body: '{}' }),
