@@ -41,11 +41,11 @@ afterEach(() => {
 
 describe('SettingsImportPanel', () => {
   it('选文件→解析→预览各区块→确认导入→onApplied 回传 bookId 与 counts', async () => {
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url.endsWith('/api/settings-import/preview')) {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/settings-import/preview') && init?.method === 'POST') {
         return new Response(JSON.stringify(DRAFT), { status: 200 });
       }
-      if (url.endsWith('/api/settings-import/apply')) {
+      if (url.endsWith('/api/settings-import/apply') && init?.method === 'POST') {
         return new Response(JSON.stringify(APPLY_RESULT), { status: 201 });
       }
       return new Response('[]', { status: 200 });
@@ -85,11 +85,11 @@ describe('SettingsImportPanel', () => {
   });
 
   it('取消文风勾选 → apply 入参 importStyle=false', async () => {
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url.endsWith('/api/settings-import/preview')) {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/settings-import/preview') && init?.method === 'POST') {
         return new Response(JSON.stringify(DRAFT), { status: 200 });
       }
-      if (url.endsWith('/api/settings-import/apply')) {
+      if (url.endsWith('/api/settings-import/apply') && init?.method === 'POST') {
         return new Response(JSON.stringify({ ...APPLY_RESULT, styleProfileId: null }), { status: 201 });
       }
       return new Response('[]', { status: 200 });

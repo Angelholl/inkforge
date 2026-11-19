@@ -1,4 +1,6 @@
 Unicode true
+; Inkforge: tauri-cli NSIS includes dir (build aid)
+!addincludedir "I:\\inkforge\\apps\\desktop\\src-tauri\\target\\release\\nsis\\x64"
 ManifestDPIAware true
 ; Add in `dpiAwareness` `PerMonitorV2` to manifest for Windows 10 1607+ (note this should not affect lower versions since they should be able to ignore this and pick up `dpiAware` `true` set by `ManifestDPIAware true`)
 ; Currently undocumented on NSIS's website but is in the Docs folder of source tree, see
@@ -1512,6 +1514,13 @@ Section Install
     File /a "/oname=resources\server\db\migrations\0003_indices.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0003_indices.sql"
     File /a "/oname=resources\server\db\migrations\0004_book_outline.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0004_book_outline.sql"
     File /a "/oname=resources\server\db\migrations\0005_round4_scope.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0005_round4_scope.sql"
+    File /a "/oname=resources\server\db\migrations\0006_chapter_version_tombstone.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0006_chapter_version_tombstone.sql"
+    File /a "/oname=resources\server\db\migrations\0007_book_style_fewshot.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0007_book_style_fewshot.sql"
+    File /a "/oname=resources\server\db\migrations\0008_distill_jobs.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0008_distill_jobs.sql"
+    File /a "/oname=resources\server\db\migrations\0009_character_offline.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0009_character_offline.sql"
+    File /a "/oname=resources\server\db\migrations\0010_book_style_profiles.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0010_book_style_profiles.sql"
+    File /a "/oname=resources\server\db\migrations\0011_book_style_weights.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0011_book_style_weights.sql"
+    File /a "/oname=resources\server\db\migrations\0012_plot_profiles.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0012_plot_profiles.sql"
     File /a "/oname=resources\server\node_modules\@fastify\accept-negotiator\.gitattributes" "I:\inkforge\apps\desktop\src-tauri\resources\server\node_modules\@fastify\accept-negotiator\.gitattributes"
     File /a "/oname=resources\server\node_modules\@fastify\accept-negotiator\.github\dependabot.yml" "I:\inkforge\apps\desktop\src-tauri\resources\server\node_modules\@fastify\accept-negotiator\.github\dependabot.yml"
     File /a "/oname=resources\server\node_modules\@fastify\accept-negotiator\.github\workflows\ci.yml" "I:\inkforge\apps\desktop\src-tauri\resources\server\node_modules\@fastify\accept-negotiator\.github\workflows\ci.yml"
@@ -5228,7 +5237,10 @@ Section Install
     File /a "/oname=resources\server\server.mjs" "I:\inkforge\apps\desktop\src-tauri\resources\server\server.mjs"
     File /a "/oname=resources\server\worker\worker.mjs" "I:\inkforge\apps\desktop\src-tauri\resources\server\worker\worker.mjs"
     SetOutPath "$INSTDIR\resources\web\dist"
-    File /r "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\assets\*"
+    ; Inkforge: purge stale hashed bundles left by previous installs (root-flattened legacy layout)
+    Delete "$INSTDIR\resources\web\dist\index-*.js"
+    Delete "$INSTDIR\resources\web\dist\index-*.css"
+    File /r "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\assets"
     File "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\favicon.svg"
     File "I:\inkforge\apps\desktop\src-tauri\resources\web\dist\index.html"
     SetOutPath "$INSTDIR"
@@ -5357,6 +5369,13 @@ Section Uninstall
     Delete "$INSTDIR\resources\server\db\migrations\0003_indices.sql"
     Delete "$INSTDIR\resources\server\db\migrations\0004_book_outline.sql"
     Delete "$INSTDIR\resources\server\db\migrations\0005_round4_scope.sql"
+    Delete "\resources\server\db\migrations\0006_chapter_version_tombstone.sql"
+    Delete "\resources\server\db\migrations\0007_book_style_fewshot.sql"
+    Delete "\resources\server\db\migrations\0008_distill_jobs.sql"
+    Delete "\resources\server\db\migrations\0009_character_offline.sql"
+    Delete "\resources\server\db\migrations\0010_book_style_profiles.sql"
+    Delete "\resources\server\db\migrations\0011_book_style_weights.sql"
+    Delete "\resources\server\db\migrations\0012_plot_profiles.sql"
     Delete "$INSTDIR\resources\server\node_modules\@fastify\accept-negotiator\.gitattributes"
     Delete "$INSTDIR\resources\server\node_modules\@fastify\accept-negotiator\.github\dependabot.yml"
     Delete "$INSTDIR\resources\server\node_modules\@fastify\accept-negotiator\.github\workflows\ci.yml"
