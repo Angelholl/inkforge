@@ -916,7 +916,7 @@ export default function BookDetailPage() {
       </section>
         </div>
         <aside className="space-y-4 lg:sticky lg:top-6">
-          <RunAsideCard runs={book?.runs ?? []} />
+          <RunAsideCard runs={book?.runs ?? []} bookId={bookId} />
         </aside>
       </div>
     </main>

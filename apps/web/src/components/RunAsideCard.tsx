@@ -1,12 +1,27 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRunEvents } from '../hooks/useRunEvents';
-import { Badge, Card, Console, isInflightStatus, runStatusTone, type ConsoleLine } from './ui';
+import { api, apiErrorText } from '../api/client';
+import { Badge, Button, Card, Console, isInflightStatus, runStatusTone, type ConsoleLine } from './ui';
 import type { RunDto, RunStepDto } from '@inkforge/shared';
 
 const ACTIVE = new Set(['queued', 'running', 'paused']);
+const TERMINAL = new Set(['done', 'failed', 'cancelled']);
 
-/** 详情页 aside 运行控制卡（D2）：runs 列表（状态徽标+报表链接）+ 最新 run 的深色控制台（useRunEvents 五分色日志）。 */
-export default function RunAsideCard({ runs }: { runs: RunDto[] }) {
+/** 详情页 aside 运行控制卡（D2）：runs 列表（状态徽标+内联操作/章节链接+报表）+ 最新 run 的深色控制台（useRunEvents 五分色日志）。 */
+export default function RunAsideCard({ runs, bookId }: { runs: RunDto[]; bookId: string }) {
+  const queryClient = useQueryClient();
+  const [actionMsg, setActionMsg] = useState('');
+  const runAction = async (runId: string, kind: 'pauseRun' | 'resumeRun' | 'cancelRun', label: string) => {
+    try {
+      await api[kind](runId);
+      setActionMsg('');
+      await queryClient.invalidateQueries({ queryKey: ['book', bookId] });
+    } catch (e) {
+      setActionMsg(`${label}失败：${apiErrorText(e)}`);
+    }
+  };
   const latest = runs.find((r) => ACTIVE.has(r.status)) ?? runs[0];
   const live = useRunEvents(latest?.id ?? null);
   const lines = consoleLines(live.run?.status, live.steps);
@@ -19,6 +34,31 @@ export default function RunAsideCard({ runs }: { runs: RunDto[] }) {
           <li key={r.id} className="flex items-center gap-2">
             <Badge tone={runStatusTone(r.status)}>{r.status}</Badge>
             <span className="font-mono text-faint">{r.id.slice(0, 8)}</span>
+            {(r.status === 'queued' || r.status === 'running') && (
+              <>
+                <Button size="sm" variant="secondary" onClick={() => void runAction(r.id, 'pauseRun', '暂停')}>
+                  暂停
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => void runAction(r.id, 'cancelRun', '取消')}>
+                  取消
+                </Button>
+              </>
+            )}
+            {r.status === 'paused' && (
+              <>
+                <Button size="sm" variant="secondary" onClick={() => void runAction(r.id, 'resumeRun', '继续')}>
+                  继续
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => void runAction(r.id, 'cancelRun', '取消')}>
+                  取消
+                </Button>
+              </>
+            )}
+            {TERMINAL.has(r.status) && (
+              <Link to={`/books/${bookId}/chapters/${r.chapterScope.from}`} className="text-primary-strong hover:underline">
+                {r.chapterScope.from === r.chapterScope.to ? `查看第${r.chapterScope.from}章→` : `查看第${r.chapterScope.from}-${r.chapterScope.to}章→`}
+              </Link>
+            )}
             <Link to={`/runs/${r.id}/dashboard`} className="ml-auto text-primary-strong hover:underline">
               报表
             </Link>
@@ -26,6 +66,7 @@ export default function RunAsideCard({ runs }: { runs: RunDto[] }) {
         ))}
         {runs.length === 0 && <li className="text-faint">尚无运行记录</li>}
       </ul>
+      {actionMsg && <p className="text-xs text-danger">{actionMsg}</p>}
       <div>
         <div className="mb-1 flex items-center gap-2 text-xs text-muted">
           控制台

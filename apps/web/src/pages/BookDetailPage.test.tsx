@@ -457,7 +457,7 @@ describe('BookDetailPage', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    const bpArea = await screen.findByPlaceholderText(/蓝图 JSON/);
+    const bpArea = (await screen.findByPlaceholderText(/蓝图 JSON/)) as HTMLTextAreaElement;
     // 等章号 effect（末章+1）生效，避免「保存蓝图」落到第 1 章（既有 :414-447 测试靠前置守卫等待躲过此时序）
     await screen.findByDisplayValue('3');
     setInput(bpArea, JSON.stringify({ goal: '入城遇阻', beats: ['守卫盘查'], mustHaveBeats: [], bannedTopics: [] }));
