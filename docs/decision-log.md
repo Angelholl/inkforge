@@ -425,3 +425,13 @@
 6. 兼容性：旧快照（V1/V2）不含哨兵 → 合并行为逐字节不变；哨兵只经 UI 显式选择写入。
 
 **验证链（主模型亲跑）：** lint 零输出、typecheck 全 workspace 0 错、全量测试 server 323+web 103+shared 2=**428**（基线 421 只增不减，+7=merge 5+http style 1+web 面板 1）、build 398.31kB、audit --prod 零新增。推送前主模型亲审替代 code-review（owner 不外派令，Standards/Spec 两轴）。GUI 未验证（owner 真实测试）点位：书详情→风格绑定→高级设置七维「共存」选项出现（勾 2+ 档案）/选共存保存回显/解绑重绑初值、生成时该维文本双档案拼接实际效果。
+
+## DEC-2026-1119-01 [OWNER] 续写 run↔内容深度关联：入队提示可点+运行卡内联操作+按 runId 查产物正文（2026-11-19）
+
+**背景：** owner 实测反馈——书详情发起续写后提示「续写已入队 run xxx，进度见右侧『运行』卡」，但（a）续写开始后无调整选择（暂停/取消不可达）、（b）无法直接查看续写内容。只读调研（调研卡 docs/design/card-research-run-continuation-gui.md，报告 docs/design/research-run-continuation-gui.md，3dc28cb）定性：**既有 IA 设计缺口非 bug、非 UI 重塑弄丢**——暂停/继续/取消 API 前后端齐全但唯一 UI 在 /runs/:runId 运行面板，运行卡零按钮、入队提示纯文本无跳转（对照新书向导 createRun 后 navigate 直达运行面板，两发起路径不对称）；内容落盘 chapter_versions（带 run_id）但 GUI 只能按章号进阅读页，无按 runId 查版本端点。主审抽查复核调研断言（文案渲染点/运行卡零 Button/向导 navigate）全部实证。
+
+**拍板：** owner 于三选项（A 仅加跳转链接/B 运行卡内联操作+内容入口/C 深度 run↔内容关联）中拍板 **C**。范围=三项：①入队提示含「查看运行面板→」链接；②运行卡活动态内联暂停/取消（paused 态继续+取消）、终态「查看第N章→」跳章节阅读页；③新端点 GET /api/runs/:runId/versions（run_id 反查 chapter_versions 正文内联）+运行卡 done 态「产物」展开+仪表盘「正文」列展开。范围外不做：rerunChapter/adoptPartial 的 UI、GUI 目验。
+
+**计划与执行：** 计划真值=docs/plans/2026-11-19-run-content-link.md（code-planner 产出七任务，主审审查通过；关键核实：RunDto 已含 chapterScope+bookId 无需扩类型）。执行=三卡串行（ZCode Agent code-Executor 通道，同工作树 ≤1 卡红线）：卡1=Task-01/02/03 后端契约（ea33ebe/aa50293/8ed14ff）、卡2=Task-04/05 前端交互（781766d/8219c61）、卡3=Task-06/07 内容展开（34fe3ad/620d1b9）。三卡主审逐卡验收：diff 对卡面范围零超界、实现与计划逐字一致；卡2 两处实测偏差合理（测试章号 effect 时序守卫 findByDisplayValue('3') 带注释、EventSource stub 改每测试重挂抗 afterEach unstubAllGlobals），断言与文案逐字未动。
+
+**验证链（主审亲跑）：** lint 零输出、typecheck 全 workspace 0 错、全量测试 server 328+web 113+shared 2=**443**（基线 428 只增不减，+15=端点 5+提示 1+运行卡 6+仪表盘 3）、build:web 401.01kB 冒烟、安全深扫 secret 零真实新增（命中 2 处均为测试本地 mock 占位符沿既有先例）+audit --prod 零漏洞。推送前 code-review 双轴（Standards 轴：0 硬违规+7 条 judgement call，RunAsideCard 按钮组/展开容器 Duplicated Code 提取留待触碰时顺手重构；Spec 轴：七任务零缺失零越界零错实现）。推送：55bea54..620d1b9（v2rayN 代理挂，git 走 -c http.proxy= 直连），ls-remote 复核✓。**GUI 未验证（owner 真实测试）**点位：①书详情发起续写→提示含「查看运行面板→」可点跳运行面板；②运行卡活动行「暂停/取消」、paused 行「继续」生效后列表刷新（invalidateQueries ['book',bookId]+4s 轮询兜底）；③完成态「查看第N章→」跳章节阅读页；④运行卡 done 态「产物」展开 run 版本正文/「收起产物」；⑤仪表盘步行行「正文」展开该步版本正文、「版本已删」行不变；⑥操作失败错误文案（如暂停已完成 run 显「暂停失败：run is done」）。Backlog：Standards 轴 judgement call（按钮组 action 映射、展开容器共享组件、msg+queuedRunId 状态合并）。
