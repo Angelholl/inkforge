@@ -91,6 +91,13 @@ function installFetchStub() {
         bookState = { ...bookState, chapters: [...bookState.chapters.filter((c) => c.chapterNo !== no), ch].sort((a, b) => a.chapterNo - b.chapterNo) };
         return jsonResponse(ch, 201);
       }
+      // 删章（DEC-2026-1120-02）：DELETE 后从 book 副本移除该章（模拟服务端硬删+refetch）
+      const chDel = u.match(/\/api\/books\/b1\/chapters\/(\d+)$/);
+      if (chDel && init?.method === 'DELETE') {
+        const no = Number(chDel[1]);
+        bookState = { ...bookState, chapters: bookState.chapters.filter((c) => c.chapterNo !== no) };
+        return jsonResponse({ ok: true });
+      }
       if (u.endsWith('/api/runs') && init?.method === 'POST') return jsonResponse({ runId: 'r1234567890' }, 202);
       if (u.includes('/api/books/b1/meta')) return jsonResponse({ ...bookState, description: '旧世界观', outline: '旧大纲' });
       if (u.includes('/api/books/b1')) {
@@ -291,6 +298,46 @@ describe('BookDetailPage', () => {
     );
     const oneCall = calls.find((c) => c.url.endsWith('/api/books/b1/chapters/1/generate'));
     expect(JSON.parse(String((oneCall!.init as RequestInit).body))).toEqual({ maxRounds: 3 });
+  });
+
+  it('删章：确认门文案 → 确认删发 DELETE /chapters/2 → 行消失（DEC-2026-1120-02）', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByText('第2章 第二章'); // 行首 span 为碎文本节点：第/2/章 /第二章
+    fireEvent.click(screen.getAllByRole('button', { name: '删除章节' })[1]);
+    expect(screen.getByText(/永久移除该章全部版本、摘要与运行步/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.endsWith('/api/books/b1/chapters/2') && c.init?.method === 'DELETE')).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByText('第2章 第二章')).toBeNull());
+    expect(screen.getByText(/第2章已删除/)).toBeTruthy();
+  });
+
+  it('删章：取消回落不调用 DELETE', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByText('第2章 第二章');
+    fireEvent.click(screen.getAllByRole('button', { name: '删除章节' })[1]);
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(screen.queryByText(/永久移除该章全部版本/)).toBeNull();
+    expect(calls.some((c) => /\/api\/books\/b1\/chapters\/\d+$/.test(c.url) && c.init?.method === 'DELETE')).toBe(false);
   });
 
   const stylePage = (): void => {

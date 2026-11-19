@@ -161,6 +161,9 @@ export const api = {
   deleteVersion: (versionId: string) =>
     // body '{}' 必需：Fastify 对「已设 content-type 且空体」直接 400 FST_ERR_CTP_EMPTY_JSON_BODY
     req<{ ok: boolean }>(`/api/versions/${versionId}`, { method: 'DELETE', body: '{}' }),
+  /** 删章（DEC-2026-1120-02）：按依赖序清理该章版本/运行步/摘要/人物状态，runs 头保留；活动 run 覆盖 → 409 */
+  deleteChapter: (bookId: string, chapterNo: number) =>
+    req<{ ok: boolean }>(`/api/books/${bookId}/chapters/${chapterNo}`, { method: 'DELETE', body: '{}' }),
   rollback: (versionId: string) =>
     req<{ ok: boolean; currentVersionId: string }>(`/api/versions/${versionId}/rollback`, { method: 'POST', body: '{}' }),
   // outDir=服务端落盘目录绝对路径（D3 澄清：保存到本机 data/exports/，不自动下载）

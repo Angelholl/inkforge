@@ -871,6 +871,35 @@ ${repairPrompt(first.errors)}`))).text,
     reply.send({ ok: true });
   });
 
+  // 删章（DEC-2026-1120-02）：按依赖序显式清理该章版本/运行步/摘要/人物状态；runs 头保留（报表降级已有）。
+  // 活动 run（queued/running/paused）chapter_scope 覆盖该章 → 409（坏 scope JSON 保守视为覆盖）。
+  app.delete('/api/books/:bookId/chapters/:chapterNo', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    const chapterNo = Number((req.params as { chapterNo: string }).chapterNo);
+    if (!Number.isInteger(chapterNo) || chapterNo <= 0) return reply.code(400).send({ error: '章号须为正整数' });
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    if (!chaptersRepo.getChapter(db, bookId, chapterNo)) return reply.code(404).send({ error: 'not found' });
+    const activeRuns = db
+      .prepare("SELECT id, status, chapter_scope_json FROM runs WHERE book_id = ? AND status IN ('queued','running','paused')")
+      .all(bookId) as Array<{ id: string; status: string; chapter_scope_json: string }>;
+    for (const r of activeRuns) {
+      let covers = true;
+      try {
+        const scope = JSON.parse(r.chapter_scope_json) as { from: number; to: number };
+        covers = chapterNo >= scope.from && chapterNo <= scope.to;
+      } catch {
+        /* 坏 JSON：保守视为覆盖 */
+      }
+      if (covers) {
+        return reply.code(409).send({ error: `章节被 ${r.status} 状态的运行引用，暂不可删除`, reason: 'run-active', runId: r.id, runStatus: r.status });
+      }
+    }
+    // 快照先于删除事务（VACUUM INTO 不能在事务内）
+    backupBookPredelete(db, bookId, path.join(config.dataDir, 'backups', bookId));
+    chaptersRepo.deleteChapterWithCleanup(db, bookId, chapterNo);
+    reply.send({ ok: true });
+  });
+
   // 版本 → 质检明细（B3 解释性）：qc 步 outputJson 已存 l0/l1/gate，按 output_version_id 反查
   app.get('/api/versions/:versionId/qc', async (req, reply) => {
     const { versionId } = req.params as { versionId: string };

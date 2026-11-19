@@ -321,3 +321,23 @@ export function deleteChapterVersionWithTombstone(db: Database, versionId: strin
   });
   return tx(versionId);
 }
+
+/** 删章（DEC-2026-1120-02）：按依赖序显式清理（FK ON/RESTRICT，沿 deleteBook 先例）；
+ *  序：partial_outputs→run_steps→chapter_fts→chapter_versions→tombstones→chapter_summaries→character_states→chapters；
+ *  runs 头行保留（run 历史存活，报表 chapterNo 0 降级已有）；大纲树/伏笔语义引用不动。章不存在返回 false。 */
+export function deleteChapterWithCleanup(db: Database, bookId: string, chapterNo: number): boolean {
+  const chapter = db.prepare('SELECT id FROM chapters WHERE book_id = ? AND chapter_no = ?').get(bookId, chapterNo) as { id: string } | undefined;
+  if (!chapter) return false;
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM partial_outputs WHERE run_step_id IN (SELECT id FROM run_steps WHERE chapter_id = ?)').run(chapter.id);
+    db.prepare('DELETE FROM run_steps WHERE chapter_id = ?').run(chapter.id);
+    db.prepare('DELETE FROM chapter_fts WHERE chapter_id = ?').run(chapter.id);
+    db.prepare('DELETE FROM chapter_versions WHERE chapter_id = ?').run(chapter.id);
+    db.prepare('DELETE FROM chapter_version_tombstones WHERE chapter_id = ?').run(chapter.id);
+    db.prepare('DELETE FROM chapter_summaries WHERE book_id = ? AND chapter_no = ?').run(bookId, chapterNo);
+    db.prepare('DELETE FROM character_states WHERE chapter_no = ? AND character_id IN (SELECT id FROM characters WHERE book_id = ?)').run(chapterNo, bookId);
+    db.prepare('DELETE FROM chapters WHERE book_id = ? AND chapter_no = ?').run(bookId, chapterNo);
+  });
+  tx();
+  return true;
+}

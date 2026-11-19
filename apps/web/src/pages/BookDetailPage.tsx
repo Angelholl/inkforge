@@ -347,6 +347,9 @@ export default function BookDetailPage() {
   const [editingCard, setEditingCard] = useState<{ id: string; name: string; setting: string } | null>(null);
   // L2 两步确认：记录待确认删除的人物卡；取消/成功后收簇
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  // 删章（DEC-2026-1120-02）：章节行三态确认门（沿人物卡/版本删除先例）
+  const [confirmingDeleteChapter, setConfirmingDeleteChapter] = useState<number | null>(null);
+  const [deletingChapter, setDeletingChapter] = useState(false);
   // book 每 4s 轮询；世界观/大纲编辑态只在首次加载同步一次，避免轮询覆盖未保存的编辑
   const metaSyncedRef = useRef(false);
 
@@ -505,6 +508,22 @@ export default function BookDetailPage() {
       void refetchCharacters();
     } catch (e) {
       setMsg(`删除失败：${(e as Error).message}`);
+    }
+  };
+
+  // 删章（DEC-2026-1120-02）：服务端按依赖序清理版本/运行步/摘要/人物状态（runs 头保留），删前自动留 -predelete- 快照
+  const removeChapter = async (chapterNo: number): Promise<void> => {
+    setDeletingChapter(true);
+    try {
+      await api.deleteChapter(bookId, chapterNo);
+      setConfirmingDeleteChapter(null);
+      setMsg(`第${chapterNo}章已删除（删前快照已留 -predelete-；可在「蓝图编辑」重存蓝图重生成）`);
+      void refetch();
+    } catch (e) {
+      setMsg(`删除失败：${apiErrorText(e)}`);
+      setConfirmingDeleteChapter(null);
+    } finally {
+      setDeletingChapter(false);
     }
   };
 
@@ -848,6 +867,23 @@ export default function BookDetailPage() {
               >
                 阅读
               </Link>
+              {confirmingDeleteChapter === c.chapterNo ? (
+                <>
+                  <span className="text-danger text-xs">
+                    删除将从磁盘永久移除该章全部版本、摘要与运行步，不可恢复（删前自动留 -predelete- 快照，同书保留最近 3 份）；可在「蓝图编辑」重存蓝图重生成。
+                  </span>
+                  <Button variant="danger" size="sm" solid loading={deletingChapter} onClick={() => void removeChapter(c.chapterNo)}>
+                    确认删除
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteChapter(null)}>
+                    取消
+                  </Button>
+                </>
+              ) : (
+                <Button variant="quiet" tone="danger" size="sm" aria-label="删除章节" onClick={() => setConfirmingDeleteChapter(c.chapterNo)}>
+                  删除
+                </Button>
+              )}
             </li>
           ))}
         </ul>
