@@ -339,6 +339,7 @@ export default function BookDetailPage() {
   // 人物下线（0009）：每卡行内章号草稿（默认下一章）
   const [offlineDraft, setOfflineDraft] = useState<Record<string, number>>({});
   const [msg, setMsg] = useState('');
+  const [queuedRunId, setQueuedRunId] = useState('');
   const [worldText, setWorldText] = useState('');
   const [outlineText, setOutlineText] = useState('');
   const [newCardName, setNewCardName] = useState('');
@@ -416,6 +417,7 @@ export default function BookDetailPage() {
 
   const startContinue = async () => {
     setMsg('');
+    setQueuedRunId('');
     const ch = book?.chapters.find((c) => c.chapterNo === chapterNo);
     if (!ch?.blueprint) {
       setMsg(`第 ${chapterNo} 章还没有蓝图：请先「保存蓝图」（或用 AI 建议生成）再发起续写`);
@@ -423,7 +425,8 @@ export default function BookDetailPage() {
     }
     try {
       const r = await api.createRun({ bookId, fromChapter: chapterNo, toChapter: chapterNo, mode: 'continue', maxRounds });
-      setMsg(`续写已入队 run ${r.runId.slice(0, 8)}，进度见右侧「运行」卡`);
+      setMsg(`续写已入队 run ${r.runId.slice(0, 8)}`);
+      setQueuedRunId(r.runId);
     } catch (e) {
       setMsg(`发起续写失败：${apiErrorText(e)}`);
     }
@@ -899,7 +902,16 @@ export default function BookDetailPage() {
             value={blueprintText}
             onChange={(e) => setBlueprintText(e.target.value)}
           />
-          {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
+          {msg && (
+            <p className="mt-2 text-sm text-muted">
+              {msg}
+              {queuedRunId && (
+                <Link className="ml-1 text-primary-strong hover:underline" to={`/runs/${queuedRunId}`}>
+                  查看运行面板→
+                </Link>
+              )}
+            </p>
+          )}
         </div>
       </section>
         </div>

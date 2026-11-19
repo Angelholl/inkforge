@@ -446,6 +446,29 @@ describe('BookDetailPage', () => {
     });
   });
 
+  it('发起续写成功提示含「查看运行面板→」链接，href 指向 /runs/:runId（C 方案①）', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const bpArea = await screen.findByPlaceholderText(/蓝图 JSON/);
+    // 等章号 effect（末章+1）生效，避免「保存蓝图」落到第 1 章（既有 :414-447 测试靠前置守卫等待躲过此时序）
+    await screen.findByDisplayValue('3');
+    setInput(bpArea, JSON.stringify({ goal: '入城遇阻', beats: ['守卫盘查'], mustHaveBeats: [], bannedTopics: [] }));
+    fireEvent.click(screen.getByRole('button', { name: '保存蓝图' }));
+    fireEvent.click(await screen.findByRole('button', { name: /发起续写/ }));
+    const link = await screen.findByText('查看运行面板→');
+    expect(link.closest('a')!.getAttribute('href')).toBe('/runs/r1234567890');
+    expect(screen.getByText(/续写已入队 run r1234567/)).toBeTruthy();
+    expect(screen.queryByText(/进度见右侧/)).toBeNull();
+  });
+
   it('人物下线（0009 专用控件）：章号默认下一章，下线发 PUT offlineFromChapter；徽标回显+恢复在场发 null', async () => {
     installFetchStub();
     render(
