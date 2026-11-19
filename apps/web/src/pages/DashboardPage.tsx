@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { Badge } from '../components/ui';
+import { Badge, Button } from '../components/ui';
 import { DataTable, dataTableCell, dataTableCellMono, dataTableCellNum, dataTableRow, dataTableHead, dataTableHeadCell } from '../components/DataTable';
 import type { ReportDto } from '@inkforge/shared';
 
@@ -9,6 +10,9 @@ import type { ReportDto } from '@inkforge/shared';
 export default function DashboardPage() {
   const { runId = '' } = useParams();
   const { data: report } = useQuery({ queryKey: ['report', runId], queryFn: () => api.getReport(runId), refetchInterval: 5000 });
+  const { data: runVersions } = useQuery({ queryKey: ['run-versions', runId], queryFn: () => api.getRunVersions(runId), enabled: !!runId });
+  const [expandedVersionId, setExpandedVersionId] = useState('');
+  const contentById = new Map((runVersions?.versions ?? []).map((v) => [v.versionId, v]));
   const r: ReportDto | null = report ?? null;
 
   return (
@@ -35,16 +39,39 @@ export default function DashboardPage() {
         </thead>
         <tbody>
           {(r?.chapters ?? []).flatMap((c) =>
-            c.steps.map((s, i) => (
-              <tr key={`${c.chapterNo}-${s.step}-${s.attempt}-${i}`} className={dataTableRow}>
-                <td className={dataTableCellNum}>{i === 0 ? `第${c.chapterNo}章` : ''}</td>
-                <td className={dataTableCellMono}>{s.step}</td>
-                <td className={dataTableCellNum}>{s.attempt}</td>
-                <td className={dataTableCellNum}>{s.ms}</td>
-                <td className={dataTableCellNum}>{s.usage.completionTokens}</td>
-                <td className={dataTableCell}>{s.versionDeleted ? <Badge tone="muted">版本已删</Badge> : ''}</td>
-              </tr>
-            )),
+            c.steps.flatMap((s, i) => {
+              const rowKey = `${c.chapterNo}-${s.step}-${s.attempt}-${i}`;
+              const rows = [
+                <tr key={rowKey} className={dataTableRow}>
+                  <td className={dataTableCellNum}>{i === 0 ? `第${c.chapterNo}章` : ''}</td>
+                  <td className={dataTableCellMono}>{s.step}</td>
+                  <td className={dataTableCellNum}>{s.attempt}</td>
+                  <td className={dataTableCellNum}>{s.ms}</td>
+                  <td className={dataTableCellNum}>{s.usage.completionTokens}</td>
+                  <td className={dataTableCell}>
+                    {s.versionDeleted ? (
+                      <Badge tone="muted">版本已删</Badge>
+                    ) : s.versionId && contentById.has(s.versionId) ? (
+                      <Button size="sm" variant="quiet" onClick={() => setExpandedVersionId((cur) => (cur === s.versionId ? '' : s.versionId!))}>
+                        正文
+                      </Button>
+                    ) : (
+                      ''
+                    )}
+                  </td>
+                </tr>,
+              ];
+              if (s.versionId && !s.versionDeleted && expandedVersionId === s.versionId && contentById.has(s.versionId)) {
+                rows.push(
+                  <tr key={`${rowKey}-content`}>
+                    <td className={dataTableCell} colSpan={6}>
+                      <div className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">{contentById.get(s.versionId)!.content}</div>
+                    </td>
+                  </tr>,
+                );
+              }
+              return rows;
+            }),
           )}
         </tbody>
       </DataTable>
