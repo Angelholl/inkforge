@@ -70,4 +70,49 @@ describe('SelectionRewrite', () => {
     expect(done.getAttribute('aria-busy')).toBeNull();
     expect(done.disabled).toBe(false);
   });
+
+  it('全文模式：勾选后隐藏选段输入、预设填全文文案、提交走无 selection 通道（DEC-2026-1120-01）', async () => {
+    const calls: Array<{ url: RequestInfo | URL; init?: RequestInit }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ url, init });
+        return stubResp(rewritten);
+      }),
+    );
+    render(<SelectionRewrite versionId="v1" fullTextChars={3240} />);
+    fireEvent.click(screen.getByLabelText('改写全文'));
+    expect(screen.queryByPlaceholderText('粘贴要改写的选段')).toBeNull();
+    expect(screen.getByText('改写全文（整章正文，约 3240 字）')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '预设-润色' }));
+    expect((screen.getByLabelText('改写指令') as HTMLInputElement).value).toContain('优化全文表达与用词');
+    fireEvent.click(screen.getByRole('button', { name: '提交全文改写' }));
+
+    await waitFor(() => expect(screen.getByText(/已生成全文改写版本/)).toBeTruthy());
+    const post = calls.find((c) => c.init?.method === 'POST')!;
+    const payload = JSON.parse(String(post.init?.body)) as Record<string, unknown>;
+    expect('selection' in payload).toBe(false);
+    expect(payload.instruction).toContain('优化全文表达与用词');
+  });
+
+  it('全文模式指令为空 → 提示「指令不能为空」且零请求', () => {
+    const fetchMock = vi.fn(async () => stubResp(rewritten));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SelectionRewrite versionId="v1" />);
+    fireEvent.click(screen.getByLabelText('改写全文'));
+    fireEvent.click(screen.getByRole('button', { name: '提交全文改写' }));
+    expect(screen.getByText('指令不能为空')).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('全文超 8000 字 → UI 预检拦截（与服务端硬门同串）且零请求', () => {
+    const fetchMock = vi.fn(async () => stubResp(rewritten));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SelectionRewrite versionId="v1" fullTextChars={9000} />);
+    fireEvent.click(screen.getByLabelText('改写全文'));
+    fireEvent.change(screen.getByLabelText('改写指令'), { target: { value: '润色全文' } });
+    fireEvent.click(screen.getByRole('button', { name: '提交全文改写' }));
+    expect(screen.getByText(/超出单轮改写上限 8000 字/)).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

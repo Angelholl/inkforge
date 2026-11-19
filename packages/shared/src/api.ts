@@ -376,6 +376,9 @@ export const STYLE_AXES = ['叙述温度', '语言密度', '叙述者姿态', '�
 /** 七维来源「共存」哨兵（DEC-2026-1118-03）：dimsSource[dim]=该值 → 该维文本按绑定序（主→辅）拼接各勾选档案的非空文本（全等段去重，'；' 连接）。双下划线包边，不会与真实档案 id 冲突。 */
 export const DIM_SOURCE_COEXIST = '__coexist__';
 
+/** 全文改写长度硬门（DEC-2026-1120-01）：countChars 口径（去空白）。依据 maxOutput=8192 tokens 的汉字规模留余量，超出后单轮改写会输出截断/静默丢文，须改走选段重写（分段）或批量校对。 */
+export const FULL_TEXT_REWRITE_MAX_CHARS = 8000;
+
 export type StyleDimension = (typeof STYLE_DIMENSIONS)[number];
 export type StyleAxis = (typeof STYLE_AXES)[number];
 

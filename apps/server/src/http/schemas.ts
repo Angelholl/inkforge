@@ -111,8 +111,9 @@ export const styleBindSchema = z
     }
   });
 
+// selection 可选（DEC-2026-1120-01）：缺省=全文模式，指令作用于该版本整章正文（服务端另有 8000 字硬门）
 export const rewriteSelectionSchema = z.object({
-  selection: z.string().min(1),
+  selection: z.string().min(1).optional(),
   instruction: z.string().min(1),
 });
 

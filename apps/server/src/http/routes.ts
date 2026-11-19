@@ -26,6 +26,7 @@ import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } fro
 import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
 import type { DistillStyleDraftDto, StyleAnalysisDto } from '@inkforge/shared';
+import { countChars, FULL_TEXT_REWRITE_MAX_CHARS } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
@@ -932,13 +933,26 @@ ${repairPrompt(first.errors)}`))).text,
     if (!body) return;
     const v = chaptersRepo.getVersion(db, versionId);
     if (!v) return reply.code(404).send({ error: 'not found' });
+    // 全文模式（DEC-2026-1120-01）：body 无 selection 键 → 指令作用于该版本整章正文
+    const { selection, instruction } = body;
+    const full = selection === undefined;
+    const sourceText = full ? v.content : selection;
+    if (full && countChars(v.content) === 0) {
+      return reply.code(400).send({ error: '当前版本无正文', reason: 'empty-content' });
+    }
+    if (full && countChars(v.content) > FULL_TEXT_REWRITE_MAX_CHARS) {
+      return reply.code(400).send({
+        error: `全文 ${countChars(v.content)} 字超出单轮改写上限 ${FULL_TEXT_REWRITE_MAX_CHARS} 字，请改用选段重写（分段粘贴）或批量校对`,
+        reason: 'fulltext-too-long',
+      });
+    }
     const chapter = chaptersRepo.getChapterById(db, v.chapterId)!;
-    const taskInstruction = `对以下选段按指令改写，只输出改写后的选段文本。
-【选段】${body.selection}
-【指令】${body.instruction}`;
+    // 正文只走 original 槽、指令只走 task 槽：正文内嵌 task 槽（budget 500/head）会把【指令】截丢
+    const target = full ? '全文' : '选段';
+    const taskInstruction = `对上面的${target}按指令改写，只输出改写后的${target}文本。\n【指令】${instruction}`;
     const slots = [
       { name: 'hardRules', content: '', budgetChars: 500, stable: true, keep: 'head' as const },
-      { name: 'original', content: body.selection, budgetChars: 6000, stable: false, keep: 'head' as const },
+      { name: 'original', content: sourceText, budgetChars: full ? FULL_TEXT_REWRITE_MAX_CHARS : 6000, stable: false, keep: 'head' as const },
       { name: 'task', content: taskInstruction, budgetChars: 500, stable: false, keep: 'head' as const },
     ];
     const assembled = assembleContext(slots, config.providers.local.contextWindow - config.providers.local.maxOutput - 500);
@@ -958,7 +972,12 @@ ${repairPrompt(first.errors)}`))).text,
       runId: v.runId,
       model: config.providers.local.model,
       parentVersionId: v.id,
-      params: { selectionRewrite: true, selection: body.selection, instruction: body.instruction, usage: res.usage },
+      params: {
+        selectionRewrite: true,
+        ...(full ? { fullText: true } : { selection }),
+        instruction,
+        usage: res.usage,
+      },
     });
     reply.code(201).send(newVersion); // 不移动 current 指针
   });

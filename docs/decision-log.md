@@ -447,3 +447,13 @@
 **验证链（主模型亲跑）：** lint 零输出、typecheck 全 workspace 0 错、全量测试 server 332+web 113+shared 2=**447**（基线 443 只增不减，+4=锁回归）、server 起服冒烟（health ok+worker 干净拿锁+心跳 mtime 4s 前进两次实证）、secret 扫描零命中+audit --prod 零漏洞。事故 run 已收口：第 7 章生成完成。**GUI 未验证（owner 真实测试）**点位：书详情发起生成/续写 → 运行卡应正常 queued→running（不再永久 queued）。
 
 **Backlog 登记：** worker 崩溃/重启对 UI 零暴露——supervisor onMessage 通道已支持但 index.ts 未接、无文件日志，worker fatal 循环时用户只见「一直 queued」无诊断线索（本次排障靠 DB+进程法证）；建议后续接 SSE 事件或落文件日志。
+
+## DEC-2026-1120-01 [OWNER] 选段重写新增「改写全文」开关：单卡双模式+8000 字硬门（2026-11-20）
+
+**背景：** owner 反馈——选段重写只能针对选段，存在对全文的调整和用词的润色等无法实现全文调整。勘探实证：rewrite-selection schema selection min(1) 必填（http/schemas.ts:114-117）+UI 双非空校验（SelectionRewrite.tsx:26-29），结构上不支持全文；既有批量校对 run（B10）三条 pass 指令钉死不收自定义指令；装配器超预算静默截断（context/assembler.ts:18-26），maxOutput=8192 tokens（config.ts:150-162）是全文输出真约束。**顺带发现相邻缺陷（本卡并入修复）：** handler 把选段全文内嵌 task 槽（budget 500/head）后才放【指令】（routes.ts:936-943）→ 选段 >~470 字符时指令被 head 截断丢失，真实模型收不到改写指令（mock 链路不可见）。
+
+**拍板：** owner 三选项拍板 **A「选段卡加全文开关」**。要点：①同卡双模式，勾选「改写全文」后指令作用于当前所选版本整章正文、选段输入隐藏；②预设四键全文模式填充全文版文案；③同端点 schema selection 转可选，缺省=全文模式，params.fullText=true 落痕，产出仍 kind=revised 不动 current（回滚采纳语义一致）；④长度硬门 8000 字（countChars 口径，shared 常量 FULL_TEXT_REWRITE_MAX_CHARS 单一真值源；依据 maxOutput 8192 tokens 留余量），服务端 400 引导+UI 同串预检双保险，防静默截断与输出截断；⑤task 槽重构两模式统一「正文只走 original 槽、指令只走 task 槽」，修复上述指令截断缺陷并回归钉死。否案：B 独立卡（双份维护）、C 扩展批量校对 run（改动大、单章即时调整体验重）。本会话主模型亲执不外派（owner 令），选型未走 critic（单点增量+owner 显式拍板）。
+
+**计划真值：** docs/plans/2026-11-20-fulltext-rewrite-toggle.md。执行留痕与验证链收口时补记。
+
+**执行留痕补记（2026-11-20 收口）：** 主模型亲执单提交。实现=shared 常量 FULL_TEXT_REWRITE_MAX_CHARS=8000 + schema selection 转可选 + routes handler 全文分支（硬门 400 双 reason；两模式统一 task 槽「正文只走 original 槽、指令只走 task 槽」修 F2 指令截断）+ client.rewriteFull + SelectionRewrite 开关（aria-label=改写全文，勾选隐藏选段输入/预设 fullInstruction 四键/按钮「提交全文改写」/成功文案「已生成全文改写版本」/8000 预检与服务端 400 同串）+ ChapterReaderPage 传 fullTextChars。实现期裁决一：TS 别名收窄对 parseBody 返回类型不生效 → 改解构局部量（routes.ts selection/instruction）。验证链（主模型亲跑）：lint 零输出、typecheck 全 workspace 0 错、全量测试 server 338+web 116+shared 2=**456**（基线 447 只增不减，+9=服务端 6+组件 3）、build:web 402.14kB 冒烟、pnpm audit --prod 零漏洞、secret 扫描零真实新增（测试 STRATA mock 占位符沿 polish.test.ts 先例）。GUI 未验证（owner 真实测试）点位：①阅读页工具卡勾选「改写全文（整章正文，约 N 字）」→ 选段输入隐藏、预设四键填充全文版指令、按钮变「提交全文改写」；②全文改写提交成功提示「已生成全文改写版本…」且版本链出现 revised 新版本（不动 current，回滚采纳）；③超 8000 字版本提交 → 预检文案拦截不发请求；④长选段（>470 字）选段重写指令实际生效（F2 修复——旧版长选段指令被截丢，owner 若遇「改了没反应」即此缺陷）。

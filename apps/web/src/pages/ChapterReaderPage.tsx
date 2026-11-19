@@ -146,7 +146,7 @@ export default function ChapterReaderPage() {
             </ul>
           </div>
 
-          {current && <SelectionRewrite versionId={current.id} onCreated={() => void refetch()} />}
+          {current && <SelectionRewrite versionId={current.id} fullTextChars={current.wordCount} onCreated={() => void refetch()} />}
         </div>
       </section>
       {current && <VersionQcPanel versionId={current.id} />}

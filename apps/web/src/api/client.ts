@@ -210,6 +210,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ selection, instruction }),
     }),
+  /** 全文改写（DEC-2026-1120-01）：body 无 selection 键 = 指令作用于该版本整章正文（服务端 8000 字硬门） */
+  rewriteFull: (versionId: string, instruction: string) =>
+    req<VersionDto>(`/api/versions/${versionId}/rewrite-selection`, {
+      method: 'POST',
+      body: JSON.stringify({ instruction }),
+    }),
 };
 
 export const SSE_BASE = API_BASE;
