@@ -90,6 +90,12 @@ export default function ChapterReaderPage() {
         />
         <div className="space-y-4 p-4">
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              className="inline-flex h-8 items-center gap-1.5 rounded-ctl border border-line bg-surface px-3 text-xs text-ink transition-colors hover:bg-bg"
+              to={`/books/${bookId}`}
+            >
+              返回书页
+            </Link>
             <Button onClick={rollback}>
               回滚到当前所选
             </Button>

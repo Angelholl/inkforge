@@ -140,4 +140,11 @@ describe('ChapterReaderPage', () => {
     fireEvent.click(btn);
     expect(await screen.findByText(/已导出 1 个文件至 X:\\mock\\data\\exports\\测试书/)).toBeTruthy();
   });
+
+  it('工具卡含「返回书页」chip 链接（DEC-2026-1120-02①：底部免滚回页顶）', async () => {
+    renderPage();
+    const link = await screen.findByRole('link', { name: '返回书页' });
+    expect(link.getAttribute('href')).toBe('/books/b1');
+    expect(link.className).toContain('rounded-ctl');
+  });
 });
