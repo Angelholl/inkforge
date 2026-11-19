@@ -895,7 +895,7 @@ ${repairPrompt(first.errors)}`))).text,
     const run = runsRepo.getRun(db, runId);
     if (!run) return reply.code(404).send({ error: 'not found' });
     const steps = runsRepo.listSteps(db, runId);
-    const chapters: Array<{ chapterNo: number; steps: Array<{ step: string; attempt: number; ms: number; usage: { promptTokens: number; completionTokens: number }; versionDeleted?: boolean }> }> = [];
+    const chapters: Array<{ chapterNo: number; steps: Array<{ step: string; attempt: number; ms: number; usage: { promptTokens: number; completionTokens: number }; versionDeleted?: boolean; versionId?: string }> }> = [];
     let totalMs = 0;
     let totalPrompt = 0;
     let totalCompletion = 0;
@@ -918,7 +918,7 @@ ${repairPrompt(first.errors)}`))).text,
         if (u) usage = { promptTokens: u.promptTokens ?? 0, completionTokens: u.completionTokens ?? 0 };
         totalPrompt += usage.promptTokens;
         totalCompletion += usage.completionTokens;
-        return { step: st.step, attempt: st.attempt, ms, usage, ...(versionDeleted ? { versionDeleted: true } : {}) };
+        return { step: st.step, attempt: st.attempt, ms, usage, ...(versionDeleted ? { versionDeleted: true } : {}), ...(st.outputVersionId ? { versionId: st.outputVersionId } : {}) };
       });
       chapters.push({ chapterNo, steps: stepRows });
     }
