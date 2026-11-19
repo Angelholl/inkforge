@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/client';
+import SettingsImportPanel from '../components/SettingsImportPanel';
 import { Button } from '../components/ui';
 import { inputBase, inputNarrow, textareaBase } from '../components/Field';
+import { decodeTextFile } from '../components/textFile';
+
+// decodeTextFile 已抽出至 components/textFile（设定集导入面板复用）；re-export 保持既有测试导入兼容
+export { decodeTextFile } from '../components/textFile';
+export type { DecodedText } from '../components/textFile';
 
 // 章题行三分支（owner 反馈：（一）/一、等形态拆章无法识别）：
 // ① 第X章/节/回（容忍「第 1 章」空格排版）；② 数字顿号「一、雪夜」（排顿号复现，防「一、二、三」误切）；
@@ -35,39 +41,6 @@ export function splitChapters(raw: string): ParsedChapter[] {
     out.push({ title: lines[start].trim(), content: lines.slice(start + 1, end).join('\n').trim() });
   }
   return out;
-}
-
-export interface DecodedText {
-  text: string;
-  encoding: string;
-}
-
-/**
- * 文本文件解码探测（owner 反馈③：GBK 文件按 UTF-8 直读全篇乱码）：
- * ① BOM 定码（UTF-16LE/BE、UTF-8）；② 无 BOM 先试 strict UTF-8；
- * ③ 解出含 C1 控制符（U+0080–U+009F，正常中文文本几乎不含）→ 判误判回退 GB18030（GBK/GB2312 超集）。
- */
-export function decodeTextFile(buf: ArrayBuffer): DecodedText {
-  const bytes = new Uint8Array(buf);
-  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-    return { text: new TextDecoder('utf-16le').decode(buf), encoding: 'UTF-16LE' };
-  }
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    return { text: new TextDecoder('utf-16be').decode(buf), encoding: 'UTF-16BE' };
-  }
-  const hasUtf8Bom = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
-  const body = hasUtf8Bom ? buf.slice(3) : buf;
-  try {
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(body);
-    for (let i = 0; i < text.length; i++) {
-      const c = text.charCodeAt(i);
-      if (c >= 0x80 && c <= 0x9f) return { text: new TextDecoder('gb18030').decode(body), encoding: 'GB18030' };
-    }
-    return { text, encoding: 'UTF-8' };
-  } catch {
-    /* 非 UTF-8：按中文 Windows 最常见编码回退 */
-  }
-  return { text: new TextDecoder('gb18030').decode(body), encoding: 'GB18030' };
 }
 
 type WizardState = { step: 1 } | { step: 2; bookId: string };
@@ -145,6 +118,13 @@ export default function NewBookPage() {
           <Button variant="primary" disabled={busy} onClick={createBook}>
             建书并进入导入
           </Button>
+          {/* 设定集直接导入（DEC-2026-1120-04）：成功建书后流入步骤②导入原文，向导其余不变 */}
+          <div className="border-t border-line pt-4">
+            <p className="text-sm font-medium">或从设定集直接导入（自动建书 + 写入世界观 / 大纲 / 人物卡 / 伏笔；导入后仍可在下一步导原文）</p>
+            <div className="mt-3">
+              <SettingsImportPanel onApplied={({ result }) => setWiz({ step: 2, bookId: result.bookId })} />
+            </div>
+          </div>
         </div>
       )}
 

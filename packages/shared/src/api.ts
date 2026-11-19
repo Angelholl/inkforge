@@ -462,3 +462,62 @@ export interface DistillJobDto {
   error: string | null;
   result: DistillStyleDraftDto | null;
 }
+
+// ── 设定集导入（DEC-2026-1120-04：新书/续写双入口，preview 出草稿→确认 apply 建书）──
+export interface SettingsImportCharacterDraft {
+  name: string;
+  /** 沿人物卡约定 {"设定": text} JSON 包裹；空设定='{}' */
+  baseSetting: string;
+}
+
+export interface SettingsImportForeshadowingDraft {
+  description: string;
+  /** 设定集无章号 → 解析默认 1，预览可改 */
+  plantedCh: number;
+}
+
+export interface SettingsImportDraftDto {
+  title: string;
+  /** 定位一句话+世界观节+规则体系节 聚合（拍板①扩槽后全量承载） */
+  description: string;
+  /** 总大纲卷级梗概聚合 */
+  outline: string;
+  characters: SettingsImportCharacterDraft[];
+  outlineTree: OutlineTreeDto;
+  foreshadowings: SettingsImportForeshadowingDraft[];
+  /** 章→蓝图预填（goal=梗概，beats 空），新书入口审阅步用 */
+  outlineItems: OutlineItemDto[];
+  /** 章号→章题（审阅步 titles 预填；JSON 键为字符串） */
+  chapterTitles: Record<string, string>;
+  /** 文风与语言规范节原文（未识别=空串；拍板②） */
+  styleSection: string;
+  /** 文风节导入风格档案并绑定（预览开关，默认 true） */
+  importStyle: boolean;
+  warnings: string[];
+}
+
+export interface SettingsImportPreviewBody {
+  content: string;
+}
+
+export interface SettingsImportApplyBody {
+  content: string;
+  draft: SettingsImportDraftDto;
+}
+
+export interface SettingsImportApplyResult {
+  bookId: string;
+  /** 整篇 MD 归档路径（data/imports/<bookId>-settings.md） */
+  sourcePath: string;
+  /** 拍板②：文风节成功导入=档案 id；跳过/失败=null（warnings 说明） */
+  styleProfileId: string | null;
+  /** apply 期警示（文风步跳过/失败等） */
+  warnings: string[];
+  counts: {
+    characters: number;
+    volumes: number;
+    stages: number;
+    cards: number;
+    foreshadowings: number;
+  };
+}

@@ -182,4 +182,47 @@ describe('NewBookPage', () => {
     expect(out[0].content).toContain('（完）');
     expect(out[0].content).toContain('1.5 万');
   });
+
+  it('设定集直接导入建书 → 流入步骤②导入原文（DEC-2026-1120-04）', async () => {
+    const DRAFT_MIN = {
+      title: '导入书',
+      description: '',
+      outline: '',
+      characters: [],
+      outlineTree: { volumes: [] },
+      foreshadowings: [],
+      outlineItems: [],
+      chapterTitles: {},
+      styleSection: '',
+      importStyle: false,
+      warnings: [],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/api/settings-import/preview')) {
+          return new Response(JSON.stringify(DRAFT_MIN), { status: 200 });
+        }
+        if (url.endsWith('/api/settings-import/apply')) {
+          return new Response(
+            JSON.stringify({ bookId: 'b7', sourcePath: '', styleProfileId: null, warnings: [], counts: { characters: 0, volumes: 0, stages: 0, cards: 0, foreshadowings: 0 } }),
+            { status: 201 },
+          );
+        }
+        return new Response('[]', { status: 200 });
+      }),
+    );
+    renderPage();
+
+    // 步骤①出现设定集导入区（建书按钮之下）
+    expect(screen.getByText(/或从设定集直接导入/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('设定集全文'), { target: { value: '# 《导入书》设定集' } });
+    fireEvent.click(screen.getByRole('button', { name: '解析预览' }));
+    await waitFor(() => screen.getByRole('button', { name: '确认导入建书' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认导入建书' }));
+
+    // 成功后进入步骤②导入原文（不跳书详情页，与手动建书一致）
+    await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+    expect(screen.queryByText(/或从设定集直接导入/)).toBeNull();
+  });
 });

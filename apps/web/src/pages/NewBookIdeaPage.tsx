@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/client';
+import SettingsImportPanel, { type SettingsImportApplied } from '../components/SettingsImportPanel';
 import type { OutlineItemDto } from '@inkforge/shared';
 import { Button } from '../components/ui';
 import { checkboxBase, inputBase, inputNarrow, textareaBase } from '../components/Field';
@@ -28,6 +29,30 @@ export default function NewBookIdeaPage() {
   const [chars, setChars] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  // 设定集导入接线（DEC-2026-1120-04 拍板③）：含章级大纲 → 跳过 LLM 直接进蓝图审阅；否则设定已入库，按章节数走现有建议
+  const onImportApplied = async ({ result, draft }: SettingsImportApplied) => {
+    setError('');
+    setBookId(result.bookId);
+    if (draft.outlineItems.length > 0) {
+      setItems(draft.outlineItems);
+      setTitles(Object.fromEntries(Object.entries(draft.chapterTitles).map(([k, v]) => [Number(k), v])));
+      setAdopted(new Set(draft.outlineItems.map((o) => o.chapterNo)));
+      setStep('review');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await api.suggestOutline(result.bookId, { chapterCount });
+      setItems(r.outline);
+      setAdopted(new Set(r.outline.map((o) => o.chapterNo)));
+      setStep('review');
+    } catch (e) {
+      setError(`蓝图生成失败：${(e as Error).message}\n设定已导入，可到书详情页手填蓝图后从书架发起生成。`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const start = async () => {
     setError('');
@@ -109,6 +134,13 @@ export default function NewBookIdeaPage() {
 
       {step === 'setup' && (
         <div className="mt-6 space-y-3">
+          {/* 设定集直接导入（DEC-2026-1120-04）：建书后接线进审阅或建议流程 */}
+          <div className="border-b border-line pb-4">
+            <p className="text-sm font-medium">已有设定集？直接导入（自动建书 + 写入世界观 / 大纲 / 人物卡 / 伏笔 + 文风档案）</p>
+            <div className="mt-3">
+              <SettingsImportPanel onApplied={(a) => void onImportApplied(a)} />
+            </div>
+          </div>
           <input
             className={inputBase}
             placeholder="书名"

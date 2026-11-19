@@ -96,10 +96,12 @@ const envSchema = z.object({
   INKFORGE_SUPERVISOR_BACKOFF_MS: z.string().optional(),
 });
 
+// DEC-2026-1120-04① 设定集导入「完全加载」扩槽：local contextWindow=524288、总预算≈515k 字符，
+// 现槽合计≈10k，扩容余量巨大且只对长设定内容生效（短设定按实际长度取用），溢出收缩逻辑不会触发。
 const BUDGETS_DRAFT: DraftBudgets = {
   hardRules: 500,
-  worldview: 1000,
-  characters: 800,
+  worldview: 16000,
+  characters: 8000,
   styleRules: 1000,
   styleDims: 600,
   blueprint: 1000,
@@ -133,7 +135,8 @@ const BUDGETS_REWRITE: RewriteBudgets = {
   task: 500,
 };
 const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 300 };
-const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 5000, characters: 1200, outline: 2000, task: 600 };
+// DEC-2026-1120-04① 同步扩槽（blueprint-suggest / outline-tree-suggest 槽）
+const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 16000, characters: 8000, outline: 8000, task: 600 };
 
 export function pickBudgetProfile(contextWindow: number): 'draft' | 'draft8k' {
   return contextWindow <= 8192 ? 'draft8k' : 'draft';

@@ -261,3 +261,58 @@ export const foreshadowingUpdateSchema = z
 
 /** 逐书文风示例开关（B4 裁决④）。 */
 export const styleFewshotPutSchema = z.object({ on: z.boolean() });
+
+// ── 设定集导入（DEC-2026-1120-04）：preview 出草稿（纯解析）；apply 事务建书+归档+文风步 ──
+export const settingsImportPreviewSchema = z.object({
+  content: z.string().min(1),
+});
+
+// draft 整形沿解析 DTO：outlineItems/chapterTitles/warnings 前端回传即被剥（章预填不落库，审阅步前端自用）
+export const settingsImportApplySchema = z.object({
+  content: z.string().min(1),
+  draft: z.object({
+    title: z.string().min(1),
+    description: z.string().default(''),
+    outline: z.string().default(''),
+    characters: z
+      .array(z.object({ name: z.string().min(1), baseSetting: z.string().default('{}') }))
+      .max(100)
+      .default([]),
+    outlineTree: z
+      .object({
+        volumes: z
+          .array(
+            z.object({
+              title: z.string().default(''),
+              body: z.string().default(''),
+              stages: z
+                .array(
+                  z.object({
+                    title: z.string().default(''),
+                    body: z.string().default(''),
+                    cards: z
+                      .array(
+                        z.object({
+                          title: z.string().default(''),
+                          body: z.string().default(''),
+                          chapterFrom: z.number().int().positive().nullable().optional(),
+                          chapterTo: z.number().int().positive().nullable().optional(),
+                        }),
+                      )
+                      .default([]),
+                  }),
+                )
+                .default([]),
+            }),
+          )
+          .default([]),
+      })
+      .default({ volumes: [] }),
+    foreshadowings: z
+      .array(z.object({ description: z.string().min(1), plantedCh: z.number().int().positive() }))
+      .max(50)
+      .default([]),
+    styleSection: z.string().default(''),
+    importStyle: z.boolean().default(true),
+  }),
+});

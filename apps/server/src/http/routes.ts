@@ -19,9 +19,11 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, settingsImportApplySchema, settingsImportPreviewSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
+import { parseSettingsCompendium } from '../settings-import';
+import { analyzeStyle } from '../style/analysis';
 import * as plotRepo from '../db/repositories/plot';
 import { saveStyleProfile } from '../style/analysis';
 import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } from '../style/merge';
@@ -197,6 +199,96 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const body = parseBody(reply, importOriginalSchema, req.body);
     if (!body) return;
     reply.code(201).send(chaptersRepo.importOriginalChapters(db, { bookId, chapters: body.chapters }));
+  });
+
+  // ── 设定集导入（DEC-2026-1120-04：preview 纯解析出草稿；apply 事务建书+归档+文风步）──
+  app.post('/api/settings-import/preview', async (req, reply) => {
+    const body = parseBody(reply, settingsImportPreviewSchema, req.body);
+    if (!body) return;
+    reply.send(parseSettingsCompendium(body.content));
+  });
+
+  app.post('/api/settings-import/apply', async (req, reply) => {
+    const body = parseBody(reply, settingsImportApplySchema, req.body);
+    if (!body) return;
+    const d = body.draft;
+    const title = d.title.trim();
+    if (title === '') return reply.code(400).send({ error: '书名不能为空' });
+    // 人物卡按 name 去重（预览未去重的手改兜底）
+    const seenNames = new Set<string>();
+    const characters = d.characters.filter((c) => {
+      const key = c.name.trim();
+      if (key === '' || seenNames.has(key)) return false;
+      seenNames.add(key);
+      return true;
+    });
+    let bookId: string;
+    try {
+      // 嵌套事务=createBook 内部事务以 savepoint 运行，任一环失败整体回滚
+      bookId = db.transaction(() => {
+        const book = booksRepo.createBook(db, { title, description: d.description, outline: d.outline, characters });
+        outlineRepo.replaceOutlineTree(db, book.id, d.outlineTree);
+        for (const f of d.foreshadowings) {
+          continuityRepo.upsertForeshadowing(db, { bookId: book.id, description: f.description, plantedCh: f.plantedCh });
+        }
+        return book.id;
+      })();
+    } catch (e) {
+      return reply.code(500).send({ error: `设定导入落库失败：${(e as Error).message}` });
+    }
+    // 整篇 MD 归档（沿 data/exports 先例；未映射节信息兜底）
+    const importDir = path.join(config.dataDir, 'imports');
+    await fs.promises.mkdir(importDir, { recursive: true });
+    const sourcePath = path.join(importDir, `${bookId}-settings.md`);
+    await fs.promises.writeFile(sourcePath, body.content, 'utf8');
+    // 文风步（拍板②）：建书+归档之后执行，失败不回滚建书
+    const warnings: string[] = [];
+    let styleProfileId: string | null = null;
+    const styleText = d.styleSection.trim();
+    if (d.importStyle && styleText !== '') {
+      if (styleText.replace(/\s/g, '').length < 200) {
+        warnings.push('文风节不足 200 字，已跳过风格档案导入（可在蒸馏工作台手动蒸馏）');
+      } else {
+        try {
+          const plannerProvider = state.plannerProvider ?? createRoleProvider(config, 'planner');
+          const { analysis } = await analyzeStyle({ provider: plannerProvider }, { sourceText: styleText, samples: [styleText] });
+          const { id: profileId } = saveStyleProfile(db, {
+            name: `${title}·文风规范`,
+            source: styleText,
+            analysis: analysis as StyleAnalysisDto,
+            samples: [{ id: 's0', text: styleText }],
+            evaluation: [],
+          });
+          const row = db
+            .prepare('SELECT id, version, rules_json, samples_json, metrics_json FROM style_profiles WHERE id = ?')
+            .get(profileId) as { id: string; version: number; rules_json: string; samples_json: string; metrics_json: string };
+          const bundle = buildStyleBundle({
+            primaryProfileId: profileId,
+            auxProfileIds: [],
+            dimsSource: {},
+            profiles: { [profileId]: contentFromProfileRow(row) },
+          });
+          booksRepo.setBookStyleBinding(db, bookId, { primaryProfileId: profileId, auxProfileIds: [], dimsSource: {}, weights: {} }, JSON.stringify(bundle));
+          styleProfileId = profileId;
+        } catch (e) {
+          warnings.push(`文风节导入风格档案失败：${(e as Error).message}（书已建成，可在蒸馏工作台手动蒸馏）`);
+        }
+      }
+    }
+    const volumes = d.outlineTree.volumes;
+    reply.code(201).send({
+      bookId,
+      sourcePath,
+      styleProfileId,
+      warnings,
+      counts: {
+        characters: characters.length,
+        volumes: volumes.length,
+        stages: volumes.reduce((n, v) => n + v.stages.length, 0),
+        cards: volumes.reduce((n, v) => n + v.stages.reduce((m, s) => m + s.cards.length, 0), 0),
+        foreshadowings: d.foreshadowings.length,
+      },
+    });
   });
 
   app.get('/api/books/:bookId', async (req, reply) => {

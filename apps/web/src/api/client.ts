@@ -41,6 +41,10 @@ import type {
   SettingsQualityDto,
   VersionQcDto,
   RunVersionsDto,
+  SettingsImportPreviewBody,
+  SettingsImportDraftDto,
+  SettingsImportApplyBody,
+  SettingsImportApplyResult,
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
@@ -110,6 +114,10 @@ export const api = {
     }),
   importOriginal: (bookId: string, body: ImportOriginalBody) =>
     req<ImportOriginalResult>(`/api/books/${bookId}/import-original`, { method: 'POST', body: JSON.stringify(body) }),
+  importSettingsPreview: (body: SettingsImportPreviewBody) =>
+    req<SettingsImportDraftDto>('/api/settings-import/preview', { method: 'POST', body: JSON.stringify(body) }),
+  importSettingsApply: (body: SettingsImportApplyBody) =>
+    req<SettingsImportApplyResult>('/api/settings-import/apply', { method: 'POST', body: JSON.stringify(body) }),
   suggestBlueprint: (bookId: string, body: BlueprintSuggestBody) =>
     req<{ blueprint: unknown; source: 'llm' | 'manual' }>(`/api/books/${bookId}/blueprint-suggest`, {
       method: 'POST',

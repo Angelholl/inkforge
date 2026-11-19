@@ -184,4 +184,91 @@ describe('NewBookIdeaPage 入口 B 向导', () => {
     const put1 = JSON.parse(String((puts[0].init as RequestInit).body));
     expect(put1.targetChars).toBe(500);
   });
+
+  it('设定集导入（含章级大纲）→ 跳过 LLM 直接进审阅（DEC-2026-1120-04 拍板③）', async () => {
+    const IMPORT_DRAFT = {
+      title: '导入示例书',
+      description: '世界观文本',
+      outline: '卷一 《起点》',
+      characters: [{ name: '主角', baseSetting: '{"设定":"连锁业务员"}' }],
+      outlineTree: { volumes: [] },
+      foreshadowings: [{ description: '对窗的一双眼睛', plantedCh: 1 }],
+      outlineItems: OUTLINE_TWO,
+      chapterTitles: { '1': '启程', '2': '入城' },
+      styleSection: '两种叙述声。',
+      importStyle: true,
+      warnings: [],
+    };
+    const calls: Call[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        if (url.endsWith('/api/settings-import/preview')) return jsonResponse(IMPORT_DRAFT);
+        if (url.endsWith('/api/settings-import/apply')) {
+          return jsonResponse({ bookId: 'b9', sourcePath: '', styleProfileId: 'sp1', warnings: [], counts: { characters: 1, volumes: 0, stages: 0, cards: 0, foreshadowings: 1 } }, 201);
+        }
+        return jsonResponse({ error: 'unexpected' }, 404);
+      }),
+    );
+    renderPage();
+
+    expect(screen.getByText(/已有设定集？直接导入/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('设定集全文'), { target: { value: '# 《导入示例书》设定集' } });
+    fireEvent.click(screen.getByRole('button', { name: '解析预览' }));
+    await waitFor(() => screen.getByRole('button', { name: '确认导入建书' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认导入建书' }));
+
+    // 直接进审阅：两条导入的蓝图渲染，无 outline-suggest 调用、无建书 POST（apply 端点自建书）
+    await waitFor(() => expect(screen.getByText(/少年踏上旅途/)).toBeTruthy());
+    expect(screen.getByText('第1章')).toBeTruthy();
+    expect(screen.getByText('第2章')).toBeTruthy();
+    expect(screen.queryByText(/蓝图勾画中/)).toBeNull();
+    expect(calls.some((c) => c.url.endsWith('/outline-suggest'))).toBe(false);
+    expect(calls.some((c) => c.url.endsWith('/api/books'))).toBe(false);
+    const apply = calls.find((c) => c.url.endsWith('/api/settings-import/apply'));
+    expect(apply).toBeTruthy();
+    expect(JSON.parse(String((apply!.init as RequestInit).body)).draft.characters[0].name).toBe('主角');
+  });
+
+  it('设定集导入（无章级大纲）→ 按章节数走建议蓝图（设定已入库）', async () => {
+    const IMPORT_DRAFT_EMPTY = {
+      title: '导入示例书',
+      description: '世界观文本',
+      outline: '卷一',
+      characters: [],
+      outlineTree: { volumes: [] },
+      foreshadowings: [],
+      outlineItems: [],
+      chapterTitles: {},
+      styleSection: '',
+      importStyle: false,
+      warnings: [],
+    };
+    const calls: Call[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        if (url.endsWith('/api/settings-import/preview')) return jsonResponse(IMPORT_DRAFT_EMPTY);
+        if (url.endsWith('/api/settings-import/apply')) {
+          return jsonResponse({ bookId: 'b9', sourcePath: '', styleProfileId: null, warnings: [], counts: { characters: 0, volumes: 0, stages: 0, cards: 0, foreshadowings: 0 } }, 201);
+        }
+        if (url.endsWith('/outline-suggest') && init?.method === 'POST') return jsonResponse({ outline: OUTLINE_TWO, source: 'llm' });
+        return jsonResponse({ error: 'unexpected' }, 404);
+      }),
+    );
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText('设定集全文'), { target: { value: '# 《导入示例书》设定集' } });
+    fireEvent.click(screen.getByRole('button', { name: '解析预览' }));
+    await waitFor(() => screen.getByRole('button', { name: '确认导入建书' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认导入建书' }));
+
+    await waitFor(() => expect(screen.getByText(/少年踏上旅途/)).toBeTruthy());
+    const suggest = calls.find((c) => c.url.endsWith('/outline-suggest'));
+    expect(suggest).toBeTruthy();
+    expect(suggest!.url).toContain('/books/b9/');
+    expect(JSON.parse(String((suggest!.init as RequestInit).body))).toEqual({ chapterCount: 8 });
+  });
 });
