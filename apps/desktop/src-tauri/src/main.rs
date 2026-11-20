@@ -14,7 +14,9 @@ const SERVICE_PORT: u16 = 8787;
 const SERVICE_PORT: u16 = 8788;
 
 /** 首次启动写入用户配置目录的 inkforge.env 模板：可自由编辑，重启应用生效。
- *  默认 mock 开箱即用；模型端点等在「设置」页填写后写入 config.json（优先级高于本文件）。 */
+ *  默认 mock 开箱即用；模型端点等在「设置」页填写后写入 config.json（优先级高于本文件）。
+ *  仅 release 分支使用（dev 走 pnpm，无需 env 文件）。 */
+#[cfg(not(debug_assertions))]
 const DEFAULT_ENV_TEMPLATE: &str = "\
 # 墨炉 Inkforge 服务环境文件（可编辑，重启应用后生效）
 # 注意：INKFORGE_PORT 由桌面壳固定注入，改这里不生效，勿改。
@@ -49,6 +51,7 @@ fn spawn_service(app: &tauri::AppHandle) -> Option<Child> {
   // dev：cwd = 仓库根（src-tauri → desktop → apps → 根），用 pnpm 拉服务
   #[cfg(debug_assertions)]
   let child = {
+    let _ = app; // dev 路径不取 resource_dir/app_config_dir，压掉未用形参告警
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).unwrap().to_path_buf();
     Command::new("cmd")
       .args(["/c", "pnpm --filter @inkforge/server start"])
@@ -114,7 +117,7 @@ fn main() {
           let pid = c.id();
           let _ = Command::new("taskkill")
             .args(["/T", "/F", "/PID", &pid.to_string()])
-            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
           println!("[inkforge-shell] service tree killed (pid {})", pid);
         }
