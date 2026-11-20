@@ -17,6 +17,7 @@ const SERVICE_PORT: u16 = 8788;
  *  默认 mock 开箱即用；模型端点等在「设置」页填写后写入 config.json（优先级高于本文件）。 */
 const DEFAULT_ENV_TEMPLATE: &str = "\
 # 墨炉 Inkforge 服务环境文件（可编辑，重启应用后生效）
+# 注意：INKFORGE_PORT 由桌面壳固定注入，改这里不生效，勿改。
 # 模型端点、密钥等请在桌面端「设置」页填写，由应用写入 config.json（优先级更高）。
 # 以下占位仅保证开箱即用的 mock 演示模式，不连任何真实服务。
 STRATA_BASE_URL=http://127.0.0.1:1
