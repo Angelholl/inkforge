@@ -6,6 +6,13 @@ use tauri::{Manager, RunEvent};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+/** 服务端口：dev 态复用开发服务（8787）；release 态独占 8788 与 dev 隔离，
+ *  避免正式版壳误连开发版进程导致数据互通（DEC-2026-1120-05）。 */
+#[cfg(debug_assertions)]
+const SERVICE_PORT: u16 = 8787;
+#[cfg(not(debug_assertions))]
+const SERVICE_PORT: u16 = 8788;
+
 /** 首次启动写入用户配置目录的 inkforge.env 模板：可自由编辑，重启应用生效。
  *  默认 mock 开箱即用；模型端点等在「设置」页填写后写入 config.json（优先级高于本文件）。 */
 const DEFAULT_ENV_TEMPLATE: &str = "\
@@ -16,13 +23,20 @@ STRATA_BASE_URL=http://127.0.0.1:1
 STRATA_API_KEY=placeholder
 STRATA_MODEL=mock
 INKFORGE_MOCK=1
-INKFORGE_PORT=8787
+INKFORGE_PORT=8788
 ";
 
-/** 探活 8787 → 未起则 spawn service；健康返回 None，否则返回子进程。 */
+/** 探活服务端口 → 未起则 spawn service；健康返回 None，否则返回子进程。 */
 fn spawn_service(app: &tauri::AppHandle) -> Option<Child> {
   let healthy = Command::new("curl")
-    .args(["-s", "-o", "NUL", "-w", "%{http_code}", "http://127.0.0.1:8787/api/health"])
+    .args([
+      "-s",
+      "-o",
+      "NUL",
+      "-w",
+      "%{http_code}",
+      &format!("http://127.0.0.1:{SERVICE_PORT}/api/health"),
+    ])
     .output()
     .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "200")
     .unwrap_or(false);
@@ -66,7 +80,7 @@ fn spawn_service(app: &tauri::AppHandle) -> Option<Child> {
       .env("INKFORGE_DATA_DIR", data_dir.display().to_string())
       .env("INKFORGE_CONFIG_FILE", cfg_dir.join("config.json").display().to_string())
       .env("INKFORGE_WORKER_TSX", "0")
-      .env("INKFORGE_PORT", "8787")
+      .env("INKFORGE_PORT", SERVICE_PORT.to_string())
       .creation_flags(CREATE_NO_WINDOW)
       .spawn()
       .ok()
@@ -75,7 +89,7 @@ fn spawn_service(app: &tauri::AppHandle) -> Option<Child> {
   child
 }
 
-/** 墨炉桌面壳：探活 8787 → 未起则 spawn service（进程树），退出时 taskkill /T 收割。 */
+/** 墨炉桌面壳：探活服务端口 → 未起则 spawn service（进程树），退出时 taskkill /T 收割。 */
 fn main() {
   let child: Mutex<Option<Child>> = Mutex::new(None);
 

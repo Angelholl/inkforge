@@ -48,7 +48,8 @@ import type {
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
-  return isDev ? '' : 'http://127.0.0.1:8787';
+  // 生产=桌面壳 sidecar 服务独占 8788（与 dev 8787 隔离，防误连开发版数据）
+  return isDev ? '' : 'http://127.0.0.1:8788';
 }
 
 export const API_BASE = resolveApiBase(import.meta.env.DEV);
