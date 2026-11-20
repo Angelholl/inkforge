@@ -226,3 +226,110 @@ describe('NewBookPage', () => {
     expect(screen.queryByText(/或从设定集直接导入/)).toBeNull();
   });
 });
+
+describe('NewBookPage 建档直选蒸馏档案（DEC-2026-1120-07）', () => {
+  const PROFILES = [
+    { id: 'p1', name: '甲档', version: 1, status: 'ready' },
+    { id: 'p2', name: '乙档', version: 2, status: 'ready' },
+  ];
+  const bindCalls: { url: string; body: Record<string, unknown> }[] = [];
+
+  function installFetch(opts?: { bindFail?: boolean; profiles?: unknown }) {
+    bindCalls.length = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (u.endsWith('/api/style-profiles')) {
+          return new Response(JSON.stringify(opts?.profiles ?? PROFILES), { status: 200 });
+        }
+        if (u.endsWith('/api/books')) {
+          return new Response(JSON.stringify({ id: 'b1', title: '试炼', chapters: [], runs: [] }), { status: 201 });
+        }
+        if (u.endsWith('/style')) {
+          bindCalls.push({ url: u, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+          if (opts?.bindFail) return new Response(JSON.stringify({ error: '档案已被删除' }), { status: 409 });
+          return new Response(JSON.stringify({ ok: true, styleProfileId: 'p1' }), { status: 200 });
+        }
+        return new Response('[]', { status: 200 });
+      }),
+    );
+  }
+
+  async function createWithChecks(names: string[]) {
+    renderPage();
+    await waitFor(() => screen.getByLabelText('风格档案勾选-甲档'));
+    for (const n of names) fireEvent.click(screen.getByLabelText(`风格档案勾选-${n}`));
+    fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '试炼' } });
+    fireEvent.click(screen.getByRole('button', { name: '建书并进入导入' }));
+  }
+
+  it('勾选 2 档提交 → createBook 后调用 bindStyle 且首位=主档、七维 dimsSource 全归主档', async () => {
+    installFetch();
+    await createWithChecks(['甲档', '乙档']);
+    await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+    expect(bindCalls).toHaveLength(1);
+    const body = bindCalls[0]!.body as { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> };
+    expect(body.primaryProfileId).toBe('p1');
+    expect(body.auxProfileIds).toEqual(['p2']);
+    expect(Object.values(body.dimsSource).every((v) => v === 'p1')).toBe(true);
+    expect(Object.keys(body.dimsSource)).toHaveLength(7);
+  });
+
+  it('不勾选 → 不调用 bindStyle', async () => {
+    installFetch();
+    await createWithChecks([]);
+    await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+    expect(bindCalls).toHaveLength(0);
+  });
+
+  it('bindStyle reject → 不回滚建书：流入步骤②且页内 msg 含「绑定失败」', async () => {
+    installFetch({ bindFail: true });
+    await createWithChecks(['甲档']);
+    await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+    expect(bindCalls).toHaveLength(1);
+    expect(screen.getByText(/书已建，但风格绑定失败/).textContent).toContain('档案已被删除');
+  });
+
+  it('满 4 禁勾第 5 个（disabled + title 提示）', async () => {
+    installFetch({
+      profiles: [
+        { id: 'p1', name: '甲档', version: 1, status: 'ready' },
+        { id: 'p2', name: '乙档', version: 1, status: 'ready' },
+        { id: 'p3', name: '丙档', version: 1, status: 'ready' },
+        { id: 'p4', name: '丁档', version: 1, status: 'ready' },
+        { id: 'p5', name: '戊档', version: 1, status: 'ready' },
+      ],
+    });
+    renderPage();
+    await waitFor(() => screen.getByLabelText('风格档案勾选-甲档'));
+    for (const n of ['甲档', '乙档', '丙档', '丁档']) fireEvent.click(screen.getByLabelText(`风格档案勾选-${n}`));
+    const fifth = screen.getByLabelText('风格档案勾选-戊档') as HTMLInputElement;
+    expect(fifth.disabled).toBe(true);
+    expect(fifth.closest('label')?.getAttribute('title')).toBe('最多绑定 4 个（1 主 + 3 辅）');
+    fireEvent.click(fifth);
+    expect(bindCalls).toHaveLength(0);
+  });
+
+  it('档案列表加载失败 → 降级不渲染选择区（console.warn）且建书不受阻', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    installFetch({ profiles: [] });
+    // 模拟接口 500：覆盖 fetch stub 的 style-profiles 分支
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL) => {
+        const u = String(url);
+        if (u.endsWith('/api/style-profiles')) return new Response(JSON.stringify({ error: 'boom' }), { status: 500 });
+        if (u.endsWith('/api/books')) return new Response(JSON.stringify({ id: 'b1', title: '试炼', chapters: [], runs: [] }), { status: 201 });
+        return new Response('[]', { status: 200 });
+      }),
+    );
+    renderPage();
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    expect(screen.queryByText(/风格档案（可选/)).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText('书名'), { target: { value: '试炼' } });
+    fireEvent.click(screen.getByRole('button', { name: '建书并进入导入' }));
+    await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
+    warnSpy.mockRestore();
+  });
+});

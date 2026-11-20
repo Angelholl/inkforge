@@ -91,6 +91,20 @@ export function normalizeWeights(values: Record<string, number>, orderedIds: str
   return out;
 }
 
+/**
+ * 多选绑定 body 构造（DEC-2026-1120-07 抽出共享，防 StyleBindPanel 与建档向导 NewBookPage 两处漂移）：
+ * checked 首位=主档（primaryProfileId），其余=auxProfileIds；dimsSource 未显式指定时七键全归主档
+ * （与下方 StyleBindPanel save 的 dims[d]||primary 缺省语义一致，两处注释互指）。
+ */
+export function buildStyleBindBody(checked: string[], dimsSource?: Record<string, string>): StyleBindBody {
+  const primary = checked[0] ?? '';
+  return {
+    primaryProfileId: primary,
+    auxProfileIds: checked.slice(1),
+    dimsSource: dimsSource ?? Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, primary])),
+  };
+}
+
 /** 风格绑定面板（多选融合，DEC-2026-1117-05）：档案勾选（上限 4）+ 基准档案 + 比例区（六轴与范例取样）+ 七维来源收进高级设置；保存经 onBind 发多选 body，解绑发 {profileId:null}。 */
 function StyleBindPanel({
   binding,
@@ -172,11 +186,11 @@ function StyleBindPanel({
   };
 
   const save = () => {
-    // dims 补齐七键：未显式改的键 = 主
+    // dims 补齐七键：未显式改的键 = 主（缺省语义与 buildStyleBindBody 的 fallback 一致，两处互指防漂移）
     const dimsSource: Record<string, string> = {};
     for (const d of STYLE_DIMENSIONS) dimsSource[d] = dims[d] || primary;
     const ids = [primary, ...checked.filter((id) => id !== primary)].filter(Boolean);
-    const body: StyleBindBody = { primaryProfileId: primary, auxProfileIds: checked.filter((id) => id !== primary), dimsSource };
+    const body: StyleBindBody = buildStyleBindBody(ids, dimsSource);
     // 非 legacy 行恒带 weights（含单档案 {id:100}——修辅权重 0 根因）；legacy 行触碰过才带（N6）
     if ((!legacyRow || weightsTouched) && ids.length > 0) {
       body.weights = normalizeWeights(Object.fromEntries(ids.map((id) => [id, rawWeights[id] ?? 1])), ids);

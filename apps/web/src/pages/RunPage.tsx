@@ -11,7 +11,7 @@ import type { RunDto } from '@inkforge/shared';
 export default function RunPage() {
   const { runId = '' } = useParams();
   const live = useRunEvents(runId || null);
-  const { data: fetched } = useQuery({
+  const { data: fetched, error: fetchError } = useQuery({
     queryKey: ['run', runId],
     queryFn: () => api.getRun(runId),
     enabled: !!runId && !live.run,
@@ -19,15 +19,31 @@ export default function RunPage() {
   const run: RunDto | null = live.run ?? fetched ?? null;
   const steps = live.run ? live.steps : (fetched?.steps ?? []);
   const [msg, setMsg] = useState('');
+  // 404 优雅降级（卡②）：详情 GET 404 或 SSE 探测 404 → 停止一切重连/轮询，渲染「运行不存在」
+  const notFound = live.notFound || (!!fetchError && String((fetchError as Error).message).includes('→ 404'));
 
   // 步状态在 SSE 下与 DB 行不同步时回退轮询
   useEffect(() => {
-    if (live.connected) return;
+    if (live.connected || notFound) return;
     const t = setInterval(() => {
       if (runId) void fetch(`/api/runs/${runId}`).then(() => undefined).catch(() => undefined);
     }, 3000);
     return () => clearInterval(t);
-  }, [live.connected, runId]);
+  }, [live.connected, notFound, runId]);
+
+  if (notFound && !run) {
+    return (
+      <main className="mx-auto max-w-6xl px-8 py-8">
+        <h1 className="text-xl font-semibold">运行 {runId}</h1>
+        <p className="mt-2 text-sm text-muted">运行不存在（可能已被删书级联清除）</p>
+        <p className="mt-2 text-sm">
+          <Link className="text-primary-strong hover:underline" to="/books">
+            返回书架 →
+          </Link>
+        </p>
+      </main>
+    );
+  }
 
   if (!run) {
     return (

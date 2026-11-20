@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { api } from '../api/client';
+import { api, apiErrorText } from '../api/client';
 import SettingsImportPanel from '../components/SettingsImportPanel';
 import { Button } from '../components/ui';
-import { inputBase, inputNarrow, textareaBase } from '../components/Field';
+import { checkboxBase, inputBase, inputNarrow, textareaBase } from '../components/Field';
 import { decodeTextFile } from '../components/textFile';
+import { buildStyleBindBody } from './BookDetailPage';
+import type { StyleProfileDto } from '@inkforge/shared';
 
 // decodeTextFile 已抽出至 components/textFile（设定集导入面板复用）；re-export 保持既有测试导入兼容
 export { decodeTextFile } from '../components/textFile';
@@ -57,14 +59,51 @@ export default function NewBookPage() {
   const [parsed, setParsed] = useState<ParsedChapter[]>([]);
   const [fileInfo, setFileInfo] = useState('');
   const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  // 建档直选蒸馏档案（DEC-2026-1120-07）：加载失败降级为不显示该区（console.warn），不阻断建档
+  const [profiles, setProfiles] = useState<StyleProfileDto[] | null>(null);
+  const [checkedProfiles, setCheckedProfiles] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .listStyleProfiles()
+      .then((list) => {
+        if (alive) setProfiles(list);
+      })
+      .catch((e) => {
+        console.warn('风格档案列表加载失败，建档页隐藏档案选择区', e);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 勾选上限逻辑照抄 BookDetailPage StyleBindPanel 的 toggle（满 4 禁勾）
+  const toggleProfile = (id: string) => {
+    setCheckedProfiles((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 4) return prev; // 上限 4（1 主 + 3 辅）
+      return [...prev, id];
+    });
+  };
 
   const createBook = async () => {
     setError('');
+    setMsg('');
     if (!title.trim()) return setError('书名不能为空');
     setBusy(true);
     try {
       const book = await api.createBook({ title: title.trim(), description: description.trim() || undefined });
+      // 建档直选档案（DEC-2026-1120-07）：建书成功后紧接着绑定；绑定失败不回滚建书，仍走原跳转链路（步骤②→书详情）
+      if (checkedProfiles.length > 0) {
+        try {
+          await api.bindStyle(book.id, buildStyleBindBody(checkedProfiles));
+        } catch (be) {
+          setMsg(`书已建，但风格绑定失败：${apiErrorText(be)}`);
+        }
+      }
       setWiz({ step: 2, bookId: book.id });
     } catch (e) {
       setError(String(e));
@@ -103,6 +142,7 @@ export default function NewBookPage() {
       <h1 className="text-xl font-semibold">新建小说（续写）</h1>
       <p className="mt-1 text-sm text-muted">① 建书 → ② 导入原文 → ③ 到书详情页设定剧情/人物/字数并发起续写</p>
       {error && <pre className="mt-4 whitespace-pre-wrap rounded-card border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</pre>}
+      {msg && <pre className="mt-4 whitespace-pre-wrap rounded-card border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">{msg}</pre>}
 
       {wiz.step === 1 && (
         <div className="mt-6 space-y-3">
@@ -117,6 +157,31 @@ export default function NewBookPage() {
           <Button variant="primary" disabled={busy} onClick={createBook}>
             建书并进入导入
           </Button>
+          {/* 建档直选蒸馏档案（DEC-2026-1120-07）：复用绑定语义（上限 4、首位=主档），body 构造走共享 buildStyleBindBody */}
+          {profiles && profiles.length > 0 && (
+            <div className="border-t border-line pt-4">
+              <p className="text-sm font-medium">风格档案（可选，最多 4 个，第 1 个为主档）</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {profiles.map((p) => {
+                  const isOn = checkedProfiles.includes(p.id);
+                  const full = !isOn && checkedProfiles.length >= 4;
+                  return (
+                    <label key={p.id} className="flex items-center gap-1.5 text-sm" title={full ? '最多绑定 4 个（1 主 + 3 辅）' : undefined}>
+                      <input
+                        type="checkbox"
+                        className={checkboxBase}
+                        aria-label={`风格档案勾选-${p.name}`}
+                        checked={isOn}
+                        disabled={full}
+                        onChange={() => toggleProfile(p.id)}
+                      />
+                      {p.name}（v{p.version}）
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {/* 设定集直接导入（DEC-2026-1120-04）：成功建书后流入步骤②导入原文，向导其余不变 */}
           <div className="border-t border-line pt-4">
             <p className="text-sm font-medium">或从设定集直接导入（自动建书 + 写入世界观 / 大纲 / 人物卡 / 伏笔；导入后仍可在下一步导原文）</p>
