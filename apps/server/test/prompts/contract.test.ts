@@ -51,6 +51,12 @@ describe('prompt 渲染契约', () => {
     expect(out).toContain('密信');
   });
 
+  it('renderDraft：带 grade 必含节拍显示落地分级提示', () => {
+    const bp = { ...BP, mustHaveBeats: [{ text: '密信到手', keywords: ['密信'], grade: 'H' as const }] };
+    const out = renderDraft({ chapterNo: 3, targetChars: 3000, worldview: '世界观占位', blueprint: bp });
+    expect(out).toContain('【必含节拍】密信到手（落地·H级须显性词）（须出现关键词：密信）');
+  });
+
   it('renderRewrite：findings 清单与修订指令齐备', () => {
     const out = renderRewrite({
       findings: [{ severity: 'blocker', dimension: '设定一致', quote: '他拔出佩剑', comment: '佩剑已折断' }],

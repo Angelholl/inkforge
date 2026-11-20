@@ -39,7 +39,7 @@ describe('loadConfig', () => {
       continuity: 2500,
       prevTail: 1500,
       fewShot: 1500,
-      task: 500,
+      task: 800,
     });
     expect(c.budgets.draft8k).toEqual({
       hardRules: 300,
@@ -61,7 +61,7 @@ describe('loadConfig', () => {
       original: 6000,
       findings: 800,
       factBaseline: 1000,
-      task: 500,
+      task: 800,
     });
     expect(c.quality).toEqual({ targetChars: 3000, scoreThreshold: 8.0, minGain: 0.05, maxRounds: 2 });
     expect(c.timeouts).toEqual({ draft: 3600000, qc: 900000, rewrite: 3600000, summarize: 1200000 });

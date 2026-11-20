@@ -108,7 +108,7 @@ const BUDGETS_DRAFT: DraftBudgets = {
   continuity: 2500,
   prevTail: 1500,
   fewShot: 1500,
-  task: 500,
+  task: 800,
 };
 
 const BUDGETS_DRAFT_8K: DraftBudgets = {
@@ -132,7 +132,7 @@ const BUDGETS_REWRITE: RewriteBudgets = {
   original: 6000,
   findings: 800,
   factBaseline: 1000,
-  task: 500,
+  task: 800,
 };
 const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 800 }; // 300→800：renderBlueprintTask 协议行占 ~210 后书籍简介仅剩 ~90 字（DEC-2026-1120-10）
 // DEC-2026-1120-04① 同步扩槽（blueprint-suggest / outline-tree-suggest 槽）

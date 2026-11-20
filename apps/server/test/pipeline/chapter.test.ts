@@ -14,6 +14,19 @@ import type { RunEvent } from '@inkforge/shared';
 import { runChapterPipeline } from '../../src/pipeline/chapter';
 import type { CompletionRequest, LlmProvider } from '../../src/llm/types';
 
+function capturing(inner: LlmProvider): { calls: Array<{ step: string; system: string; user: string }>; provider: LlmProvider } {
+  const calls: Array<{ step: string; system: string; user: string }> = [];
+  return {
+    calls,
+    provider: {
+      complete: async (req: CompletionRequest) => {
+        calls.push({ step: String((req.meta as { step?: string } | undefined)?.step ?? ''), system: req.system ?? '', user: req.user ?? '' });
+        return inner.complete(req);
+      },
+    },
+  };
+}
+
 const config = loadConfig({
   STRATA_BASE_URL: 'http://127.0.0.1:47831/v1',
   STRATA_API_KEY: 'strata',
@@ -459,4 +472,58 @@ describe('B3 入库分阈值 app_meta 覆盖（章级生效）', () => {
       setThreshold(null);
     }
   }, 60000);
+});
+
+describe('Task-03 rewrite 落地保全 + task 尾部摘要块', () => {
+  function insertCh4(blueprint: string): void {
+    db.prepare(
+      "INSERT OR REPLACE INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run('ch4', bookId, 4, '第四章', blueprint, 500, new Date().toISOString());
+  }
+
+  it('mustHaveBeats(grade H) 章 → draft task 尾含【本章硬要求】分级文案，无档案书不含【文风铁则】', async () => {
+    insertCh4(JSON.stringify({ goal: '推进落地', beats: [], mustHaveBeats: [{ text: 'X（场景一）', keywords: ['场景一', '房东'], grade: 'H' }], bannedTopics: [] }));
+    const runId = freshRun(4);
+    db.prepare('UPDATE runs SET max_rounds = 1 WHERE id = ?').run(runId);
+    const cap = capturing(createDefaultMockProvider());
+    await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId, chapterNo: 4 });
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.user).toContain('【本章硬要求】');
+    expect(draft.user).toContain('· X（场景一）（落地·H级须显性词）（须出现关键词：场景一、房东）');
+    expect(draft.user.indexOf('【本章硬要求】')).toBeGreaterThan(draft.user.indexOf('【任务】'));
+    expect(draft.user).not.toContain('【文风铁则】');
+  }, 30000);
+
+  it('无必含节拍章 → task 尾零污染', async () => {
+    const runId = freshRun(1);
+    db.prepare('UPDATE runs SET max_rounds = 1 WHERE id = ?').run(runId);
+    const cap = capturing(createDefaultMockProvider());
+    await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId, chapterNo: 1 });
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.user).not.toContain('【本章硬要求】');
+    expect(draft.user).not.toContain('蓝图必含节拍');
+  }, 30000);
+
+  it('重写保全：rewrite 指令含保全句与硬要求块', async () => {
+    insertCh4(JSON.stringify({ goal: '推进落地', beats: [], mustHaveBeats: [{ text: 'X（场景一）', keywords: ['场景一', '房东'], grade: 'H' }], bannedTopics: [] }));
+    const runId = freshRun(4);
+    db.prepare('UPDATE runs SET max_rounds = 1 WHERE id = ?').run(runId);
+    const blockerQc = `OVERALL: 7
+---
+SEVERITY: blocker
+DIMENSION: 设定一致
+QUOTE: 【章
+COMMENT: 引文锚定测试块（blocker）`;
+    const provider = createMockProvider({
+      draft: { textFn: (m) => `【章${m.chapterNo}改】独有开头。` + '线'.repeat(480) },
+      qc: { repeat: { text: blockerQc } },
+      rewrite: { textFn: (m) => `【章${m.chapterNo}修】重写后开头。` + '改'.repeat(480) },
+      summarize: { text: 'SUMMARY: 第4章推进完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
+    });
+    const cap = capturing(provider);
+    await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId, chapterNo: 4 });
+    const rewrite = cap.calls.find((c) => c.step === 'rewrite')!;
+    expect(rewrite.user).toContain('不得在修订中丢失');
+    expect(rewrite.user).toContain('【本章硬要求】');
+  }, 30000);
 });

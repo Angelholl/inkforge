@@ -1,4 +1,4 @@
-import { DIMENSIONS, type ChapterBlueprint, type Finding, type OutlineCardDto, type OutlineTreeDto } from '@inkforge/shared';
+import { DIMENSIONS, type BeatRequirement, type ChapterBlueprint, type Finding, type OutlineCardDto, type OutlineTreeDto } from '@inkforge/shared';
 
 const LENGTH_RULE = (target: number) => `字数目标 ${target} 字，允许偏差 ±20%。`;
 
@@ -19,7 +19,7 @@ export function renderDraft(input: { chapterNo: number; targetChars: number; wor
     `【世界观要点】${input.worldview.slice(0, 100)}`,
     `【本章目标】${input.blueprint.goal}`,
     ...input.blueprint.beats.map((b, i) => `【节拍 ${i + 1}】${b}`),
-    ...input.blueprint.mustHaveBeats.map((m) => `【必含节拍】${m.text}（须出现关键词：${m.keywords.join('、')}）`),
+    ...input.blueprint.mustHaveBeats.map((m) => `【必含节拍】${m.text}${m.grade !== undefined ? `（落地·${m.grade}级须显性词）` : ''}（须出现关键词：${m.keywords.join('、')}）`),
     ...(input.blueprint.bannedTopics.length > 0 ? [`【禁区】本章不得涉及：${input.blueprint.bannedTopics.join('；')}`] : []),
   ];
   return lines.join('\n');
@@ -85,6 +85,25 @@ export function renderRewrite(input: { findings: Finding[]; taskInstruction: str
     `【修订要求】${input.taskInstruction}`,
     `【输出格式】直接输出修订后的完整章节正文，不要任何解释或标记。`,
   ].join('\n');
+}
+
+/** task 槽尾部 recency 摘要块（DEC-2026-1120-10）：必含节拍文本+关键词（带 grade 显示落地分级）、文风铁则（rulesText 前 3 非空行）。
+ *  两块全空返回 ''——无蓝图硬要求且无档案的书零污染。签名不动 renderDraft/renderRewrite（contract.test 钉其形态）。 */
+export function renderTaskSummaryBlock(input: { mustHaveBeats: BeatRequirement[]; styleRulesText?: string }): string {
+  const parts: string[] = [];
+  if (input.mustHaveBeats.length > 0) {
+    parts.push([
+      '【本章硬要求】',
+      ...input.mustHaveBeats.map(
+        (m) => `· ${m.text}${m.grade !== undefined ? `（落地·${m.grade}级须显性词）` : ''}（须出现关键词：${m.keywords.join('、')}）`,
+      ),
+    ].join('\n'));
+  }
+  const ironRules = (input.styleRulesText ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '').slice(0, 3);
+  if (ironRules.length > 0) {
+    parts.push(['【文风铁则】', ...ironRules].join('\n'));
+  }
+  return parts.join('\n\n');
 }
 
 /** summarize 步指令：四段输出协议。 */

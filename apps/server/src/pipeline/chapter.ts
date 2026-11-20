@@ -12,7 +12,7 @@ import { assembleContext, draftSlots } from '../context/assembler';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 import { hashPrompt } from '../llm/hash';
-import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite } from '../prompts/render';
+import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite, renderTaskSummaryBlock } from '../prompts/render';
 import { loadCliches, loadLandingWords, runL0Checks } from '../quality/l0';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
@@ -240,7 +240,7 @@ export async function runChapterPipeline(
             continuity: continuityText,
             prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
             fewShot: fewShotBlock,
-            task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }) + (runMode === 'continue' ? '\n前文腔调优先，文风档案作质感参照。' : ''),
+            task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }) + (runMode === 'continue' ? '\n前文腔调优先，文风档案作质感参照。' : '') + renderTaskSummaryBlock({ mustHaveBeats: blueprint.mustHaveBeats, styleRulesText: styleRulesText }),
           },
           config.budgets.draft,
         ),
@@ -325,17 +325,16 @@ export async function runChapterPipeline(
       const mode = chooseRewriteMode(l0, l1);
       const clicheFix = l0.clicheHits.length > 0 ? `以下套话句必须整句删除或改写（不得保留原句式）：${l0.clicheHits.map((h) => `「${h}」`).join('、')}。` : '';
       const echoFix = l0.checks.find((c) => c.name === 'echo_20gram' && !c.pass) ? '正文与前文存在 20 字以上连续复文，必须彻底改写复文段，不得换皮复用。' : '';
-      const taskInstruction = renderRewrite({
-        findings: l1.findings,
-        taskInstruction:
-          mode === 'targeted'
-            ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}直接输出修订后的完整章节正文。`
-            : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}直接输出完整章节正文。`,
-      });
+      const landingPreserve = blueprint.mustHaveBeats.length > 0 ? '蓝图必含节拍（含关键词）不得在修订中丢失，缺失必须补写。' : '';
+      const taskInstruction =
+        mode === 'targeted'
+          ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}${landingPreserve}直接输出修订后的完整章节正文。`
+          : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}${landingPreserve}直接输出完整章节正文。`;
+      const taskText = renderRewrite({ findings: l1.findings, taskInstruction }) + renderTaskSummaryBlock({ mustHaveBeats: blueprint.mustHaveBeats, styleRulesText: styleRulesText });
       const rwSlots =
         mode === 'targeted'
           ? buildRewriteSlots(
-              { original: currentVersion.content, findings: l1.findings, factBaselineText: continuityText, mode, taskInstruction, hardRules, styleRules: styleRulesText || undefined },
+              { original: currentVersion.content, findings: l1.findings, factBaselineText: continuityText, mode, taskInstruction: taskText, hardRules, styleRules: styleRulesText || undefined },
               config.budgets.rewrite,
             )
           : buildRewriteSlots(
@@ -344,7 +343,7 @@ export async function runChapterPipeline(
                 findings: l1.findings,
                 factBaselineText: continuityText,
                 mode,
-                taskInstruction,
+                taskInstruction: taskText,
                 hardRules,
                 worldview: book.description,
                 blueprint: blueprintText(blueprint),

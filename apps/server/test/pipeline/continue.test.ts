@@ -140,6 +140,27 @@ describe('continue 模式管线', () => {
     expect(row.style_sample_ids_json).toBe('["mock-profile:s3","mock-profile:s1","mock-profile:s2"]');
   }, 30000);
 
+  it('continue：带 grade 必含节拍在 task 尾部注入硬要求块与文风铁则', async () => {
+    upsertBlueprint(db, {
+      bookId,
+      chapterNo: 4,
+      title: '第四章',
+      blueprint: { goal: '续写落地', beats: [], mustHaveBeats: [{ text: 'Y（重逢戏）', keywords: ['重逢'], grade: 'H' }], bannedTopics: [] },
+      targetChars: 500,
+    });
+    const run = createRun(db, { bookId, mode: 'continue', chapterScope: { from: 4, to: 4 }, maxRounds: 1 });
+    const cap = capturing(createDefaultMockProvider());
+    await runChapterPipeline(
+      { db, provider: cap.provider, config, emit: () => {} },
+      { runId: run.id, bookId, chapterNo: 4 },
+    );
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.user).toContain('【本章硬要求】');
+    expect(draft.user).toContain('（落地·H级须显性词）');
+    expect(draft.user).toContain('【文风铁则】');
+    expect(draft.user).toContain('RULES: 句长 10-20 字。');
+  }, 30000);
+
   it('continue 无锚点 → 400 且先于 blueprint 校验', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-continue-http-'));
     const app = await buildApp({
