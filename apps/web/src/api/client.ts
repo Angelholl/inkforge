@@ -29,6 +29,7 @@ import type {
   VersionDto,
   VersionListDto,
   BlueprintPutBody,
+  StyleProfileDetailDto,
   StyleProfileDto,
   StyleBindBody,
   DistillJobDto,
@@ -211,6 +212,8 @@ export const api = {
     }),
   versionQc: (versionId: string) => req<VersionQcDto>(`/api/versions/${versionId}/qc`),
   listStyleProfiles: () => req<StyleProfileDto[]>('/api/style-profiles'),
+  // 档案详情（DEC-2026-1120-08）：查看面板懒加载，只读展示分析细节
+  getStyleProfile: (id: string) => req<StyleProfileDetailDto>(`/api/style-profiles/${id}`),
   listStyleProfileVersions: (id: string) =>
     req<Array<{ id: string; name: string; version: number; createdAt: string; selfScore?: number }>>(`/api/style-profiles/${id}/versions`),
   distillStyle: (body: DistillStyleBody) =>

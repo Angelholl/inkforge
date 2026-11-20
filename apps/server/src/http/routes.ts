@@ -763,6 +763,49 @@ ${repairPrompt(first.errors)}`))).text,
     }));
   });
 
+  // 档案详情（DEC-2026-1120-08）：只读查看面板用。list dto 基础上加 analysis/evaluation/sourcePath；
+  // analysis 从 rules_json 反序列化，freqTerms 旧档案无键 → ?? [] 兜底；evaluation 未整表落库，
+  // 由 metrics_json 的 selfScore/selfReason 还原为单项数组（无自评则缺省）
+  app.get('/api/style-profiles/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const row = db
+      .prepare('SELECT id, name, version, source_path, rules_json, metrics_json, created_at FROM style_profiles WHERE id = ?')
+      .get(id) as
+      | { id: string; name: string; version: number; source_path: string; rules_json: string; metrics_json: string; created_at: string }
+      | undefined;
+    if (!row) return reply.code(404).send({ error: 'not found' });
+    const rulesData = JSON.parse(row.rules_json) as {
+      rulesText?: string;
+      dims?: StyleAnalysisDto['dims'];
+      axes?: StyleAnalysisDto['axes'];
+      rules?: string[];
+      terms?: StyleAnalysisDto['terms'];
+      freqTerms?: StyleAnalysisDto['freqTerms'];
+    };
+    const analysis: StyleAnalysisDto = {
+      dims: rulesData.dims ?? ({} as StyleAnalysisDto['dims']),
+      axes: rulesData.axes ?? ({} as StyleAnalysisDto['axes']),
+      rules: rulesData.rules ?? (rulesData.rulesText ?? '').split('\n').map((s) => s.trim()).filter((s) => s !== ''),
+      terms: rulesData.terms ?? [],
+      freqTerms: rulesData.freqTerms ?? [],
+    };
+    const metrics = JSON.parse(row.metrics_json) as Record<string, number | string>;
+    const evaluation =
+      typeof metrics.selfScore === 'number'
+        ? [{ score: metrics.selfScore, reason: typeof metrics.selfReason === 'string' ? metrics.selfReason : '' }]
+        : undefined;
+    reply.send({
+      id: row.id,
+      name: row.name,
+      version: row.version,
+      createdAt: row.created_at,
+      metrics,
+      sourcePath: row.source_path,
+      analysis,
+      ...(evaluation !== undefined ? { evaluation } : {}),
+    });
+  });
+
   // B4 裁决②：档案删除。只删被删 id 那一行（同 source_hash 的其他版本不受牵连，版本族靠 source_hash 组织）；
   // 仍被任何书绑定 → 409 并回绑定书列表，绝不静默解绑（books.style_profile_id 无外键，靠这里守住引用）。
   app.delete('/api/style-profiles/:id', async (req, reply) => {

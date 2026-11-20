@@ -78,6 +78,18 @@ function fetchFor(url: string, init?: RequestInit): Response {
   if (url.endsWith('/api/style-profiles') && init?.method === 'POST') {
     return new Response(JSON.stringify({ profileId: 'sp2', version: 2 }), { status: 201 });
   }
+  // 详情端点桩（DEC-2026-1120-08）：GET /api/style-profiles/spN；detailFail=true → 500
+  if (/^\/api\/style-profiles\/sp\d+$/.test(url) && (!init?.method || init.method === 'GET')) {
+    if (detailFail) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+    return new Response(
+      JSON.stringify({
+        ...PROFILE,
+        analysis: DRAFT.analysis,
+        evaluation: [{ score: 4, reason: '整体贴合样本' }],
+      }),
+      { status: 200 },
+    );
+  }
   if (url.includes('/api/style-profiles/sp1/versions')) {
     return new Response(
       JSON.stringify([
@@ -135,6 +147,8 @@ let distilled = false;
 // 档案删除桩状态（各用例首行自行重置，沿 distilled 的既有习惯）
 let deletedIds: string[] = [];
 let deleteOverride: { status: number; body: unknown } | null = null;
+// 详情端点失败桩（查看细节用例用）
+let detailFail = false;
 // B5 蒸馏 job 轮询桩：'done'（首查即成，现有蒸馏路径用例的默认）| 'failed' | 'running-then-done'（首查 running、次查起 done）
 let jobStub: 'done' | 'failed' | 'running-then-done' = 'done';
 let jobPollCount = 0;
@@ -145,6 +159,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   jobStub = 'done';
   jobPollCount = 0;
+  detailFail = false;
 });
 
 function setInput(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -548,5 +563,50 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(await screen.findByText('无法删除，已被绑定：样本之书')).toBeTruthy();
     expect(screen.getByText('测试档案')).toBeTruthy(); // 拒删：档案行仍在
     deleteOverride = null;
+  });
+});
+
+describe('档案查看细节（DEC-2026-1120-08）', () => {
+  it('点查看 → 懒加载详情并只读渲染七维/术语/高频词；再点收起面板消失', async () => {
+    distilled = false;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    const row = screen.getByText('测试档案').closest('li')!;
+    fireEvent.click(within(row).getByRole('button', { name: '查看' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/api/style-profiles/sp1'))).toBe(true),
+    );
+    // 七维/术语/高频词/自评只读渲染
+    expect(await within(row).findByText(/短句为主/)).toBeTruthy();
+    expect(within(row).getByText(/青云剑诀/)).toBeTruthy();
+    expect(within(row).getByText(/抬眸/)).toBeTruthy();
+    expect(within(row).getByText(/SCORE 4\/5 · REASON：整体贴合样本/)).toBeTruthy();
+    // 只读：面板里没有编辑输入框
+    expect(within(row).queryByLabelText('维度-节奏')).toBeNull();
+
+    fireEvent.click(within(row).getByRole('button', { name: '收起' }));
+    await waitFor(() => expect(within(row).queryByText(/青云剑诀/)).toBeNull());
+  });
+
+  it('详情加载失败 → 人话错误+重试按钮；重试成功后面板正常渲染', async () => {
+    distilled = false;
+    detailFail = true;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    const row = screen.getByText('测试档案').closest('li')!;
+    fireEvent.click(within(row).getByRole('button', { name: '查看' }));
+    expect(await within(row).findByText('详情加载失败')).toBeTruthy();
+    expect(within(row).getByRole('button', { name: '重试' })).toBeTruthy();
+
+    detailFail = false;
+    fireEvent.click(within(row).getByRole('button', { name: '重试' }));
+    expect(await within(row).findByText(/青云剑诀/)).toBeTruthy();
+    expect(within(row).queryByText('详情加载失败')).toBeNull();
   });
 });

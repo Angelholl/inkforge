@@ -166,6 +166,74 @@ describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
   });
 });
 
+describe('档案详情端点（DEC-2026-1120-08 查看细节）', () => {
+  async function newProfileForDetail(name: string): Promise<string> {
+    const draft = await distill(name);
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/style-profiles',
+      payload: { name, text: SAMPLE_TEXT, analysis: draft.analysis, samples: draft.samples },
+    });
+    expect(r.statusCode).toBe(201);
+    return (r.json() as { profileId: string }).profileId;
+  }
+
+  it('GET /:id 命中 → 200 完整 dto：list 字段 + analysis(dims/axes/rules/terms/freqTerms) + sourcePath', async () => {
+    const pid = await newProfileForDetail('详情命中档');
+    const r = await app.inject({ method: 'GET', url: `/api/style-profiles/${pid}` });
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as {
+      id: string;
+      name: string;
+      version: number;
+      createdAt: string;
+      metrics: Record<string, unknown>;
+      sourcePath: string;
+      analysis: { dims: Record<string, string>; axes: Record<string, number>; rules: string[]; terms: unknown[]; freqTerms: unknown[] };
+    };
+    expect(d.id).toBe(pid);
+    expect(d.name).toBe('详情命中档');
+    expect(d.version).toBeGreaterThanOrEqual(1); // SAMPLE_TEXT 各用例共用 → 同 hash 版本族递增
+    expect(typeof d.createdAt).toBe('string');
+    expect(d.sourcePath.startsWith('inline:')).toBe(true);
+    expect(d.analysis.dims['节奏']).toBe('短句为主，段落 3-6 行。');
+    expect(d.analysis.axes['叙述温度']).toBe(72);
+    expect(d.analysis.rules).toEqual(['平均句长 10-20 字。', '对话占比 20%-40%。']);
+    expect(d.analysis.terms).toEqual([]);
+    expect(d.analysis.freqTerms).toEqual([]);
+
+    expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+  });
+
+  it('GET /:id 不存在 → 404', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/style-profiles/no-such-detail-id' });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('旧档案兜底：rules_json 无 freqTerms/terms 键 → []；无 metrics selfScore → 无 evaluation 键；静态段不被 :id 吞', async () => {
+    const pid = await newProfileForDetail('旧格式档');
+    // 模拟旧档案：剥掉 freqTerms/terms 键
+    const row = db.prepare('SELECT rules_json FROM style_profiles WHERE id = ?').get(pid) as { rules_json: string };
+    const old = JSON.parse(row.rules_json) as Record<string, unknown>;
+    delete old.freqTerms;
+    delete old.terms;
+    db.prepare('UPDATE style_profiles SET rules_json = ? WHERE id = ?').run(JSON.stringify(old), pid);
+
+    const r = await app.inject({ method: 'GET', url: `/api/style-profiles/${pid}` });
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as { analysis: { freqTerms: unknown[]; terms: unknown[] }; evaluation?: unknown };
+    expect(d.analysis.freqTerms).toEqual([]);
+    expect(d.analysis.terms).toEqual([]);
+    expect('evaluation' in d).toBe(false);
+
+    // 静态段不被 :id 吞（Fastify 静态优先）：versions / jobs 仍可达
+    expect((await app.inject({ method: 'GET', url: `/api/style-profiles/${pid}/versions` })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/style-profiles/jobs/not-a-job' })).statusCode).toBe(404);
+
+    expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+  });
+});
+
 describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1116-01）', () => {
   async function newProfile(name: string): Promise<string> {
     const draft = await distill(name);

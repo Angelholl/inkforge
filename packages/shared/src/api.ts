@@ -327,6 +327,13 @@ export interface SelfEvalItemDto {
   reason: string;
 }
 
+/** 档案详情（DEC-2026-1120-08）：list dto + 只读查看面板所需的分析细节与自评 */
+export interface StyleProfileDetailDto extends StyleProfileDto {
+  analysis: StyleAnalysisDto;
+  /** 自评未整表落库，由 metrics 的 selfScore/selfReason 还原为单项数组；无自评则缺省 */
+  evaluation?: SelfEvalItemDto[];
+}
+
 // ── 伏笔 CRUD（三小件 C2）──
 export interface ForeshadowingDto {
   id: string;
