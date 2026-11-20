@@ -85,7 +85,7 @@ export interface DistillProfileBase extends ListProfileBase {
   structure: string[];
 }
 
-interface DistillApi<P, D> {
+interface DistillApi<D> {
   analyze: (body: { name: string; text: string }) => Promise<{ draft: D }>;
   save: (draft: D) => Promise<unknown>;
   remove: (id: string) => Promise<unknown>;
@@ -129,7 +129,7 @@ interface DistillLabels {
 interface DistillProfilesShellProps<P extends DistillProfileBase, D> {
   queryKey: QueryKey;
   listApi: () => Promise<P[]>;
-  api: DistillApi<P, D>;
+  api: DistillApi<D>;
   labels: DistillLabels;
 }
 
