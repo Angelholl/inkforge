@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorBody, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
 import { inputBase, inputNarrow, textareaBase } from '../components/Field';
-import { EmptyState } from '../components/EmptyState';
+import { ProfilesListShell } from '../components/DistillProfilesShell';
 import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAnalysisDto, type StyleProfileDetailDto, type StyleProfileDto } from '@inkforge/shared';
 import ImitationProfilesSection from './ImitationProfilesSection';
 import BookSamplePicker from './BookSamplePicker';
@@ -37,8 +37,7 @@ export default function StyleProfilesSection() {
   const [openDetail, setOpenDetail] = useState<string | null>(null);
   const [detailMap, setDetailMap] = useState<Record<string, { status: 'loading' | 'error' | 'ok'; detail?: StyleProfileDetailDto }>>({});
   const [versionMap, setVersionMap] = useState<Record<string, Array<{ id: string; version: number; createdAt: string; selfScore?: number }>>>({});
-  // L2 两步确认：待确认删除的档案 id（B4 裁决②）
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  // L2 两步确认状态由 ProfilesListShell 持有；此处只留确认按钮的 loading 态
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -212,12 +211,12 @@ export default function StyleProfilesSection() {
     }
   };
 
-  const removeProfile = async (profileId: string): Promise<void> => {
+  const removeProfile = async (profileId: string, clearConfirm: () => void): Promise<void> => {
     setDeleting(true);
     try {
       await api.deleteStyleProfile(profileId);
       setMsg('档案已删除');
-      setConfirmingDeleteId(null);
+      clearConfirm();
       void refetch();
     } catch (e) {
       // 409 附带绑定书列表：优先用它拼人话，其余走 error 字段
@@ -231,7 +230,7 @@ export default function StyleProfilesSection() {
         /* 非 JSON 响应体：沿用 apiErrorText 的兜底 */
       }
       setMsg(text);
-      setConfirmingDeleteId(null);
+      clearConfirm();
     } finally {
       setDeleting(false);
     }
@@ -275,144 +274,141 @@ export default function StyleProfilesSection() {
     <section className="mt-10">
       <h2 className="text-lg font-semibold">风格档案</h2>
 
-      <section className="mt-6">
-        <h2 className="text-base font-semibold">档案列表</h2>
-        <ul className="mt-2 space-y-2">
-          {(profiles ?? []).map((p: StyleProfileDto) => (
-            <li key={p.id} className="rounded-card border border-line bg-surface px-4 py-3">
-              <div className="font-medium">{p.name}</div>
-              <div className="mt-1 flex items-center gap-3 text-xs text-muted">
-                <span className="min-w-0">
-                  v{p.version} · {new Date(p.createdAt).toLocaleString()} · 句长中位数 {p.metrics.medianSentenceLen ?? '—'}
-                  {typeof p.metrics.selfScore === 'number' ? ` · 自评 ${p.metrics.selfScore}/5` : ''}
-                </span>
-                <Button
-                  variant="quiet"
-                  tone="primary"
-                  size="sm"
-                  className="ml-auto"
-                  disabled={busy}
-                  loading={redistillingId === p.id}
-                  onClick={() => void redistill(p)}
-                >
-                  重新蒸馏
-                </Button>
-                <Button variant="quiet" size="sm" onClick={() => void toggleVersions(p.id)}>
-                  {openVersions === p.id ? '收起版本' : '版本'}
-                </Button>
-                <Button variant="quiet" size="sm" onClick={() => void toggleDetail(p.id)}>
-                  {openDetail === p.id ? '收起' : '查看'}
-                </Button>
-                {confirmingDeleteId === p.id ? (
-                  <>
-                    <span className="text-danger text-xs">删除该档案行不影响已绑定书的 persona 快照；仍被书绑定的档案不可删。</span>
-                    <Button variant="danger" size="sm" solid loading={deleting} onClick={() => void removeProfile(p.id)}>
-                      确认删除
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={() => setConfirmingDeleteId(null)}>
-                      取消
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="quiet" tone="danger" size="sm" onClick={() => setConfirmingDeleteId(p.id)}>
-                    删除
+      <ProfilesListShell
+        profiles={profiles ?? []}
+        listTitle="档案列表"
+        empty={{ title: '还没有风格档案', hint: '粘贴或导入 ≥200 字风格样本，从下方表单蒸馏第一个。' }}
+        sectionClassName="mt-6"
+        onDelete={(id, _label, clearConfirm) => removeProfile(id, clearConfirm)}
+        renderCard={(p: StyleProfileDto, ctx) => (
+          <li className="rounded-card border border-line bg-surface px-4 py-3">
+            <div className="font-medium">{p.name}</div>
+            <div className="mt-1 flex items-center gap-3 text-xs text-muted">
+              <span className="min-w-0">
+                v{p.version} · {new Date(p.createdAt).toLocaleString()} · 句长中位数 {p.metrics.medianSentenceLen ?? '—'}
+                {typeof p.metrics.selfScore === 'number' ? ` · 自评 ${p.metrics.selfScore}/5` : ''}
+              </span>
+              <Button
+                variant="quiet"
+                tone="primary"
+                size="sm"
+                className="ml-auto"
+                disabled={busy}
+                loading={redistillingId === p.id}
+                onClick={() => void redistill(p)}
+              >
+                重新蒸馏
+              </Button>
+              <Button variant="quiet" size="sm" onClick={() => void toggleVersions(p.id)}>
+                {openVersions === p.id ? '收起版本' : '版本'}
+              </Button>
+              <Button variant="quiet" size="sm" onClick={() => void toggleDetail(p.id)}>
+                {openDetail === p.id ? '收起' : '查看'}
+              </Button>
+              {ctx.confirming ? (
+                <>
+                  <span className="text-danger text-xs">删除该档案行不影响已绑定书的 persona 快照；仍被书绑定的档案不可删。</span>
+                  <Button variant="danger" size="sm" solid loading={deleting} onClick={ctx.confirmDelete}>
+                    确认删除
                   </Button>
-                )}
-              </div>
-              {openVersions === p.id && (
-                <ul className="mt-2 ml-4 space-y-1 border-l pl-3 text-xs text-muted">
-                  {(versionMap[p.id] ?? []).map((v) => (
-                    <li key={v.id}>
-                      v{v.version} · {new Date(v.createdAt).toLocaleString()}
-                      {typeof v.selfScore === 'number' ? ` · 自评 ${v.selfScore}/5` : ''}
-                    </li>
-                  ))}
-                  {(versionMap[p.id] ?? []).length === 0 && <li>加载中…</li>}
-                </ul>
+                  <Button variant="secondary" size="sm" onClick={ctx.cancelDelete}>
+                    取消
+                  </Button>
+                </>
+              ) : (
+                <Button variant="quiet" tone="danger" size="sm" onClick={ctx.askDelete}>
+                  删除
+                </Button>
               )}
-              {openDetail === p.id && (
-                <div className="mt-2 rounded border border-line bg-bg p-3 text-xs">
-                  {(detailMap[p.id]?.status ?? 'loading') === 'loading' && <p className="text-muted">加载中…</p>}
-                  {detailMap[p.id]?.status === 'error' && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-danger">详情加载失败</span>
-                      <Button variant="secondary" size="sm" onClick={() => void retryDetail(p.id)}>
-                        重试
-                      </Button>
+            </div>
+            {openVersions === p.id && (
+              <ul className="mt-2 ml-4 space-y-1 border-l pl-3 text-xs text-muted">
+                {(versionMap[p.id] ?? []).map((v) => (
+                  <li key={v.id}>
+                    v{v.version} · {new Date(v.createdAt).toLocaleString()}
+                    {typeof v.selfScore === 'number' ? ` · 自评 ${v.selfScore}/5` : ''}
+                  </li>
+                ))}
+                {(versionMap[p.id] ?? []).length === 0 && <li>加载中…</li>}
+              </ul>
+            )}
+            {openDetail === p.id && (
+              <div className="mt-2 rounded border border-line bg-bg p-3 text-xs">
+                {(detailMap[p.id]?.status ?? 'loading') === 'loading' && <p className="text-muted">加载中…</p>}
+                {detailMap[p.id]?.status === 'error' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-danger">详情加载失败</span>
+                    <Button variant="secondary" size="sm" onClick={() => void retryDetail(p.id)}>
+                      重试
+                    </Button>
+                  </div>
+                )}
+                {detailMap[p.id]?.status === 'ok' && detailMap[p.id].detail && (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-sm font-medium">七维</div>
+                      {STYLE_DIMENSIONS.map((dim) => (
+                        <p key={dim} className="mt-1 text-muted">
+                          <span className="text-ink">{dim}</span>：{detailMap[p.id].detail!.analysis.dims[dim] || '—'}
+                        </p>
+                      ))}
                     </div>
-                  )}
-                  {detailMap[p.id]?.status === 'ok' && detailMap[p.id].detail && (
-                    <div className="space-y-3">
+                    <div>
+                      <div className="text-sm font-medium">六轴（0-100）</div>
+                      <p className="mt-1 text-muted">
+                        {STYLE_AXES.map((axis) => `${axis} ${detailMap[p.id].detail!.analysis.axes[axis] ?? 0}`).join(' · ')}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">规则</div>
+                      <ul className="mt-1 ml-4 list-disc text-muted">
+                        {detailMap[p.id].detail!.analysis.rules.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                        {detailMap[p.id].detail!.analysis.rules.length === 0 && <li>（无）</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">术语表</div>
+                      {(detailMap[p.id].detail!.analysis.terms ?? []).length === 0 ? (
+                        <p className="mt-1 text-muted">（无）</p>
+                      ) : (
+                        (detailMap[p.id].detail!.analysis.terms ?? []).map((t, i) => (
+                          <p key={i} className="mt-1 text-muted">
+                            <span className="text-ink">{t.term}</span>：{t.note}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">高频词</div>
+                      {(detailMap[p.id].detail!.analysis.freqTerms ?? []).length === 0 ? (
+                        <p className="mt-1 text-muted">（无）</p>
+                      ) : (
+                        (detailMap[p.id].detail!.analysis.freqTerms ?? []).map((t, i) => (
+                          <p key={i} className="mt-1 text-muted">
+                            <span className="text-ink">{t.term}</span>：{t.note}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                    {detailMap[p.id].detail!.evaluation && detailMap[p.id].detail!.evaluation!.length > 0 && (
                       <div>
-                        <div className="text-sm font-medium">七维</div>
-                        {STYLE_DIMENSIONS.map((dim) => (
-                          <p key={dim} className="mt-1 text-muted">
-                            <span className="text-ink">{dim}</span>：{detailMap[p.id].detail!.analysis.dims[dim] || '—'}
+                        <div className="text-sm font-medium">自评</div>
+                        {detailMap[p.id].detail!.evaluation!.map((e, i) => (
+                          <p key={i} className="mt-1 text-muted">
+                            SCORE {e.score}/5 · REASON：{e.reason}
                           </p>
                         ))}
                       </div>
-                      <div>
-                        <div className="text-sm font-medium">六轴（0-100）</div>
-                        <p className="mt-1 text-muted">
-                          {STYLE_AXES.map((axis) => `${axis} ${detailMap[p.id].detail!.analysis.axes[axis] ?? 0}`).join(' · ')}
-                        </p>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">规则</div>
-                        <ul className="mt-1 ml-4 list-disc text-muted">
-                          {detailMap[p.id].detail!.analysis.rules.map((r, i) => (
-                            <li key={i}>{r}</li>
-                          ))}
-                          {detailMap[p.id].detail!.analysis.rules.length === 0 && <li>（无）</li>}
-                        </ul>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">术语表</div>
-                        {(detailMap[p.id].detail!.analysis.terms ?? []).length === 0 ? (
-                          <p className="mt-1 text-muted">（无）</p>
-                        ) : (
-                          (detailMap[p.id].detail!.analysis.terms ?? []).map((t, i) => (
-                            <p key={i} className="mt-1 text-muted">
-                              <span className="text-ink">{t.term}</span>：{t.note}
-                            </p>
-                          ))
-                        )}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">高频词</div>
-                        {(detailMap[p.id].detail!.analysis.freqTerms ?? []).length === 0 ? (
-                          <p className="mt-1 text-muted">（无）</p>
-                        ) : (
-                          (detailMap[p.id].detail!.analysis.freqTerms ?? []).map((t, i) => (
-                            <p key={i} className="mt-1 text-muted">
-                              <span className="text-ink">{t.term}</span>：{t.note}
-                            </p>
-                          ))
-                        )}
-                      </div>
-                      {detailMap[p.id].detail!.evaluation && detailMap[p.id].detail!.evaluation!.length > 0 && (
-                        <div>
-                          <div className="text-sm font-medium">自评</div>
-                          {detailMap[p.id].detail!.evaluation!.map((e, i) => (
-                            <p key={i} className="mt-1 text-muted">
-                              SCORE {e.score}/5 · REASON：{e.reason}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-          {(profiles ?? []).length === 0 && (
-            <li>
-              <EmptyState title="还没有风格档案" hint="粘贴或导入 ≥200 字风格样本，从下方表单蒸馏第一个。" />
-            </li>
-          )}
-        </ul>
-      </section>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </li>
+        )}
+      />
 
       <section className="mt-8">
         <h2 className="text-base font-semibold">蒸馏新档案（蒸馏 → 预览编辑 → 确认入库）</h2>
