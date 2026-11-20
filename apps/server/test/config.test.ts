@@ -72,7 +72,7 @@ describe('loadConfig', () => {
 
   it('budgets.planner 钉值', () => {
     const c = loadConfig(LEGAL_ENV);
-    expect(c.budgets.planner).toEqual({ hardRules: 300, continuity: 1500, prevTail: 1500, task: 300 });
+    expect(c.budgets.planner).toEqual({ hardRules: 300, continuity: 1500, prevTail: 1500, task: 800 });
   });
 
   it('缺 STRATA_API_KEY → ZodError', () => {

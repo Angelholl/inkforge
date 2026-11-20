@@ -134,7 +134,7 @@ const BUDGETS_REWRITE: RewriteBudgets = {
   factBaseline: 1000,
   task: 500,
 };
-const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 300 };
+const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 800 }; // 300→800：renderBlueprintTask 协议行占 ~210 后书籍简介仅剩 ~90 字（DEC-2026-1120-10）
 // DEC-2026-1120-04① 同步扩槽（blueprint-suggest / outline-tree-suggest 槽）
 const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 16000, characters: 8000, outline: 8000, task: 600 };
 

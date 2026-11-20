@@ -31,7 +31,7 @@ import { saveStyleProfile } from '../style/analysis';
 import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } from '../style/merge';
 import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
-import type { DistillStyleDraftDto, StyleAnalysisDto } from '@inkforge/shared';
+import type { DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto } from '@inkforge/shared';
 import { countChars, FULL_TEXT_REWRITE_MAX_CHARS } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
@@ -56,6 +56,19 @@ const settingsPutSchema = z.object({
 
 const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive() });
 const outlineSuggestSchema = z.object({ chapterCount: z.number().int().min(1).max(50) });
+
+/** 按章号取命中卡：树遍历序（卷→阶段→卡 seq）首个 chapterFrom/To 非空且覆盖该章的卡；区间重叠首卡胜（与 apply 同语义）。 */
+function findOutlineCardForChapter(tree: OutlineTreeDto, chapterNo: number): OutlineCardDto | undefined {
+  for (const vol of tree.volumes) {
+    for (const stage of vol.stages) {
+      for (const card of stage.cards) {
+        if (card.chapterFrom == null || card.chapterTo == null) continue; // DTO=number|undefined（同 1-2 钉正）
+        if (card.chapterFrom <= chapterNo && chapterNo <= card.chapterTo) return card;
+      }
+    }
+  }
+  return undefined;
+}
 
 const PLANNER_HARD_RULES =
   '【硬规则】你是长篇小说的策划编辑，只输出章节蓝图行协议；不要输出 JSON、markdown 代码块或任何解释。';
@@ -359,12 +372,17 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
     const body = parseBody(reply, blueprintSchema, req.body);
     if (!body) return;
+    const existingBeats = chaptersRepo.getChapter(db, bookId, Number(chapterNo))?.blueprint?.mustHaveBeats ?? [];
+    const mergedBeats = [...existingBeats];
+    for (const m of body.blueprint.mustHaveBeats) {
+      if (!mergedBeats.some((x) => x.text.trim() === m.text.trim())) mergedBeats.push(m); // 去重键=text trim 全等（不含 grade）；卡预填在前（优先存活，grade 随条目保留）
+    }
     reply.send(
       chaptersRepo.upsertBlueprint(db, {
         bookId,
         chapterNo: Number(chapterNo),
         title: body.title,
-        blueprint: body.blueprint,
+        blueprint: { ...body.blueprint, mustHaveBeats: mergedBeats },
         targetChars: body.targetChars,
       }),
     );
@@ -400,6 +418,10 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       const p = spectrumRepo.getSpectrumProfile(db, book.spectrumProfileId);
       return p ? `【人物光谱参考】\n${p.structure.join('\n')}` : '';
     })();
+    const outlineCard = findOutlineCardForChapter(outlineRepo.getOutlineTree(db, bookId) ?? { volumes: [] }, chapterNo);
+    const outlineCardBrief = outlineCard
+      ? `【本章大纲卡】\n${renderOutlineCardSchedule([outlineCard])}` // 复用 renderOutlineCardSchedule，产出 "第a-b章 卡题：body"
+      : '';
 
     const taskText = renderBlueprintTask({
       chapterNo,
@@ -415,6 +437,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       ...(imitationBrief ? [{ name: 'imitationStructure', content: imitationBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       ...(plotBrief ? [{ name: 'plotReference', content: plotBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       ...(spectrumBrief ? [{ name: 'spectrumReference', content: spectrumBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
+      ...(outlineCardBrief ? [{ name: 'outlineCard', content: outlineCardBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'head' as const },
       { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },
     ];
@@ -440,6 +463,13 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       );
     }
     if (report.errors.length > 0) return reply.code(502).send({ error: 'blueprint parse failed', errors: report.errors });
+    // 确定性叠加（DEC-2026-1120-10）：落地格解析结果直接合并（含 grade），不依赖模型输出；parseBlueprint 恒产 mustHaveBeats:[]，并集语义面向未来
+    if (outlineCard) {
+      const landing = parseLandingCell(outlineCard.body);
+      if (landing !== null && landing.keywords.length > 0 && !report.blueprint.mustHaveBeats.some((m) => m.text.trim() === outlineCard.body.trim())) {
+        report.blueprint.mustHaveBeats = [...report.blueprint.mustHaveBeats, { text: outlineCard.body.trim(), keywords: landing.keywords, grade: landing.grade }];
+      }
+    }
     reply.send({ blueprint: report.blueprint, source: 'llm' });
   });
 
