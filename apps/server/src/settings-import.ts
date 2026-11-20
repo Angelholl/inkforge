@@ -126,6 +126,34 @@ function matchParen(s: string, openIdx: number): number {
   return -1;
 }
 
+interface ParsedLanding {
+  grade: 'H' | 'L';
+  scene: string;
+  keywords: string[];
+}
+
+/** 落地格解析纯函数（DEC-2026-1120-10）：body 首字符 H/L 认分级；括号内容=场景；关键词=场景 token（≥2 字、含 CJK、全等去重、上限 6）。
+ *  无格（首字符非 H/L）返回 null；分级不硬编码任何露骨词表——关键词一律取自卡 body 自身场景文本。 */
+export function parseLandingCell(body: string): ParsedLanding | null {
+  const t = body.trim();
+  if (t === '') return null;
+  const grade = /^H/.test(t) ? 'H' : /^L/.test(t) ? 'L' : null;
+  if (!grade) return null;
+  let scene = t.slice(1).trim();
+  const open = t.search(/[（(]/);
+  if (open >= 0) {
+    const close = matchParen(t, open);
+    if (close >= 0) scene = t.slice(open + 1, close).trim();
+  }
+  const keywords: string[] = [];
+  for (const token of scene.split(/[：:；;，,、×ＸX／/·\s]+/)) {
+    if (token.length < 2 || !/[\u4e00-\u9fff]/.test(token)) continue;
+    if (!keywords.includes(token)) keywords.push(token);
+    if (keywords.length >= 6) break;
+  }
+  return { grade, scene, keywords };
+}
+
 /** 锚点切分：编号段起点（行首或 ；：;:｜ 后接 1-3 位数字，可选 N–M 区间）。 */
 function anchorSegments(text: string): string[] {
   const re = /(?:^|[；：;:｜])\s*(\d{1,3})(?:\s*[–—-]\s*(\d{1,3}))?/g;

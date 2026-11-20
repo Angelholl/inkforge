@@ -13,7 +13,7 @@ import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 import { hashPrompt } from '../llm/hash';
 import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite } from '../prompts/render';
-import { loadCliches, runL0Checks } from '../quality/l0';
+import { loadCliches, loadLandingWords, runL0Checks } from '../quality/l0';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
 import { readScoreThreshold } from '../settings';
@@ -26,6 +26,10 @@ import { computeStyleMetrics, type StyleMetrics } from '../style/metrics';
 import { runSummarizeStep } from './summarize';
 
 const CLIQUES_PATH = process.env.INKFORGE_CLIQUES_PATH ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
+
+const LANDING_WORDS_PATH =
+  process.env.INKFORGE_LANDING_WORDS_PATH ??
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/landing-words.default.txt');
 
 export interface RunOutcome {
   status: 'done' | 'needs_human' | 'failed';
@@ -86,6 +90,7 @@ export async function runChapterPipeline(
   const blueprint = chapter.blueprint;
   const targetChars = chapter.targetChars;
   const cliches = loadCliches(CLIQUES_PATH);
+  const landingWords = loadLandingWords(LANDING_WORDS_PATH);
   const model = config.providers.local.model;
   const runRow = runsRepo.getRun(db, args.runId);
   const runMode = runRow?.mode ?? 'generate';
@@ -288,6 +293,7 @@ export async function runChapterPipeline(
         // 抄用检测接线（B6）：generate 模式以本次注入的 few-shot 样本为参考文本
         referenceTexts: runMode === 'generate' && styleSamples.length > 0 ? styleSamples.map((s) => s.text) : undefined,
         cliches,
+        landingWords,
       });
       const l1: L1Report = await runL1Qc(
         { provider: roleProvider('qc'), config, hardRules },

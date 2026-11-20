@@ -29,7 +29,7 @@ export const blueprintSchema = z.object({
   blueprint: z.object({
     goal: z.string().min(1),
     beats: z.array(z.string()),
-    mustHaveBeats: z.array(z.object({ text: z.string(), keywords: z.array(z.string().min(1)) })),
+    mustHaveBeats: z.array(z.object({ text: z.string(), keywords: z.array(z.string().min(1)), grade: z.enum(['H', 'L']).optional() })),
     bannedTopics: z.array(z.string()),
   }),
   targetChars: z.number().int().positive().optional(),
@@ -285,7 +285,8 @@ export const settingsImportPreviewSchema = z.object({
   content: z.string().min(1),
 });
 
-// draft 整形沿解析 DTO：outlineItems/chapterTitles/warnings 前端回传即被剥（章预填不落库，审阅步前端自用）
+// draft 整形沿解析 DTO：outlineItems/chapterTitles/warnings 前端回传即被剥（审阅步前端自用）；
+// 章骨架单一真值源=outlineTree 卡（DEC-2026-1120-10：apply 服务端从卡落 chapters+blueprint，本 schema 不消费 outlineItems）
 export const settingsImportApplySchema = z.object({
   content: z.string().min(1),
   draft: z.object({

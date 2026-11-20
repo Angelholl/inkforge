@@ -23,7 +23,7 @@ import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSc
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
 import { analyzeSpectrum } from '../spectrum';
-import { parseSettingsCompendium } from '../settings-import';
+import { parseLandingCell, parseSettingsCompendium } from '../settings-import';
 import { analyzeStyle } from '../style/analysis';
 import * as plotRepo from '../db/repositories/plot';
 import * as spectrumRepo from '../db/repositories/spectrum';
@@ -228,12 +228,55 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       seenNames.add(key);
       return true;
     });
+    const warnings: string[] = [];
     let bookId: string;
     try {
       // 嵌套事务=createBook 内部事务以 savepoint 运行，任一环失败整体回滚
       bookId = db.transaction(() => {
         const book = booksRepo.createBook(db, { title, description: d.description, outline: d.outline, characters });
         outlineRepo.replaceOutlineTree(db, book.id, d.outlineTree);
+        // 章骨架（DEC-2026-1120-10）：单一真值源=outlineTree 卡；区间重叠首卡胜（遍历序先到先得）
+        const claimed = new Set<number>();
+        let skeletonCapped = false;
+        for (const vol of d.outlineTree.volumes) {
+          for (const stage of vol.stages) {
+            for (const card of stage.cards) {
+              if (skeletonCapped) break;
+              if (card.chapterFrom == null || card.chapterTo == null) continue;
+              if (card.chapterFrom < 1 || card.chapterTo < card.chapterFrom) continue;
+              const landing = parseLandingCell(card.body);
+              const mustHave = landing !== null && landing.keywords.length > 0
+                ? [{ text: card.body.trim(), keywords: landing.keywords, grade: landing.grade }]
+                : [];
+              let contributed = 0;
+              const to = Math.min(card.chapterTo, card.chapterFrom + 49); // 单卡展开上限 50 章（沿 outlineItems 预填先例）
+              for (let ch = card.chapterFrom; ch <= to; ch++) {
+                if (claimed.has(ch)) continue; // 区间重叠=首卡胜
+                if (claimed.size >= 300) {
+                  warnings.push('章骨架超过 300 章，已截断（保留前 300）');
+                  skeletonCapped = true;
+                  break;
+                }
+                claimed.add(ch);
+                contributed += 1;
+                chaptersRepo.upsertBlueprint(db, {
+                  bookId: book.id,
+                  chapterNo: ch,
+                  title: card.title !== '' ? card.title : `第${ch}章`,
+                  blueprint: {
+                    goal: card.body !== '' ? card.body : card.title, // 空 body 回落卡题（沿 outlineItems 先例）
+                    beats: [],
+                    mustHaveBeats: mustHave,
+                    bannedTopics: [],
+                  },
+                });
+              }
+              if (contributed > 0 && landing !== null && landing.keywords.length === 0) {
+                warnings.push(`卡「${card.title}」落地格「${card.body.trim()}」未解析出可靠关键词，未预填必含节拍（可手补蓝图）`);
+              }
+            }
+          }
+        }
         for (const f of d.foreshadowings) {
           continuityRepo.upsertForeshadowing(db, { bookId: book.id, description: f.description, plantedCh: f.plantedCh });
         }
@@ -243,7 +286,6 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       return reply.code(500).send({ error: `设定导入落库失败：${(e as Error).message}` });
     }
     // 文风步（拍板②）与归档共用警示通道
-    const warnings: string[] = [];
     // 整篇 MD 归档（沿 data/exports 先例；未映射节信息兜底）。书已建成（事务已提交），
     // 归档失败降级 warning 而非 500：500 会让 owner 误以为建书失败而重试 → 重复建书
     //（2026-11-20 审计发现，同文风步「失败不回滚建书」先例）

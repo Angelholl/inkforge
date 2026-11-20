@@ -283,3 +283,61 @@ describe('POST /api/settings-import/apply（归档失败降级，2026-11-20 审�
     expect(fs.statSync(path.join(h.dir, 'imports')).isFile()).toBe(true);
   });
 });
+
+// 重叠语义=跨卡重复章号首卡胜（解析器原生形态：「N-M **题**」行系阶段行非卡，夹具修订裁决 2026-11-20）
+const LANDING_COMPENDIUM = `# 《落地测试书》· 扩写设定集
+
+> 定位一句话：落地格解析与章骨架落库测试。
+
+## 6. 总大纲
+
+**阶段A 「开局」**（2003）
+| 章 | 标题 | 线 | 落地 |
+| --- | --- | --- | --- |
+| 1 | 第一夜 | L10 | H（撞见场：房东×阿美） |
+| 2 | 坦白局 | L10 | L（框架确立） |
+| 3 | 借宿 | L4 | H |
+| 4 | 客房事件 | L4 | |
+
+**阶段B 「重叠」**（2004）
+| 章 | 标题 | 线 | 落地 |
+| --- | --- | --- | --- |
+| 10 | 重叠卡A | L1 | H（场景甲：甲×乙） |
+| 10 | 重叠卡B | L1 | H（场景乙：甲×乙） |
+| 11 | 章十一 | L1 | L（场景丙） |
+`;
+
+describe('POST /api/settings-import/apply 落章骨架（DEC-2026-1120-10）', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await makeApp('');
+  });
+  afterAll(() => teardown(h));
+
+  it('逐章表+重叠区间 → chapters 行 title/goal/mustHaveBeats(含 grade)/status 钉值，无关键词落地格 fail-open warning', async () => {
+    const draft = await previewDraft(h.app, LANDING_COMPENDIUM);
+    const r = await h.app.inject({ method: 'POST', url: '/api/settings-import/apply', payload: { content: LANDING_COMPENDIUM, draft } });
+    expect(r.statusCode).toBe(201);
+    const res = r.json() as { bookId: string; warnings: string[] };
+    // 唯一 warning：卡「借宿」落地格「H」解析不出关键词（第 4 章无格不警、无格卡与被覆盖章不重复警）
+    expect(res.warnings).toHaveLength(1);
+    expect(res.warnings[0]).toContain('借宿');
+    expect(res.warnings[0]).toContain('未解析出可靠关键词');
+
+    const book = (await h.app.inject({ method: 'GET', url: `/api/books/${res.bookId}` })).json() as {
+      chapters: Array<{ chapterNo: number; title: string; status: string; blueprint: { goal: string; mustHaveBeats: Array<{ text: string; keywords: string[]; grade?: string }> } }>;
+    };
+    expect(book.chapters.map((c) => c.chapterNo)).toEqual([1, 2, 3, 4, 10, 11]);
+    expect(book.chapters.every((c) => c.status === 'planned')).toBe(true);
+    const ch1 = book.chapters[0];
+    expect(ch1.title).toBe('第一夜');
+    expect(ch1.blueprint.goal).toBe('H（撞见场：房东×阿美）');
+    expect(ch1.blueprint.mustHaveBeats).toEqual([{ text: 'H（撞见场：房东×阿美）', keywords: ['撞见场', '房东', '阿美'], grade: 'H' }]);
+    expect(book.chapters[1].blueprint.mustHaveBeats).toEqual([{ text: 'L（框架确立）', keywords: ['框架确立'], grade: 'L' }]);
+    expect(book.chapters[2].blueprint).toEqual({ goal: 'H', beats: [], mustHaveBeats: [], bannedTopics: [] });
+    // 跨卡重复章号首卡胜：ch10 归重叠卡A（重叠卡B 让位不落章）
+    expect(book.chapters[4]).toMatchObject({ title: '重叠卡A', blueprint: { goal: 'H（场景甲：甲×乙）', mustHaveBeats: [{ text: 'H（场景甲：甲×乙）', keywords: ['场景甲'], grade: 'H' }] } });
+    expect(book.chapters.some((c) => c.title === '重叠卡B')).toBe(false);
+    expect(book.chapters[5]).toMatchObject({ title: '章十一', blueprint: { mustHaveBeats: [{ text: 'L（场景丙）', keywords: ['场景丙'], grade: 'L' }] } });
+  });
+});

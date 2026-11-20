@@ -35,6 +35,37 @@ export function loadCliches(path: string): { hard: RegExp[]; soft: RegExp[] } {
   return { hard, soft };
 }
 
+export interface LandingWords {
+  h: string[];
+  l: string[];
+}
+
+/** 落地分级词表装载（DEC-2026-1120-10）：[H]/[L] 分节词表，每行一词，# 注释与空行跳过。
+ *  文件缺失/不可读 → 空表：AND 层跳过（fail-open 保守放行）。镜像 loadCliches 先例，无额外警告通道（cliches 亦无）。 */
+export function loadLandingWords(path: string): LandingWords {
+  try {
+    const lines = fs.readFileSync(path, 'utf8').split(/\r?\n/);
+    const out: LandingWords = { h: [], l: [] };
+    let cur: 'h' | 'l' | null = null;
+    for (const raw of lines) {
+      const t = raw.trim();
+      if (t === '' || t.startsWith('#')) continue;
+      if (t === '[H]') {
+        cur = 'h';
+        continue;
+      }
+      if (t === '[L]') {
+        cur = 'l';
+        continue;
+      }
+      if (cur !== null && !out[cur].includes(t)) out[cur].push(t);
+    }
+    return out;
+  } catch {
+    return { h: [], l: [] };
+  }
+}
+
 function ngramSet(text: string, n: number): Set<string> {
   const clean = text.replace(/\s/g, '');
   const set = new Set<string>();
@@ -104,6 +135,7 @@ export function runL0Checks(input: {
   referenceTexts?: string[];
   voiceRefMetrics?: StyleMetrics;
   cliches?: { hard: RegExp[]; soft: RegExp[] };
+  landingWords?: LandingWords;
 }): L0Report {
   const checks: L0Check[] = [];
   let softMajors = 0;
@@ -156,8 +188,18 @@ export function runL0Checks(input: {
   const copied = input.referenceTexts ? hasLongCopy(input.draft, input.referenceTexts) : false;
   checks.push({ name: 'plagiarism_ngram', pass: !copied, details: copied ? '发现 ≥15 连续字与参考文本重合' : '无 ≥15 连续字重合' });
 
-  // 5. beat_coverage：mustHaveBeats keywords 至少一个出现
-  const missed = input.blueprint.mustHaveBeats.filter((m) => !m.keywords.some((k) => input.draft.includes(k)));
+  // 5. beat_coverage：keywords 至少一个出现（OR 层）；条目带 grade 时追加分级词表 AND 层（DEC-2026-1120-10）：
+  //    H 级判定=L词∪H词（L 完成⊂H 场景）、L 级=L词；词表缺失/空 → AND 层跳过（fail-open）；无 grade 条目=旧行为零改动
+  const lw = input.landingWords;
+  const wordsEmpty = !lw || (lw.h.length === 0 && lw.l.length === 0);
+  const wordHit = (grade: 'H' | 'L'): boolean => {
+    if (wordsEmpty) return true;
+    const pool = grade === 'H' ? [...lw.h, ...lw.l] : lw.l;
+    return pool.some((w) => input.draft.includes(w));
+  };
+  const missed = input.blueprint.mustHaveBeats.filter(
+    (m) => !m.keywords.some((k) => input.draft.includes(k)) || (m.grade !== undefined && !wordHit(m.grade)),
+  );
   checks.push({ name: 'beat_coverage', pass: missed.length === 0, details: missed.length === 0 ? '必含节拍全覆盖' : `缺失: ${missed.map((m) => m.text).join('、')}` });
 
   // 6. continuity_facts：deceased/absent 角色不得出现

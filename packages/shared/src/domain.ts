@@ -23,6 +23,8 @@ export type ChapterStatus = 'planned' | 'drafting' | 'in_qc' | 'needs_human' | '
 export interface BeatRequirement {
   text: string;
   keywords: string[];
+  /** 落地分级（DEC-2026-1120-10）：apply/落地格来源写入；缺省=常规必含节拍（beat_coverage 行为零改动） */
+  grade?: 'H' | 'L';
 }
 
 export interface ChapterBlueprint {

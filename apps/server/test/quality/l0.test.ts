@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { countChars } from '@inkforge/shared';
-import { loadCliches, runL0Checks } from '../../src/quality/l0';
+import { loadCliches, loadLandingWords, runL0Checks } from '../../src/quality/l0';
 import {
   BEAT_BP,
   BEAT_MISS_DRAFT,
@@ -173,5 +173,68 @@ describe('L0 echo_20gram + 模板系套话', () => {
     const c = r.checks.find((c) => c.name === 'cliche')!;
     expect(c.pass).toBe(false);
     expect(r.clicheHits).toContain('第四层的试炼正在展开');
+  });
+});
+
+describe('L0 beat_coverage 分级词表 AND 层（DEC-2026-1120-10）', () => {
+  const LW = { h: ['玉佩光'], l: ['铜镜摇'] }; // 中性占位词表（语义同构：H 词/L 词）
+  const gradeBp = {
+    goal: 'g',
+    beats: [],
+    mustHaveBeats: [{ text: 'H（撞见场：房东×阿美）', keywords: ['阿美'], grade: 'H' as const }],
+    bannedTopics: [],
+  };
+  const noGradeBp = {
+    goal: 'g',
+    beats: [],
+    mustHaveBeats: [{ text: '信物到手', keywords: ['玉佩'] }],
+    bannedTopics: [],
+  };
+  const run = (draft: string, bp: object, landingWords?: { h: string[]; l: string[] }) =>
+    runL0Checks({ draft, targetChars: 100, prevTexts: [], blueprint: bp as never, continuity: { characters: [] }, cliches, landingWords });
+  // 关键词在场文（含 '阿美'，不含任何占位词表词）：隔离 OR 层，专测 AND 层
+  const kwDraft = BEAT_MISS_DRAFT + '阿美在门口张望。';
+
+  it('① 人名关键词命中但无词表词 → H 级节拍不覆盖（硬失败）；同输入无词表 → 覆盖（对照证明失败源=AND 层）', () => {
+    const r = run(kwDraft, gradeBp, LW);
+    const c = r.checks.find((x) => x.name === 'beat_coverage')!;
+    expect(c.pass).toBe(false);
+    expect(r.hardFail).toBe(true);
+    expect(c.details).toContain('H（撞见场：房东×阿美）');
+    const orOnly = run(kwDraft, gradeBp);
+    expect(orOnly.checks.find((x) => x.name === 'beat_coverage')!.pass).toBe(true);
+  });
+
+  it('② 词表词命中但 keyword 全 miss → 不覆盖', () => {
+    const r = run(BEAT_MISS_DRAFT + '她抬手碰了碰床头的玉佩光。', gradeBp, LW);
+    expect(r.checks.find((x) => x.name === 'beat_coverage')!.pass).toBe(false);
+  });
+
+  it('③ keyword 与词表词双命中 → 覆盖', () => {
+    const r = run(BEAT_MISS_DRAFT + '阿美侧身，床头的玉佩光晃了一下。', gradeBp, LW);
+    expect(r.checks.find((x) => x.name === 'beat_coverage')!.pass).toBe(true);
+  });
+
+  it('④ 无 grade 旧条目：词表在场也只走 OR 层，行为与改前逐字节同形', () => {
+    const r = run(BEAT_MISS_DRAFT, noGradeBp, LW);
+    expect(r.checks.find((x) => x.name === 'beat_coverage')!.pass).toBe(false); // BEAT_MISS_DRAFT 不含 '玉佩'
+    const good = run(BEAT_MISS_DRAFT + '他终于握住了那枚玉佩。', noGradeBp, LW);
+    expect(good.checks.find((x) => x.name === 'beat_coverage')!.pass).toBe(true);
+  });
+
+  it('⑤ 词表缺失/空 → AND 层跳过（fail-open 放行）', () => {
+    const empty = { h: [] as string[], l: [] as string[] };
+    for (const lw of [undefined, empty]) {
+      const r = run(BEAT_MISS_DRAFT + '阿美点头。', gradeBp, lw);
+      expect(r.checks.find((x) => x.name === 'beat_coverage')!.pass).toBe(true);
+    }
+  });
+
+  it('⑥ loadLandingWords：默认文件解析出两节；缺失路径 → 空表不抛', () => {
+    const lw = loadLandingWords(path.join(process.cwd(), 'config/quality/landing-words.default.txt'));
+    expect(lw.h.length).toBeGreaterThan(0);
+    expect(lw.l.length).toBeGreaterThan(0);
+    const missing = loadLandingWords(path.join(process.cwd(), 'config/quality/__no_such__.txt'));
+    expect(missing).toEqual({ h: [], l: [] });
   });
 });

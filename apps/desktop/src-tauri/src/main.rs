@@ -81,6 +81,7 @@ fn spawn_service(app: &tauri::AppHandle) -> Option<Child> {
       .env("INKFORGE_MIGRATIONS_DIR", server_root.join("db").join("migrations").display().to_string())
       .env("INKFORGE_WEB_DIST", res.join("resources").join("web").join("dist").display().to_string())
       .env("INKFORGE_CLIQUES_PATH", server_root.join("config").join("quality").join("cliches.default.txt").display().to_string())
+      .env("INKFORGE_LANDING_WORDS_PATH", server_root.join("config").join("quality").join("landing-words.default.txt").display().to_string())
       .env("INKFORGE_DATA_DIR", data_dir.display().to_string())
       .env("INKFORGE_CONFIG_FILE", cfg_dir.join("config.json").display().to_string())
       .env("INKFORGE_WORKER_TSX", "0")

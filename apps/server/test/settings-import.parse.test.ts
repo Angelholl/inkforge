@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSettingsCompendium } from '../src/settings-import';
+import { parseLandingCell, parseSettingsCompendium } from '../src/settings-import';
 
 // 中性仿形设定集夹具（DEC-2026-1120-04 全局约束：原始 MD 不进仓库，夹具内容全部中性占位）
 const FIXTURE = `# 《示例之作》都市群像长篇 · 扩写设定集
@@ -353,5 +353,36 @@ describe('parseSettingsCompendium', () => {
     const cards = d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
     expect(cards.map((c) => c.title)).toEqual(['车站接人', '饭桌试探', '同学会']);
     expect(cards[0]).toMatchObject({ chapterFrom: 25, body: '' });
+  });
+});
+
+describe('parseLandingCell（DEC-2026-1120-10 落地格解析）', () => {
+  it('H 级带场景：分级+场景+人名辅助关键词', () => {
+    expect(parseLandingCell('H（撞见场：房东×阿美）')).toEqual({
+      grade: 'H', scene: '撞见场：房东×阿美', keywords: ['撞见场', '房东', '阿美'],
+    });
+  });
+  it('L 级带场景', () => {
+    expect(parseLandingCell('L（框架确立）')).toEqual({ grade: 'L', scene: '框架确立', keywords: ['框架确立'] });
+  });
+  it('分级无括号场景 → scene 空、keywords 空（fail-open 信号）', () => {
+    expect(parseLandingCell('H')).toEqual({ grade: 'H', scene: '', keywords: [] });
+    expect(parseLandingCell('L')).toEqual({ grade: 'L', scene: '', keywords: [] });
+  });
+  it('无括号但有场景文 → 场景取去首字符余文', () => {
+    expect(parseLandingCell('H车站接人与还钥匙')).toEqual({ grade: 'H', scene: '车站接人与还钥匙', keywords: ['车站接人与还钥匙'] });
+  });
+  it('首字符非 H/L → null（无落地格，非失败）', () => {
+    expect(parseLandingCell('开场悬念前置')).toBeNull();
+    expect(parseLandingCell('')).toBeNull();
+    expect(parseLandingCell('h（小写不认）')).toBeNull();
+  });
+  it('单词级（<2 字）关键词拒绝：全单字 → keywords 空', () => {
+    expect(parseLandingCell('H（吻）')).toEqual({ grade: 'H', scene: '吻', keywords: [] });
+  });
+  it('重复 token 全等去重、线标签类非 CJK 短 token 拒绝', () => {
+    expect(parseLandingCell('H（车站接人：房东×阿美×房东；L4）')).toEqual({
+      grade: 'H', scene: '车站接人：房东×阿美×房东；L4', keywords: ['车站接人', '房东', '阿美'],
+    });
   });
 });
