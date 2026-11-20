@@ -26,7 +26,7 @@ describe('migrate', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('0003 索引 + 0004 outline 列：user_version=11 且迁移物在场；user_version=2 旧库升级数据 intact', () => {
+  it('0003 索引 + 0004 outline 列：user_version=13 且迁移物在场；user_version=2 旧库升级数据 intact', () => {
     const dir = tmpDir();
     const db = openDb(path.join(dir, 'inkforge.db'));
     migrate(db);

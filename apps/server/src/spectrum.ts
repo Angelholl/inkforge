@@ -17,12 +17,14 @@ export interface SpectrumDraft {
   structure: string[];
 }
 
-/** 脱敏校验：ROLE 行命中任一原文角色名（或其 ≥2 字连续子串）即违规，返回命中的名字。 */
+/** 脱敏校验：ROLE 行命中任一原文角色名即违规，返回命中的名字。
+ *  匹配口径：2 字名查整名；≥3 字名查整名及其 ≥3 字连续子串（防「林静如」子串「静如」误杀文学措辞）。 */
 function findNameLeak(roleLine: string, names: string[]): string | undefined {
   for (const name of names) {
     const n = name.trim();
     if (n.length < 2) continue;
-    for (let len = n.length; len >= 2; len--) {
+    if (roleLine.includes(n)) return n;
+    for (let len = n.length - 1; len >= 3; len--) {
       for (let i = 0; i + len <= n.length; i++) {
         if (roleLine.includes(n.slice(i, i + len))) return n;
       }
