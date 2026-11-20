@@ -72,7 +72,7 @@ describe('analyzeSpectrum（人物光谱蒸馏）', () => {
     const clean = SPECTRUM_TEXT;
     let calls = 0;
     const provider: LlmProvider = {
-      async complete(req) {
+      async complete() {
         calls++;
         const text = calls === 1 ? leaked : clean;
         return { text, usage: { promptTokens: 1, completionTokens: 1 }, finishReason: 'end_turn' } as Awaited<ReturnType<LlmProvider['complete']>>;
