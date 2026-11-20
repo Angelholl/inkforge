@@ -12,6 +12,8 @@ export interface Book {
   imitationProfileId: string | null;
   /** 剧情档案绑定（DEC-2026-1120-03）：blueprint-suggest planner 槽注入【剧情参考】 */
   plotProfileId: string | null;
+  /** 人物光谱档案绑定（DEC-2026-1120-09）：blueprint-suggest planner 槽注入【人物光谱参考】 */
+  spectrumProfileId: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入，抄用检测不受影响 */
   styleFewshotOn: boolean;
   createdAt: string;
@@ -32,13 +34,14 @@ interface BookRow {
   style_snapshot_json: string | null;
   imitation_profile_id: string | null;
   plot_profile_id: string | null;
+  spectrum_profile_id: string | null;
   style_fewshot_on: number;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, plotProfileId: r.plot_profile_id, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, plotProfileId: r.plot_profile_id, spectrumProfileId: r.spectrum_profile_id, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
@@ -55,6 +58,7 @@ export function createBook(
     styleSnapshotJson: null,
     imitationProfileId: null,
     plotProfileId: null,
+    spectrumProfileId: null,
     styleFewshotOn: false,
     createdAt: now,
     updatedAt: now,
@@ -200,6 +204,15 @@ export function setBookImitation(db: Database, bookId: string, profileId: string
 /** 剧情档案绑定（DEC-2026-1120-03）：沿 setBookImitation 同构。 */
 export function setBookPlotProfile(db: Database, bookId: string, profileId: string | null): void {
   db.prepare('UPDATE books SET plot_profile_id = ?, updated_at = ? WHERE id = ?').run(
+    profileId,
+    new Date().toISOString(),
+    bookId,
+  );
+}
+
+/** 人物光谱档案绑定（DEC-2026-1120-09）：沿 setBookPlotProfile 同构。 */
+export function setBookSpectrumProfile(db: Database, bookId: string, profileId: string | null): void {
+  db.prepare('UPDATE books SET spectrum_profile_id = ?, updated_at = ? WHERE id = ?').run(
     profileId,
     new Date().toISOString(),
     bookId,

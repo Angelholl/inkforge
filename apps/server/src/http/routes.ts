@@ -19,12 +19,14 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, settingsImportApplySchema, settingsImportPreviewSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, settingsImportApplySchema, settingsImportPreviewSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
+import { analyzeSpectrum } from '../spectrum';
 import { parseSettingsCompendium } from '../settings-import';
 import { analyzeStyle } from '../style/analysis';
 import * as plotRepo from '../db/repositories/plot';
+import * as spectrumRepo from '../db/repositories/spectrum';
 import { saveStyleProfile } from '../style/analysis';
 import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } from '../style/merge';
 import * as distillJobRepo from '../style/distill-job';
@@ -350,6 +352,12 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       const p = plotRepo.getPlotProfile(db, book.plotProfileId);
       return p ? `【剧情参考】\n${p.structure.join('\n')}` : '';
     })();
+    // 人物光谱参考（DEC-2026-1120-09）：绑定光谱档案时并列注入 planner 槽；drafter/related 不注入（红线同 PLOT）
+    const spectrumBrief = (() => {
+      if (!book.spectrumProfileId) return '';
+      const p = spectrumRepo.getSpectrumProfile(db, book.spectrumProfileId);
+      return p ? `【人物光谱参考】\n${p.structure.join('\n')}` : '';
+    })();
 
     const taskText = renderBlueprintTask({
       chapterNo,
@@ -364,6 +372,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       { name: 'continuity', content: continuityText, budgetChars: b.continuity, stable: false, keep: 'head' as const },
       ...(imitationBrief ? [{ name: 'imitationStructure', content: imitationBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       ...(plotBrief ? [{ name: 'plotReference', content: plotBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
+      ...(spectrumBrief ? [{ name: 'spectrumReference', content: spectrumBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'head' as const },
       { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },
     ];
@@ -1004,6 +1013,45 @@ ${repairPrompt(first.errors)}`))).text,
     }
     booksRepo.setBookPlotProfile(db, bookId, body.profileId);
     reply.send({ ok: true, plotProfileId: body.profileId });
+  });
+
+  // ── 人物光谱蒸馏（DEC-2026-1120-09）：五端点沿剧情同构；注入面=blueprint-suggest planner 槽 spectrumReference（drafter 红线不注入）──
+  app.post('/api/spectrum-profiles/analyze', async (req, reply) => {
+    const body = parseBody(reply, spectrumAnalyzeSchema, req.body);
+    if (!body) return;
+    try {
+      const draft = await analyzeSpectrum({ db, provider }, body);
+      reply.send({ draft });
+    } catch (e) {
+      reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  app.post('/api/spectrum-profiles', async (req, reply) => {
+    const body = parseBody(reply, spectrumSaveSchema, req.body);
+    if (!body) return;
+    const saved = spectrumRepo.saveSpectrumProfile(db, body.draft);
+    reply.code(201).send(saved);
+  });
+
+  app.get('/api/spectrum-profiles', async () => spectrumRepo.listSpectrumProfiles(db));
+
+  app.delete('/api/spectrum-profiles/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!spectrumRepo.deleteSpectrumProfile(db, id)) return reply.code(404).send({ error: 'not found' });
+    reply.send({ ok: true });
+  });
+
+  app.put('/api/books/:bookId/spectrum', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, spectrumBindSchema, req.body);
+    if (!body) return;
+    if (body.profileId !== null && !spectrumRepo.getSpectrumProfile(db, body.profileId)) {
+      return reply.code(404).send({ error: 'profile not found' });
+    }
+    booksRepo.setBookSpectrumProfile(db, bookId, body.profileId);
+    reply.send({ ok: true, spectrumProfileId: body.profileId });
   });
 
   app.post('/api/books/:bookId/chapters/:chapterNo/summarize', async (req, reply) => {
