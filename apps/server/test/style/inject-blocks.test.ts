@@ -47,4 +47,11 @@ describe('renderStyleBlock 空规则头修', () => {
     // 样本与术语行为不变
     expect(renderStyleBlock('', samples)).toContain('【范例片段】');
   });
+
+  it('注入隔离（DEC-2026-1120-06）：renderStyleBlock 不输出 freqTerms 高频词内容', () => {
+    const block = renderStyleBlock('规则一', samples, 100000, [{ term: '青云剑诀', note: '核心功法' }]);
+    expect(block).not.toContain('FREQTERMS');
+    expect(block).not.toContain('freqTerms');
+    expect(block).not.toContain('高频词');
+  });
 });

@@ -220,14 +220,20 @@ export default function StyleProfilesSection() {
             ...d,
             analysis: {
               ...d.analysis,
-              terms: v
-                .split('\n')
-                .map((s) => s.trim())
-                .filter((s) => s !== '')
-                .map((line) => {
-                  const i = line.search(/[：:]/);
-                  return i > 0 ? { term: line.slice(0, i).trim(), note: line.slice(i + 1).trim() } : { term: line, note: '' };
-                }),
+              terms: parseTermLines(v),
+            },
+          }
+        : d,
+    );
+  // 高频词编辑（DEC-2026-1120-06）：每行「词组：说明」，仅展示编辑，不注入草稿/润色管线
+  const setFreqTerms = (v: string): void =>
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            analysis: {
+              ...d.analysis,
+              freqTerms: parseTermLines(v),
             },
           }
         : d,
@@ -403,6 +409,16 @@ export default function StyleProfilesSection() {
                   onChange={(e) => setTerms(e.target.value)}
                 />
               </div>
+              <div>
+                <div className="text-sm font-medium">高频词（每行「词组：说明」）</div>
+                <textarea
+                  className={`${textareaBase} mt-1`}
+                  rows={3}
+                  aria-label="高频词编辑"
+                  value={(draft.analysis.freqTerms ?? []).map((t) => `${t.term}：${t.note}`).join('\n')}
+                  onChange={(e) => setFreqTerms(e.target.value)}
+                />
+              </div>
               <div className="flex gap-2">
                 <Button variant="primary" size="sm" disabled={busy} onClick={() => void create()}>
                   确认入库
@@ -429,4 +445,16 @@ interface DistillDraftState {
   name: string;
   /** 确认入库用原文：重蒸靠 job result.sourceText 回灌（表单里没有），同 hash 才能算 version+1 */
   sourceText: string;
+}
+
+/** 每行「词：说明」→ { term, note }（术语区/高频词区共用；无冒号整行作 term）。 */
+function parseTermLines(v: string): Array<{ term: string; note: string }> {
+  return v
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s !== '')
+    .map((line) => {
+      const i = line.search(/[：:]/);
+      return i > 0 ? { term: line.slice(0, i).trim(), note: line.slice(i + 1).trim() } : { term: line, note: '' };
+    });
 }

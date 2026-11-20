@@ -31,6 +31,10 @@ const DRAFT = {
       { term: '青云剑诀', note: '核心功法' },
       { term: '临水城', note: '主城' },
     ],
+    freqTerms: [
+      { term: '抬眸', note: '对峙前的停顿' },
+      { term: '沉默', note: '高频收尾用语' },
+    ],
   },
   samples: ['样本一', '样本二'],
 };
@@ -266,6 +270,28 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(body.analysis.terms).toEqual([
       { term: '青云剑诀', note: '主角核心功法，首现全称' },
       { term: '临水城', note: '主城禁写「临水市」' },
+    ]);
+  });
+
+  it('高频词预览编辑：逐行「词组：说明」改写随 create 提交（DEC-2026-1120-06）', async () => {
+    distilled = false;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '高频测' } });
+    fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
+    fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
+    const freqArea = (await waitFor(() => screen.getByLabelText('高频词编辑'))) as HTMLTextAreaElement;
+    expect(freqArea.value).toContain('抬眸：对峙前的停顿');
+
+    setInput(freqArea, '抬眸：人物对视前的停顿动作\n沉默：高频收尾，承担留白');
+    fireEvent.click(screen.getByRole('button', { name: '确认入库' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles', expect.anything()));
+    const body = JSON.parse(String((fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/style-profiles') && (c[1] as RequestInit).method === 'POST')![1] as RequestInit).body));
+    expect(body.analysis.freqTerms).toEqual([
+      { term: '抬眸', note: '人物对视前的停顿动作' },
+      { term: '沉默', note: '高频收尾，承担留白' },
     ]);
   });
 

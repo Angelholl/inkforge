@@ -132,6 +132,7 @@ export const styleProfileCreateSchema = z.object({
     axes: z.record(z.string(), z.number()),
     rules: z.array(z.string()),
     terms: z.array(z.object({ term: z.string().min(1), note: z.string() })).optional(),
+    freqTerms: z.array(z.object({ term: z.string().min(1), note: z.string() })).optional(),
   }),
   samples: z.array(z.string().min(1)).min(1),
   evaluation: z.array(z.object({ score: z.number().int().min(1).max(5), reason: z.string() })).optional(),

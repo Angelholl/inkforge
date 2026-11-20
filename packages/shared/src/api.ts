@@ -393,6 +393,8 @@ export interface StyleAnalysisDto {
   rules: string[];
   /** 术语表（人名/地名/专有词与用法偏好；TERMS 行缺省为 []） */
   terms?: StyleTermDto[];
+  /** 高频词总结（DEC-2026-1120-06；FREQTERMS 行缺省为 []；仅展示编辑，不注入草稿/润色管线） */
+  freqTerms?: StyleTermDto[];
 }
 
 // ── 拆解仿写（Pagekin 式）──

@@ -23,6 +23,7 @@ import { pickStyleSamples } from './inject';
 
 const RULES_TOTAL_BUDGET = 400; // 规格 B：合并 rulesText 总预算（辅补充以 400 封顶）
 const TERMS_MAX = 10; // 规格依据：蒸馏 TERMS 3-10 条惯例（analysis.ts:19）
+const FREQ_TERMS_MAX = 10; // 高频词合并上限（DEC-2026-1120-06）：语义照抄 TERMS（主全收、辅按 term.trim() 去重、达限停）
 const SAMPLE_QUOTA = 3; // 规格 B：fewShot 预算内等比取样总席位（现注入 count=3 惯例）
 
 export interface StyleProfileContent {
@@ -32,6 +33,8 @@ export interface StyleProfileContent {
   dims: Partial<Record<StyleDimension, string>>;
   axes: Partial<Record<StyleAxis, number>>;
   terms: StyleTermDto[];
+  /** 高频词总结（DEC-2026-1120-06；旧档案/旧快照缺字段按 [] 兜底，仅合并展示不注入） */
+  freqTerms?: StyleTermDto[];
   samples: StyleSample[];
 }
 
@@ -56,6 +59,7 @@ export interface MergedStyleProfile {
   axes: Partial<Record<StyleAxis, number>>;
   rulesText: string;
   terms: StyleTermDto[];
+  freqTerms: StyleTermDto[];
   samples: StyleSample[];
 }
 
@@ -118,7 +122,8 @@ export function contentFromProfileRow(row: { version: number; rules_json: string
   const dims = rulesData.dims && typeof rulesData.dims === 'object' && !Array.isArray(rulesData.dims) ? (rulesData.dims as Partial<Record<StyleDimension, string>>) : {};
   const axes = rulesData.axes && typeof rulesData.axes === 'object' && !Array.isArray(rulesData.axes) ? (rulesData.axes as Partial<Record<StyleAxis, number>>) : {};
   const terms = Array.isArray(rulesData.terms) ? (rulesData.terms as StyleTermDto[]) : [];
-  return { version: row.version, metricsJson: row.metrics_json, rulesText, dims, axes, terms, samples: tolerantSamples(row.samples_json) };
+  const freqTerms = Array.isArray(rulesData.freqTerms) ? (rulesData.freqTerms as StyleTermDto[]) : [];
+  return { version: row.version, metricsJson: row.metrics_json, rulesText, dims, axes, terms, freqTerms, samples: tolerantSamples(row.samples_json) };
 }
 
 export function parseStyleBundle(raw: string | null | undefined): StyleBundleV2 | undefined {
@@ -150,6 +155,7 @@ export function parseStyleBundle(raw: string | null | undefined): StyleBundleV2 
       dims: rulesData.dims && typeof rulesData.dims === 'object' && !Array.isArray(rulesData.dims) ? (rulesData.dims as Partial<Record<StyleDimension, string>>) : {},
       axes: rulesData.axes && typeof rulesData.axes === 'object' && !Array.isArray(rulesData.axes) ? (rulesData.axes as Partial<Record<StyleAxis, number>>) : {},
       terms: Array.isArray(rulesData.terms) ? (rulesData.terms as StyleTermDto[]) : [],
+      freqTerms: Array.isArray(rulesData.freqTerms) ? (rulesData.freqTerms as StyleTermDto[]) : [],
       samples: tolerantSamples(typeof obj.samplesJson === 'string' ? obj.samplesJson : undefined),
     };
     return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds: [], dimsSource: {}, weights: undefined, profiles: { [primaryProfileId]: content } };
@@ -285,6 +291,19 @@ export function mergeStyleProfiles(bundle: StyleBundleV2, chapterNo: number): Me
     }
   }
 
+  // 6'. freqTerms：语义照抄 terms（DEC-2026-1120-06）——主全收；辅 term.trim() 判同跳过；达 FREQ_TERMS_MAX 停
+  const freqTerms: StyleTermDto[] = [...(profiles[primaryProfileId]?.freqTerms ?? [])];
+  const freqTermSet = new Set(freqTerms.map((t) => t.term.trim()));
+  outerFreq: for (const id of auxProfileIds) {
+    for (const t of profiles[id]?.freqTerms ?? []) {
+      if (freqTerms.length >= FREQ_TERMS_MAX) break outerFreq;
+      const key = t.term.trim();
+      if (freqTermSet.has(key)) continue;
+      freqTerms.push(t);
+      freqTermSet.add(key);
+    }
+  }
+
   // 7. samples：最大余数法配席位 + 顺延循环 + pickStyleSamples 池内轮转 + id 命名空间
   const quota = new Map<string, number>();
   const floors = new Map<string, number>();
@@ -335,5 +354,5 @@ export function mergeStyleProfiles(bundle: StyleBundleV2, chapterNo: number): Me
 
   // 8. 主 metrics 透传
   const primaryMetricsJson = profiles[primaryProfileId]?.metricsJson ?? '';
-  return { primaryProfileId, primaryMetricsJson, dims, axes, rulesText, terms, samples };
+  return { primaryProfileId, primaryMetricsJson, dims, axes, rulesText, terms, freqTerms, samples };
 }

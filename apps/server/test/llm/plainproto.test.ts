@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFindings, parseOutlineTree, parseSummary } from '../../src/llm/plainproto';
+import { parseAnalysis, parseFindings, parseOutlineTree, parseSummary } from '../../src/llm/plainproto';
 
 const SAMPLE = `OVERALL: 7
 ---
@@ -190,5 +190,25 @@ CARD: 未定章号的卡`);
     ]);
     expect(cards[4].title).toBe('未定章号的卡');
     expect(cards.map((c) => c.seq)).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+describe('parseAnalysis FREQTERMS 行（DEC-2026-1120-06）', () => {
+  it('解析 FREQTERMS: <词组>: <说明> → freqTerms（同 TERMS 形态）；缺行补 []', () => {
+    const r = parseAnalysis(`DIM: 节奏: 短句。
+FREQTERMS: 抬眸: 常用于人物对视前的停顿，多出现于对峙语境
+FREQTERMS: 沉默: 高频收尾用语，承担留白功能
+RULES: 平均句长 10-20 字。`);
+    expect(r.freqTerms).toEqual([
+      { term: '抬眸', note: '常用于人物对视前的停顿，多出现于对峙语境' },
+      { term: '沉默', note: '高频收尾用语，承担留白功能' },
+    ]);
+    // 无 FREQTERMS 行 → []
+    expect(parseAnalysis('RULES: x').freqTerms).toEqual([]);
+    // 全角冒号兼容 + 空词组记 error 不抛
+    const messy = parseAnalysis('FREQTERMS：落雪：冬日场景惯用意象');
+    expect(messy.freqTerms).toEqual([{ term: '落雪', note: '冬日场景惯用意象' }]);
+    expect(parseAnalysis('FREQTERMS: : 说明').freqTerms).toEqual([]);
+    expect(parseAnalysis('FREQTERMS: : 说明').errors.some((e) => e.includes('高频词为空'))).toBe(true);
   });
 });

@@ -3,6 +3,7 @@ import type { Database } from '../db/open';
 import type { LlmProvider } from '../llm/types';
 import { analyzeStyle, saveStyleProfile } from './analysis';
 import { pickFewShotAndHeldOut } from './sample';
+import { buildFreqBlock } from './freq';
 
 export interface StyleSample {
   id: string;
@@ -36,7 +37,12 @@ export async function distillStyleProfile(
   const explicit = input.samples !== undefined && input.samples.length > 0;
   const sampled = pickFewShotAndHeldOut(source);
   const fewShot = explicit ? input.samples!.map((x, i) => (typeof x === 'string' ? { id: `s${i}`, text: x } : x)).map((s) => s.text) : sampled.fewShot;
-  const { analysis, evaluation } = await analyzeStyle({ provider: deps.provider }, { sourceText: source, samples: fewShot, heldOut: explicit ? [] : sampled.heldOut });
+  // 高频词组统计（DEC-2026-1120-06）：程序统计 few-shot 样本 2/3 字 gram，作为参考数据并入分析输入（仅蒸馏，不注入草稿/润色管线）
+  const freqBlock = buildFreqBlock(fewShot);
+  const { analysis, evaluation } = await analyzeStyle(
+    { provider: deps.provider },
+    { sourceText: source, samples: fewShot, heldOut: explicit ? [] : sampled.heldOut, freqBlock },
+  );
   const normalized: StyleSample[] = fewShot.map((t, i) => ({ id: `s${i}`, text: t }));
   const { id } = saveStyleProfile(deps.db, { name: input.name, source, sourcePath: input.sourcePath, analysis, samples: normalized, evaluation });
   return id;

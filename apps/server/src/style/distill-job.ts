@@ -5,6 +5,7 @@ import type { LlmProvider } from '../llm/types';
 import type { DistillStyleDraftDto } from '@inkforge/shared';
 import { analyzeStyle } from './analysis';
 import { pickFewShotAndHeldOut } from './sample';
+import { buildFreqBlock } from './freq';
 
 /** 进程重启后把上次没跑完的 job 一律判失败（轮询端点不会永远挂着 running）。 */
 export function failStaleDistillJobs(db: Database): void {
@@ -96,6 +97,8 @@ export async function runDistillJob(
         heldOut,
         temperature: input.temperature,
         instruction: deps.getTemplate() || undefined,
+        // 高频词组统计参考块（DEC-2026-1120-06），与 CLI 蒸馏路径同语义
+        freqBlock: buildFreqBlock(fewShot),
       },
     );
     // sourceText 一并留档：重蒸出来的草稿要能走同一条「确认入库」（前端手里没有整篇原文）

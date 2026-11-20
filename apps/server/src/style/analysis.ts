@@ -17,6 +17,7 @@ DIM: <维度>: <一段描述>（七维：节奏、对话、描写、情感基调
 AXIS: <轴名>: <0-100 整数>（六轴：叙述温度、语言密度、叙述者姿态、节奏、幽默、情绪表达，每轴一行）
 RULES: <一条可执行、可判分的量化规则>（3-8 条，作为六轴的文本补充）
 TERMS: <术语>: <用法说明>（从样本抽取人名/地名/专有词与用法偏好 3-10 条；无则省略本行）
+FREQTERMS: <词组>: <总结说明>（结合上方统计总结 3-8 条高频用语：何处高频/什么语境/表达功能；与 TERMS 的人名地名专有词区分；无则省略本行）
 不要输出 JSON、markdown 代码块或任何解释。
 【样本开始】`;
 
@@ -36,7 +37,7 @@ REASON: <一句理由>
  *  heldOut 非空时追加第二次调用（自评）：SCORE(1-5 钳制)/REASON 解析，缺行 evaluation=[]。 */
 export async function analyzeStyle(
   deps: { provider: LlmProvider },
-  input: { sourceText: string; samples: string[]; heldOut?: string[]; instruction?: string; temperature?: number },
+  input: { sourceText: string; samples: string[]; heldOut?: string[]; instruction?: string; temperature?: number; freqBlock?: string },
 ): Promise<{ analysis: StyleAnalysisDto; evaluation: SelfEvalItem[] }> {
   const instruction = input.instruction?.trim() ? input.instruction : ANALYSIS_INSTRUCTION;
   const baseReq = (user: string) => ({
@@ -48,17 +49,17 @@ export async function analyzeStyle(
     timeoutMs: 900000,
     meta: { step: 'summarize' as const },
   });
-  const user = `${instruction}\n${input.samples.join('\n----\n')}\n【样本结束】`;
+  const user = `${instruction}\n${input.samples.join('\n----\n')}\n【样本结束】${input.freqBlock ? `\n${input.freqBlock}` : ''}`;
 
   const isEmpty = (a: StyleAnalysisDto): boolean =>
     Object.values(a.dims).every((v) => v === '') && a.rules.length === 0;
   const first = parseAnalysis((await deps.provider.complete(baseReq(user))).text);
-  let analysis: StyleAnalysisDto = { dims: first.dims as StyleAnalysisDto['dims'], axes: first.axes as StyleAnalysisDto['axes'], rules: first.rules, terms: first.terms };
+  let analysis: StyleAnalysisDto = { dims: first.dims as StyleAnalysisDto['dims'], axes: first.axes as StyleAnalysisDto['axes'], rules: first.rules, terms: first.terms, freqTerms: first.freqTerms };
   if (isEmpty(analysis)) {
     const second = parseAnalysis(
       (await deps.provider.complete(baseReq(`${user}\n\n【解析失败重试】上一轮输出缺少 DIM/AXIS/RULES 标记，请严格按【输出格式】重新输出。`))).text,
     );
-    analysis = { dims: second.dims as StyleAnalysisDto['dims'], axes: second.axes as StyleAnalysisDto['axes'], rules: second.rules, terms: second.terms };
+    analysis = { dims: second.dims as StyleAnalysisDto['dims'], axes: second.axes as StyleAnalysisDto['axes'], rules: second.rules, terms: second.terms, freqTerms: second.freqTerms };
     if (isEmpty(analysis)) throw new Error('文风分析失败：输出缺少 DIM/AXIS/RULES 行');
   }
 
@@ -114,6 +115,7 @@ export function saveStyleProfile(
       dims: input.analysis.dims,
       axes: input.analysis.axes,
       terms: input.analysis.terms ?? [],
+      freqTerms: input.analysis.freqTerms ?? [],
     }),
     JSON.stringify(input.samples),
     JSON.stringify(metrics),

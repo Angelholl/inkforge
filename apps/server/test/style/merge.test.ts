@@ -134,6 +134,25 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
     expect(m.terms[9]).toEqual({ term: '辅新词2', note: '辅注2' });
   });
 
+  it('freqTerms 并集主优先、上限 10 条；缺字段按 [] 兜底（DEC-2026-1120-06）', () => {
+    const mainFreq: StyleTermDto[] = Array.from({ length: 8 }, (_, i) => ({ term: `主高频${i}`, note: `注${i}` }));
+    const auxFreq: StyleTermDto[] = [
+      { term: '主高频6', note: '辅重复注' },
+      { term: '主高频7', note: '辅重复注' },
+      { term: '辅高频1', note: '辅注1' },
+      { term: '辅高频2', note: '辅注2' },
+    ];
+    const b = bundle({ profiles: { p1: prof({ freqTerms: mainFreq }), p2: prof({ freqTerms: auxFreq }) }, auxProfileIds: ['p2'] });
+    const m = mergeStyleProfiles(b, 1);
+    expect(m.freqTerms).toHaveLength(10);
+    expect(m.freqTerms.slice(0, 8)).toEqual(mainFreq);
+    expect(m.freqTerms[8]).toEqual({ term: '辅高频1', note: '辅注1' });
+    expect(m.freqTerms[9]).toEqual({ term: '辅高频2', note: '辅注2' });
+    // 双方均无 freqTerms（旧档案）→ []
+    const none = mergeStyleProfiles(bundle({ auxProfileIds: ['p2'] }), 1);
+    expect(none.freqTerms).toEqual([]);
+  });
+
   it('样本席位最大余数法：wA=4/wB=3 → A2+B1', () => {
     const dimsA = { 节奏: 'A节奏', 对话: 'A对话', 描写: 'A描写', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
     const dimsB = { 写作特点: 'B写作', 特色词汇: 'B词汇', 章节结构: 'B章节' } as Partial<Record<StyleDimension, string>>;

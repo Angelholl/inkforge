@@ -178,3 +178,33 @@ RULES: 平均句长 10-20 字。`);
     expect(tight.length).toBeLessThanOrEqual(30);
   });
 });
+
+describe('高频词 FREQTERMS（DEC-2026-1120-06）', () => {
+  it('分析输入带程序统计参考块；FREQTERMS 行落 rules_json.freqTerms 非空', async () => {
+    const captured: string[] = [];
+    const withFreq = `${ANALYSIS_TEXT}
+TERMS: 青云剑诀: 核心功法
+FREQTERMS: 抬眸: 人物对峙前的高频停顿动作
+FREQTERMS: 沉默: 高频收尾用语，承担留白`;
+    const capturing: LlmProvider = {
+      complete: async (req) => {
+        captured.push(req.user);
+        return { text: withFreq, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: 'stop' };
+      },
+    };
+    const id = await distillStyleProfile({ db, provider: capturing }, { name: '高频档案', sourceText: '抬眸沉默'.repeat(200), samples: ['样本一', '样本一', '样本一'] });
+    // 分析输入并入程序统计参考块（词组×次数）
+    expect(captured[0]).toContain('样本高频词组统计');
+    expect(captured[0]).toContain('×');
+    // prompt 模板含 FREQTERMS 行协议
+    expect(captured[0]).toContain('FREQTERMS:');
+    // 落库 rules_json.freqTerms 非空
+    const rules1 = JSON.parse((db.prepare('SELECT rules_json FROM style_profiles WHERE id = ?').get(id) as { rules_json: string }).rules_json) as {
+      freqTerms: Array<{ term: string; note: string }>;
+    };
+    expect(rules1.freqTerms).toEqual([
+      { term: '抬眸', note: '人物对峙前的高频停顿动作' },
+      { term: '沉默', note: '高频收尾用语，承担留白' },
+    ]);
+  });
+});
