@@ -462,6 +462,32 @@ export interface PlotBindBody {
   profileId: string | null;
 }
 
+/** 人物光谱蒸馏草稿（DEC-2026-1120-09）：ROLE 行协议匿名化人物原型拆解，draft 不入库，确认才落档案。 */
+export interface SpectrumDraftDto {
+  name: string;
+  sourcePath: string;
+  sourceHash: string;
+  structure: string[];
+}
+
+/** 人物光谱档案（DEC-2026-1120-09）：沿 server SpectrumProfileDetail 实际形状（无 version，每条蒸馏=独立档案）。 */
+export interface SpectrumProfileDto {
+  id: string;
+  name: string;
+  sourcePath: string;
+  sourceHash: string;
+  structure: string[];
+  createdAt: string;
+}
+
+export interface SpectrumSaveBody {
+  draft: SpectrumDraftDto;
+}
+
+export interface SpectrumBindBody {
+  profileId: string | null;
+}
+
 /** 蒸馏后台 job（B5）：status=done 时 result 非空；failed 时 error 是给人看的文案。 */
 export interface DistillJobDto {
   id: string;

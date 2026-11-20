@@ -16,6 +16,8 @@ import type {
   ImitationProfileDto,
   PlotDraftDto,
   PlotProfileDto,
+  SpectrumDraftDto,
+  SpectrumProfileDto,
   ForeshadowingDto,
   ForeshadowingCreateBody,
   ForeshadowingUpdateBody,
@@ -169,6 +171,19 @@ export const api = {
     req<{ ok: boolean }>(`/api/plot-profiles/${id}`, { method: 'DELETE', body: '{}' }), // 空体会被 Fastify 拒（沿 deleteBook 先例）
   bindPlot: (bookId: string, profileId: string | null) =>
     req<{ ok: boolean; plotProfileId: string | null }>(`/api/books/${bookId}/plot`, {
+      method: 'PUT',
+      body: JSON.stringify({ profileId }),
+    }),
+  // 人物光谱蒸馏（DEC-2026-1120-09）：五方法沿剧情同构
+  analyzeSpectrum: (body: { name: string; text: string }) =>
+    req<{ draft: SpectrumDraftDto }>('/api/spectrum-profiles/analyze', { method: 'POST', body: JSON.stringify(body) }),
+  saveSpectrumProfile: (draft: SpectrumDraftDto) =>
+    req<{ id: string }>('/api/spectrum-profiles', { method: 'POST', body: JSON.stringify({ draft }) }),
+  listSpectrumProfiles: () => req<SpectrumProfileDto[]>('/api/spectrum-profiles'),
+  deleteSpectrumProfile: (id: string) =>
+    req<{ ok: boolean }>(`/api/spectrum-profiles/${id}`, { method: 'DELETE', body: '{}' }), // 空体会被 Fastify 拒（沿 deleteBook 先例）
+  bindSpectrum: (bookId: string, profileId: string | null) =>
+    req<{ ok: boolean; spectrumProfileId: string | null }>(`/api/books/${bookId}/spectrum`, {
       method: 'PUT',
       body: JSON.stringify({ profileId }),
     }),
