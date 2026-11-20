@@ -80,7 +80,7 @@ for (const vol of d.outlineTree.volumes) {
   for (const stage of vol.stages) {
     for (const card of stage.cards) {
       if (skeletonCapped) break;
-      if (card.chapterFrom === null || card.chapterTo === null) continue;
+      if (card.chapterFrom == null || card.chapterTo == null) continue; // DTO=number|undefined，==null 兼容 null/undefined（执行期钉正，DEC-2026-1120-10）
       if (card.chapterFrom < 1 || card.chapterTo < card.chapterFrom) continue;
       const landing = parseLandingCell(card.body);
       const mustHave = landing !== null && landing.keywords.length > 0
@@ -307,6 +307,7 @@ describe('parseLandingCell（DEC-2026-1120-10 落地格解析）', () => {
 **B. apps/server/test/http/settings-import.test.ts**：新增夹具常量与新 describe（harness 复用文件内既有 `makeApp`/`previewDraft`/`teardown`，canned 用 `''`——本用例不依赖风格档案）：
 
 ```ts
+// 重叠语义=跨卡重复章号首卡胜（解析器原生形态：「N-M **题**」行系阶段行非卡，夹具修订裁决 2026-11-20）
 const LANDING_COMPENDIUM = `# 《落地测试书》· 扩写设定集
 
 > 定位一句话：落地格解析与章骨架落库测试。
@@ -321,10 +322,12 @@ const LANDING_COMPENDIUM = `# 《落地测试书》· 扩写设定集
 | 3 | 借宿 | L4 | H |
 | 4 | 客房事件 | L4 | |
 
-### 卷二 《重叠》
-
-10-11 **重叠卡A**（首卡胜）
-11-12 **重叠卡B**（次卡让位）
+**阶段B 「重叠」**（2004）
+| 章 | 标题 | 线 | 落地 |
+| --- | --- | --- | --- |
+| 10 | 重叠卡A | L1 | H（场景甲：甲×乙） |
+| 10 | 重叠卡B | L1 | H（场景乙：甲×乙） |
+| 11 | 章十一 | L1 | L（场景丙） |
 `;
 
 describe('POST /api/settings-import/apply 落章骨架（DEC-2026-1120-10）', () => {
@@ -347,7 +350,7 @@ describe('POST /api/settings-import/apply 落章骨架（DEC-2026-1120-10）', (
     const book = (await h.app.inject({ method: 'GET', url: `/api/books/${res.bookId}` })).json() as {
       chapters: Array<{ chapterNo: number; title: string; status: string; blueprint: { goal: string; mustHaveBeats: Array<{ text: string; keywords: string[]; grade?: string }> } }>;
     };
-    expect(book.chapters.map((c) => c.chapterNo)).toEqual([1, 2, 3, 4, 10, 11, 12]);
+    expect(book.chapters.map((c) => c.chapterNo)).toEqual([1, 2, 3, 4, 10, 11]);
     expect(book.chapters.every((c) => c.status === 'planned')).toBe(true);
     const ch1 = book.chapters[0];
     expect(ch1.title).toBe('第一夜');
@@ -355,9 +358,10 @@ describe('POST /api/settings-import/apply 落章骨架（DEC-2026-1120-10）', (
     expect(ch1.blueprint.mustHaveBeats).toEqual([{ text: 'H（撞见场：房东×阿美）', keywords: ['撞见场', '房东', '阿美'], grade: 'H' }]);
     expect(book.chapters[1].blueprint.mustHaveBeats).toEqual([{ text: 'L（框架确立）', keywords: ['框架确立'], grade: 'L' }]);
     expect(book.chapters[2].blueprint).toEqual({ goal: 'H', beats: [], mustHaveBeats: [], bannedTopics: [] });
-    // 区间重叠首卡胜：ch10/ch11 归重叠卡A；ch12 归重叠卡B
-    expect(book.chapters[5]).toMatchObject({ title: '重叠卡A', blueprint: { goal: '首卡胜' } });
-    expect(book.chapters[6]).toMatchObject({ title: '重叠卡B', blueprint: { goal: '次卡让位' } });
+    // 跨卡重复章号首卡胜：ch10 归重叠卡A（重叠卡B 让位不落章）
+    expect(book.chapters[4]).toMatchObject({ title: '重叠卡A', blueprint: { goal: 'H（场景甲：甲×乙）', mustHaveBeats: [{ text: 'H（场景甲：甲×乙）', keywords: ['场景甲'], grade: 'H' }] } });
+    expect(book.chapters.some((c) => c.title === '重叠卡B')).toBe(false);
+    expect(book.chapters[5]).toMatchObject({ title: '章十一', blueprint: { mustHaveBeats: [{ text: 'L（场景丙）', keywords: ['场景丙'], grade: 'L' }] } });
   });
 });
 ```
@@ -438,7 +442,7 @@ describe('L0 beat_coverage 分级词表 AND 层（DEC-2026-1120-10）', () => {
 - 输入卡 body `'H（撞见场：房东×阿美）'` → 第 1 章蓝图 `mustHaveBeats === [{ text: 'H（撞见场：房东×阿美）', keywords: ['撞见场', '房东', '阿美'], grade: 'H' }]`。
 - 输入卡 body `'H'` → 该章 `mustHaveBeats === []` 且 apply 响应 warnings 恰含一条该卡 fail-open 警示（201 建书不回滚）。
 - 输入卡 body `'开场悬念前置'` → 无格：`mustHaveBeats === []` 且**无** warning。
-- 重叠卡 10-11 与 11-12 → ch10/ch11 归前者，ch12 归后者。
+- 跨卡重复章号 10（重叠卡A/重叠卡B 两卡行）→ ch10 归首卡（次卡让位不落章，`N-M **题**` 行系阶段行非卡——夹具修订裁决）。
 - beat_coverage：正文含『阿美』但无任何词表词 → H 级节拍**不**覆盖（人名假通过被封死）；无 grade 条目全路径行为与改前逐字节同形。
 - 词表文件缺失 → 空表、AND 层跳过、不抛（fail-open）。
 - queue 视角（worker/queue.ts 缺蓝图跳章）：apply 后的书不再被跳章，可直接建 run 生成。
@@ -473,7 +477,7 @@ function findOutlineCardForChapter(tree: OutlineTreeDto, chapterNo: number): Out
   for (const vol of tree.volumes) {
     for (const stage of vol.stages) {
       for (const card of stage.cards) {
-        if (card.chapterFrom === null || card.chapterTo === null) continue;
+        if (card.chapterFrom == null || card.chapterTo == null) continue; // DTO=number|undefined（同 1-2 钉正）
         if (card.chapterFrom <= chapterNo && chapterNo <= card.chapterTo) return card;
       }
     }
