@@ -245,7 +245,6 @@ export const api = {
     }),
 };
 
-export const SSE_BASE = API_BASE;
 export function runEventsUrl(runId: string): string {
   return `${API_BASE}/api/runs/${runId}/events`;
 }

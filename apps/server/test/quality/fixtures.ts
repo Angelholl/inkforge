@@ -31,10 +31,7 @@ export const BEAT_BP: ChapterBlueprint = {
 };
 export const BEAT_MISS_DRAFT = '他在阁楼里翻找整夜，天明时两手空空地离开。';
 
-export const DECEASED_BP = BP_EMPTY;
 export const DECEASED_APPEAR_DRAFT = '长谈之后，李慕白送他出门，临别赠言半句。';
-
-export const SENTIMENT_DRAFT = '清点行装，把拓片夹进书册，他连夜返回山门。';
 
 /** 章尾 200 字复演：PREV 为前文（末句「步伐沉稳，眼神冷峻地走远。」），DRAFT 末 200 字复制 PREV 末段。 */
 export const TAIL_REPLAY_PREV =
@@ -44,7 +41,7 @@ export const TAIL_REPLAY_DRAFT =
   TAIL_REPLAY_PREV.slice(TAIL_REPLAY_PREV.length - 200);
 
 /** 004 第4层实证复文句（来源：data/exports/挂机-试炼之路-1112基线/004-第4层.md）。 */
-export const ECHO_SENTENCE =
+const ECHO_SENTENCE =
   '第四层的试炼正在展开，而他已经带着第三层收束后的认知进入了这个新的领域。这里的混乱并非无序，而是另一种形式的秩序，需要更深层的理解才能破解。' +
   '林澈深吸一口气，调整状态，准备面对接下来可能出现的更直接的对抗或更隐蔽的陷阱。';
 

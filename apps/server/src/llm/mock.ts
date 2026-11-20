@@ -1,7 +1,7 @@
 import type { StepName } from '@inkforge/shared';
 import { ProviderError, type CompletionRequest, type CompletionResult, type LlmProvider } from './types';
 
-export type MockStepBehavior =
+type MockStepBehavior =
   | { text: string }
   | { textFn: (meta: CompletionRequest['meta']) => string }
   | { text: string; chunks: number; chunkDelayMs: number }

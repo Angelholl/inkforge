@@ -36,7 +36,7 @@ export function Chip({ active = false, children }: { active?: boolean; children:
   );
 }
 
-export type ConsoleTone = 'normal' | 'dim' | 'error' | 'warn' | 'ok';
+type ConsoleTone = 'normal' | 'dim' | 'error' | 'warn' | 'ok';
 
 const CONSOLE_TONES: Record<ConsoleTone, string> = {
   normal: 'text-console-1',
@@ -83,8 +83,8 @@ export function isInflightStatus(status: string): boolean {
   return status === 'inflight' || status === 'running' || status === 'queued';
 }
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet';
-export type ButtonSize = 'md' | 'sm';
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet';
+type ButtonSize = 'md' | 'sm';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant; // 默认 'secondary'

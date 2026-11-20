@@ -117,8 +117,6 @@ export const rewriteSelectionSchema = z.object({
   instruction: z.string().min(1),
 });
 
-export const cancelRunSchema = z.object({}).strict().optional();
-
 export const distillStyleSchema = z.object({
   name: z.string().min(1),
   text: z.string().min(1),

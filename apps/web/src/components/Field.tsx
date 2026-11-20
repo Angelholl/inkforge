@@ -1,5 +1,3 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
-
 /**
  * 表单控件基座（DEC-2026-1118-02 §2.2，评议员 HIGH_RISK 修正版）：
  * 边界一律 line-control（3.25:1，治裸 currentColor 黑边与「line 色不可辨」两端），
@@ -7,9 +5,6 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTML
  * 纯样式壳；受控逻辑留在页面（不改任何 onChange/onSubmit 行为）。
  */
 export const fieldLabel = 'text-xs font-medium text-muted';
-export const fieldHelp = 'mt-1.5 text-xs text-faint';
-export const fieldError = 'mt-1.5 text-xs text-danger';
-
 export const inputBase =
   'h-ctl w-full rounded-ctl border border-line-control bg-surface px-3 text-sm text-ink '
   + 'placeholder:text-faint transition-colors duration-150 '
@@ -34,39 +29,3 @@ export const inputNarrow =
   'h-ctl rounded-ctl border border-line-control bg-surface px-3 text-sm text-ink '
   + 'placeholder:text-faint transition-colors duration-150 '
   + 'hover:border-ink/50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary tabular-nums';
-
-interface FieldProps {
-  label: ReactNode;
-  htmlFor?: string;
-  help?: ReactNode;
-  error?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}
-
-/** label+控件+help 垂直式表单行；两栏式布局由调用方 grid 包裹（设置页）。 */
-export function Field({ label, htmlFor, help, error, children, className = '' }: FieldProps) {
-  return (
-    <div className={`space-y-1.5 ${className}`}>
-      <label htmlFor={htmlFor} className={fieldLabel}>
-        {label}
-      </label>
-      {children}
-      {help && <p className={fieldHelp}>{help}</p>}
-      {error && <p className={fieldError}>{error}</p>}
-    </div>
-  );
-}
-
-/** 常用受控 input 快捷壳：透传全部原生属性，样式钉 inputBase。 */
-export function TextInput({ className = '', ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`${inputBase} ${className}`} {...rest} />;
-}
-
-export function TextArea({ className = '', ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={`${textareaBase} ${className}`} {...rest} />;
-}
-
-export function Select({ className = '', ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={`${selectBase} ${className}`} {...rest} />;
-}

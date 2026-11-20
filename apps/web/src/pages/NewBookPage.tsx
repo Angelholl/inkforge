@@ -8,7 +8,6 @@ import { decodeTextFile } from '../components/textFile';
 
 // decodeTextFile 已抽出至 components/textFile（设定集导入面板复用）；re-export 保持既有测试导入兼容
 export { decodeTextFile } from '../components/textFile';
-export type { DecodedText } from '../components/textFile';
 
 // 章题行三分支（owner 反馈：（一）/一、等形态拆章无法识别）：
 // ① 第X章/节/回（容忍「第 1 章」空格排版）；② 数字顿号「一、雪夜」（排顿号复现，防「一、二、三」误切）；

@@ -33,9 +33,9 @@ export interface RunOutcome {
   rounds: number;
 }
 
-export type PipelineRole = 'drafter' | 'qc' | 'rewriter' | 'summarizer';
+type PipelineRole = 'drafter' | 'qc' | 'rewriter' | 'summarizer';
 
-export interface RoleProviders {
+interface RoleProviders {
   drafter: LlmProvider;
   qc: LlmProvider;
   rewriter: LlmProvider;

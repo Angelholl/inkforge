@@ -11,7 +11,7 @@ interface Props {
 }
 
 /** 段落四操作预设（DEC-2026-1115-04 三小件 C1，instruction 文案钉死）；fullInstruction=全文模式文案（DEC-2026-1120-01）。 */
-export const SELECTION_PRESETS = [
+const SELECTION_PRESETS = [
   { label: '续写', instruction: '从选段结尾自然续写 2-3 句，保持人称与时态', fullInstruction: '从全文结尾自然续写 2-3 句，保持人称与时态' },
   { label: '润色', instruction: '优化选段表达，不改情节与信息量', fullInstruction: '优化全文表达与用词，不改情节与信息量' },
   { label: '扩写', instruction: '在选段基础上扩写细节与感官描写，篇幅约增加一倍', fullInstruction: '在全文基础上扩写细节与感官描写，篇幅约增加一半' },

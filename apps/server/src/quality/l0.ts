@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { countChars, type ChapterBlueprint } from '@inkforge/shared';
 
-export interface L0Check {
+interface L0Check {
   name: 'length' | 'cliche' | 'replay_ngram' | 'plagiarism_ngram' | 'beat_coverage' | 'continuity_facts' | 'style_drift' | 'tail_replay' | 'echo_20gram';
   pass: boolean;
   details: string;

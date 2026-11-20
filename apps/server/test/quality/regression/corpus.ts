@@ -25,7 +25,7 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REAL_DIR = path.join(HERE, 'real');
 /** L1 夹具对应的采章章号（T-C3 采集口径），供 quote⊆draft 校验。 */
-export const CAPTURE_CHAPTERS = [5, 8, 12] as const;
+const CAPTURE_CHAPTERS = [5, 8, 12] as const;
 
 export interface L0Sample {
   name: string;

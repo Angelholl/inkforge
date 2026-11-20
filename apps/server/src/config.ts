@@ -14,7 +14,7 @@ export interface ProviderConfig {
   supportsJsonSchema: boolean;
 }
 
-export interface DraftBudgets {
+interface DraftBudgets {
   hardRules: number;
   worldview: number;
   characters: number;
@@ -27,14 +27,14 @@ export interface DraftBudgets {
   task: number;
 }
 
-export interface QcBudgets {
+interface QcBudgets {
   hardRules: number;
   draft: number;
   blueprint: number;
   continuity: number;
 }
 
-export interface RewriteBudgets {
+interface RewriteBudgets {
   hardRules: number;
   styleRules: number;
   original: number;
@@ -43,14 +43,14 @@ export interface RewriteBudgets {
   task: number;
 }
 
-export interface PlannerBudgets {
+interface PlannerBudgets {
   hardRules: number;
   continuity: number;
   prevTail: number;
   task: number;
 }
 
-export interface OutlineBudgets {
+interface OutlineBudgets {
   hardRules: number;
   worldview: number;
   characters: number;

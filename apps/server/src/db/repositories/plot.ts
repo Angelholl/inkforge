@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database } from '../open';
 import type { PlotDraft } from '../../plot';
 
-export interface PlotProfileRow {
+interface PlotProfileRow {
   id: string;
   name: string;
   source_path: string;

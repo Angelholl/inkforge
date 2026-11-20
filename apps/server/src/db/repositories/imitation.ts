@@ -3,7 +3,7 @@ import type { OutlineItemDto } from '@inkforge/shared';
 import type { Database } from '../open';
 import type { ImitationDraft } from '../../imitation';
 
-export interface ImitationProfileRow {
+interface ImitationProfileRow {
   id: string;
   name: string;
   source_path: string;

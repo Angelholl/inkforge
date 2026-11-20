@@ -4,7 +4,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { Database } from './db/open';
 
-export const settingsSchema = z.object({
+const settingsSchema = z.object({
   STRATA_BASE_URL: z.string().min(1).optional(),
   STRATA_API_KEY: z.string().min(1).optional(),
   STRATA_MODEL: z.string().min(1).optional(),
@@ -50,7 +50,7 @@ export function writeSettingsFile(obj: Record<string, string>, p = configFilePat
 }
 
 /** 入库分阈值存 app_meta 的键名（B3：阈值属运行时数据，存 DB 而非 config.json，改值无需重启）。 */
-export const SCORE_THRESHOLD_KEY = 'quality_score_threshold';
+const SCORE_THRESHOLD_KEY = 'quality_score_threshold';
 
 /** 读入库分阈值：缺失、非数字或越界 [1,10] → undefined（调用方回落 config 默认）。 */
 export function readScoreThreshold(db: Database): number | undefined {

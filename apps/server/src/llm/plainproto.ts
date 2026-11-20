@@ -199,7 +199,7 @@ export function parseBlueprint(raw: string): ParsedBlueprint {
   };
 }
 
-export interface OutlineItem {
+interface OutlineItem {
   chapterNo: number;
   blueprint: ChapterBlueprint;
 }
@@ -386,7 +386,7 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
 
 // ── 蒸馏自评（SCORE:/REASON: 行协议，held-out 检验）──
 
-export interface SelfEvalItem {
+interface SelfEvalItem {
   score: number;
   reason: string;
 }

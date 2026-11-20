@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6.46.1/schema.json",
+  "workspaces": {
+    ".": {
+      "ignoreDependencies": ["prettier"],
+      "ignoreBinaries": ["netstat", "findstr"]
+    },
+    "apps/server": {
+      "entry": [
+        "scripts/**/*.{mjs,ts}",
+        "src/worker/main.ts",
+        "src/style/cli.ts",
+        "test/worker/fixtures/worker-plain.mjs"
+      ]
+    },
+    "apps/desktop": {
+      "entry": ["scripts/**/*.mjs"]
+    },
+    "apps/web": {},
+    "packages/shared": {}
+  }
+}

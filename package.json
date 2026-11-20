@@ -14,12 +14,14 @@
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "lint": "eslint .",
+    "deadcode": "knip",
     "sidecar:node": "node apps/desktop/scripts/fetch-node.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9",
     "@types/node": "^22",
     "eslint": "^9",
+    "knip": "^6.46.1",
     "prettier": "^3",
     "typescript-eslint": "^8"
   },

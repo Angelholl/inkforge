@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getChapter, getCurrentVersion, listChapters } from '../db/repositories/chapters';
+import { getCurrentVersion, listChapters } from '../db/repositories/chapters';
 import type { Database } from '../db/open';
 
 export type ExportFormat = 'chapters-md' | 'combined-md' | 'txt';
@@ -44,9 +44,4 @@ export async function exportBook(
     files.push(fileName);
   }
   return { files };
-}
-
-export function chapterHasVersion(db: Database, bookId: string, chapterNo: number): boolean {
-  const ch = getChapter(db, bookId, chapterNo);
-  return !!ch?.currentVersionId;
 }

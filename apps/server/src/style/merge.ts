@@ -21,9 +21,9 @@ import type { Database } from '../db/open';
 import { getLatestProfile, type StyleSample } from './distill';
 import { pickStyleSamples } from './inject';
 
-export const RULES_TOTAL_BUDGET = 400; // 规格 B：合并 rulesText 总预算（辅补充以 400 封顶）
-export const TERMS_MAX = 10; // 规格依据：蒸馏 TERMS 3-10 条惯例（analysis.ts:19）
-export const SAMPLE_QUOTA = 3; // 规格 B：fewShot 预算内等比取样总席位（现注入 count=3 惯例）
+const RULES_TOTAL_BUDGET = 400; // 规格 B：合并 rulesText 总预算（辅补充以 400 封顶）
+const TERMS_MAX = 10; // 规格依据：蒸馏 TERMS 3-10 条惯例（analysis.ts:19）
+const SAMPLE_QUOTA = 3; // 规格 B：fewShot 预算内等比取样总席位（现注入 count=3 惯例）
 
 export interface StyleProfileContent {
   version: number;
