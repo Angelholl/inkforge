@@ -10,7 +10,7 @@
 
 `docs/plans/2026-11-20-gen-landing-style-inject.md`：
 - 全局约束：第 9–17 行
-- Task-03 全文：第 721–844 行（3-1 文案钉死 / 3-2 renderDraft grade 分支 / 3-3 renderTaskSummaryBlock 全文 / 3-4 chapter.ts 接线四步 / 3-5 task 预算 500→800×2 / 3-6 测试 A-D / 3-7 验收 / 3-8 命令）
+- Task-03 全文：从「## Task-03」标题行读到「## Task-04」标题行为止（offset/limit 分段读；3-1 文案钉死 / 3-2 renderDraft grade 分支 / 3-3 renderTaskSummaryBlock 全文 / 3-4 chapter.ts 接线四步 / 3-5 task 预算 500→800×2 / 3-6 测试 A-D / 3-7 验收 / 3-8 命令）
 
 依赖 Task-02 已提交（config.ts/config.test.ts 串行）。grade 模板文案与 Task-01 的 grade 字段同源，逐字照计划。
 

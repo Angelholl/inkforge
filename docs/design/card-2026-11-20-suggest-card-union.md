@@ -10,7 +10,7 @@ blueprint-suggest 槽里无 outline、task 300 字被协议行占 ~210（简介�
 
 `docs/plans/2026-11-20-gen-landing-style-inject.md`：
 - 全局约束：第 9–17 行
-- Task-02 全文：第 459–717 行（2-1 suggest 路由五步含 findOutlineCardForChapter/outlineCard 槽/确定性叠加 / 2-2 PUT 并集 / 2-3 planner 预算 / 2-4 测试 / 2-5 验收 / 2-6 命令）
+- Task-02 全文：从「## Task-02」标题行读到「## Task-03」标题行为止（offset/limit 分段读；2-1 suggest 路由五步含 findOutlineCardForChapter/outlineCard 槽/确定性叠加 / 2-2 PUT 并集 / 2-3 planner 预算 / 2-4 测试 / 2-5 验收 / 2-6 命令）
 
 依赖 Task-01 已提交（复用 `parseLandingCell` 与 grade 字段）。槽插入点锚=`name: 'spectrumReference'` 行之后（光谱线先例）。大文件按锚文本局部读，勿整读。
 

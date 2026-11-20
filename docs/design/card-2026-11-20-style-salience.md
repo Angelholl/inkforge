@@ -10,7 +10,7 @@
 
 `docs/plans/2026-11-20-gen-landing-style-inject.md`：
 - 全局约束：第 9–17 行
-- Task-04 全文：第 848–1023 行（4-1 预算钉值 / 4-2 merge 封顶 / 4-3 renderStyleBlock 全文替换 / 4-4 降噪两正则+跳节逻辑 / 4-5 测试冲击清单 1-5 / 4-6 验收 / 4-7 命令）
+- Task-04 全文：从「## Task-04」标题行读到「## Task-05」标题行为止（offset/limit 分段读；4-1 预算钉值 / 4-2 merge 封顶 / 4-3 renderStyleBlock 全文替换 / 4-4 降噪两正则+跳节逻辑 / 4-5 测试冲击清单 1-5 / 4-6 验收 / 4-7 命令）
 
 依赖 Task-03 已提交（config.ts/config.test.ts 串行）。8k 表与 freqTerms 注入隔离不动。
 
