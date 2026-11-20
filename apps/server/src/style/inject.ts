@@ -12,16 +12,16 @@ export function pickStyleSamples(samples: StyleSample[], chapterNo: number, coun
   return out;
 }
 
-/** 风格块渲染：规则行 + 术语段（B9）+ 样本文本；超预算截断。rulesText 去空白为空时不产出【文风规则】空头（B1 修）。 */
+/** 风格块渲染（DEC-2026-1120-10）：规则行 + 范例片段 + 术语段（terms 截 5 条、置于尾部）；超预算 head 截断时先牺牲术语。rulesText 去空白为空时不产出【文风规则】空头（B1 修保留）。 */
 export function renderStyleBlock(rulesText: string, samples: StyleSample[], budgetChars = 1200, terms?: StyleTermDto[]): string {
   const parts: string[] = [];
   if (rulesText.trim().length > 0) {
     parts.push(`【文风规则】\n${rulesText}`);
   }
-  if (terms && terms.length > 0) {
-    parts.push(`【术语表】\n${terms.map((t) => `${t.term}：${t.note}`).join('\n')}`);
-  }
   parts.push(...samples.map((s) => `【范例片段】\n${s.text}`));
+  if (terms && terms.length > 0) {
+    parts.push(`【术语表】\n${terms.slice(0, 5).map((t) => `${t.term}：${t.note}`).join('\n')}`);
+  }
   const full = parts.join('\n\n');
   return full.length <= budgetChars ? full : full.slice(0, budgetChars);
 }

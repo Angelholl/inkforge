@@ -54,4 +54,13 @@ describe('renderStyleBlock 空规则头修', () => {
     expect(block).not.toContain('freqTerms');
     expect(block).not.toContain('高频词');
   });
+
+  it('块序（DEC-2026-1120-10）：范例片段在前、术语表在后且截 5 条', () => {
+    const terms = Array.from({ length: 8 }, (_, i) => ({ term: `术语${i}`, note: `注${i}` }));
+    const block = renderStyleBlock('', samples, 100000, terms);
+    expect(block.indexOf('【范例片段】')).toBeLessThan(block.indexOf('【术语表】'));
+    expect(block).toContain('术语4：注4');
+    expect(block).not.toContain('术语5：注5'); // slice(0,5)
+    expect(block).not.toContain('高频词'); // 注入隔离不受影响（DEC-2026-1120-06 沿用）
+  });
 });

@@ -83,6 +83,10 @@ function cleanBlock(sec: Section | undefined): string {
     .trim();
 }
 
+// v4 元信息降噪（DEC-2026-1120-10）：版本行 / vN→vN 变更行 / 待确认项行 / 决策记录行，及上述主题的整节
+const META_LINE_RE = /^(?:>+\s*)?(?:版本\s*[：:]|v\d+\s*[→↔\-—>]+\s*v?\d+|待确认项?\s*[：:]|决策(?:记录|日志)\s*[：:])/;
+const META_SECTION_RE = /^#{1,6}\s*(?:[\d.、]+\s*)?(?:版本(?:记录|沿革|变更)|修订(?:记录|历史|说明)|变更(?:记录|日志|说明)|待确认项?|决策(?:记录|日志))/;
+
 /**
  * 全文精炼（DEC-2026-1120-04 追加裁决「16000 上限内精炼前置」，拍板①完全加载的完整落地）：
  * H 骨架剥 # 保留标题行、表格压行成 a｜b｜c（分隔行删）、空行折叠、文档序=owner 前置序。
@@ -90,8 +94,22 @@ function cleanBlock(sec: Section | undefined): string {
  */
 function refineForDescription(raw: string): string {
   const out: string[] = [];
+  let skipUntilLevel: number | null = null;
   for (const rawLine of raw.split('\n')) {
     const t = stripMd(rawLine.trim());
+    const headM = /^(#{1,6})\s*(?:[\d.、]+\s*)?/.exec(t);
+    if (headM && META_SECTION_RE.test(t)) {
+      skipUntilLevel = headM[1].length; // 噪声节：连标题带节体剥除
+      continue;
+    }
+    if (skipUntilLevel !== null) {
+      if (headM && headM[1].length <= skipUntilLevel) {
+        skipUntilLevel = null; // 同级或更高级标题恢复正文
+      } else {
+        continue;
+      }
+    }
+    if (META_LINE_RE.test(t)) continue; // 散落噪声行
     if (/^\|[\s|:-]*\|?$/.test(t) || /^[-—=_*]{3,}$/.test(t)) {
       out.push('');
       continue;

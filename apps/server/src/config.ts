@@ -103,11 +103,11 @@ const BUDGETS_DRAFT: DraftBudgets = {
   worldview: 16000,
   characters: 8000,
   styleRules: 1000,
-  styleDims: 600,
+  styleDims: 1600,
   blueprint: 1000,
   continuity: 2500,
   prevTail: 1500,
-  fewShot: 1500,
+  fewShot: 2500,
   task: 800,
 };
 

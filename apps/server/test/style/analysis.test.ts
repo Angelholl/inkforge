@@ -168,14 +168,14 @@ RULES: 平均句长 10-20 字。`);
     expect(rules1.terms).toEqual([{ term: '青云剑诀', note: '核心功法' }]);
   });
 
-  it('renderStyleBlock 注入术语段：位于范例片段之前，超预算整体截断', () => {
+  it('renderStyleBlock 注入术语段：位于范例片段之后，超预算先牺牲术语', () => {
     const terms = [{ term: '青云剑诀', note: '核心功法' }];
     const block = renderStyleBlock('规则行', [{ id: 's0', text: '样本正文'.repeat(50) }], 100000, terms);
-    expect(block.indexOf('【术语表】')).toBeGreaterThan(-1);
-    expect(block.indexOf('【术语表】')).toBeLessThan(block.indexOf('【范例片段】'));
+    expect(block.indexOf('【术语表】')).toBeGreaterThan(block.indexOf('【范例片段】'));
     expect(block).toContain('青云剑诀：核心功法');
     const tight = renderStyleBlock('规则行', [{ id: 's0', text: '样本正文'.repeat(50) }], 30, terms);
     expect(tight.length).toBeLessThanOrEqual(30);
+    expect(tight).not.toContain('【术语表】'); // 尾部术语先被 head 截断牺牲
   });
 });
 

@@ -21,7 +21,7 @@ import type { Database } from '../db/open';
 import { getLatestProfile, type StyleSample } from './distill';
 import { pickStyleSamples } from './inject';
 
-const RULES_TOTAL_BUDGET = 400; // 规格 B：合并 rulesText 总预算（辅补充以 400 封顶）
+const RULES_TOTAL_BUDGET = 800; // DEC-2026-1120-10：辅档案规则总封顶 400→800（主档案 rulesText 382 字全量不变，第三档案规则 0 注入 → 有量可进）
 const TERMS_MAX = 10; // 规格依据：蒸馏 TERMS 3-10 条惯例（analysis.ts:19）
 const FREQ_TERMS_MAX = 10; // 高频词合并上限（DEC-2026-1120-06）：语义照抄 TERMS（主全收、辅按 term.trim() 去重、达限停）
 const SAMPLE_QUOTA = 3; // 规格 B：fewShot 预算内等比取样总席位（现注入 count=3 惯例）

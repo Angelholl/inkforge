@@ -354,6 +354,35 @@ describe('parseSettingsCompendium', () => {
     expect(cards.map((c) => c.title)).toEqual(['车站接人', '饭桌试探', '同学会']);
     expect(cards[0]).toMatchObject({ chapterFrom: 25, body: '' });
   });
+
+  it('v4 元信息降噪：版本行/变更行/待确认节/决策记录剥除，正文保留', () => {
+    const noisy = [
+      '# 《降噪书》设定集（v4）',
+      '> 定位一句话：降噪测试。',
+      '> 版本：v4（2026-11-20，owner 修订四至七）',
+      '## 3. 世界观',
+      '虚构港市，年代约 2003。',
+      '### 版本记录',
+      'v3→v4 变更：新增女性线三章。',
+      '### 3.1 待确认项',
+      '- 女主线是否提前登场',
+      '决策记录：原第 12 章并入第 9 章。',
+      '## 6. 总大纲',
+      '### 卷一 《题》（第 1–2 章）',
+      '1. **第一夜**（开场）',
+    ].join('\n');
+    const d = parseSettingsCompendium(noisy);
+    expect(d.description).toContain('定位一句话：降噪测试');
+    expect(d.description).toContain('虚构港市');
+    expect(d.description).toContain('第一夜');
+    expect(d.description).not.toContain('版本：v4');
+    expect(d.description).not.toContain('v3→v4');
+    expect(d.description).not.toContain('新增女性线三章');
+    expect(d.description).not.toContain('女主线是否提前登场');
+    expect(d.description).not.toContain('决策记录');
+    // '### 3.1 待确认项' 是低级噪声节标题：剥到下一个更高级标题（## 6）为止，节前正文存活
+    expect(d.description.indexOf('虚构港市')).toBeGreaterThan(-1);
+  });
 });
 
 describe('parseLandingCell（DEC-2026-1120-10 落地格解析）', () => {

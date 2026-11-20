@@ -97,25 +97,25 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
     expect(m.axes['叙述温度']).toBe(70);
   });
 
-  it('规则合并：主全量保留，辅去重补充受 400 总预算封顶', () => {
-    const main380 = '甲'.repeat(380);
-    const b1 = bundle({ profiles: { p1: prof({ rulesText: main380 }), p2: prof({ rulesText: '乙'.repeat(30) }) }, auxProfileIds: ['p2'] });
+  it('规则合并：主全量保留，辅去重补充受 800 总预算封顶（预算内追加）', () => {
+    const main700 = '甲'.repeat(700);
+    const b1 = bundle({ profiles: { p1: prof({ rulesText: main700 }), p2: prof({ rulesText: '乙'.repeat(30) }) }, auxProfileIds: ['p2'] });
     const m1 = mergeStyleProfiles(b1, 1);
-    expect(m1.rulesText.length).toBe(380);
-
-    const main300 = '丙'.repeat(300);
-    const b2 = bundle({ profiles: { p1: prof({ rulesText: main300 }), p2: prof({ rulesText: `${main300}\n${'丁'.repeat(60)}` }) }, auxProfileIds: ['p2'] });
-    const m2 = mergeStyleProfiles(b2, 1);
-    expect(m2.rulesText.length).toBe(300 + 1 + 60);
-    expect(m2.rulesText.startsWith(main300)).toBe(true);
-    expect(m2.rulesText.endsWith('丁'.repeat(60))).toBe(true);
+    expect(m1.rulesText.length).toBe(700 + 1 + 30);
   });
 
-  it('主 rulesText 超 400：全量保留且不补辅', () => {
-    const main420 = '戊'.repeat(420);
-    const b = bundle({ profiles: { p1: prof({ rulesText: main420 }), p2: prof({ rulesText: '己'.repeat(20) }) }, auxProfileIds: ['p2'] });
+  it('辅行超 800 封顶：break 当前辅档案不再补', () => {
+    const main700 = '丙'.repeat(700);
+    const b2 = bundle({ profiles: { p1: prof({ rulesText: main700 }), p2: prof({ rulesText: `${main700}\n${'丁'.repeat(120)}` }) }, auxProfileIds: ['p2'] });
+    const m2 = mergeStyleProfiles(b2, 1);
+    expect(m2.rulesText).toBe(main700); // 首行重复跳过；次行 700+1+120=821>800 → break
+  });
+
+  it('主 rulesText 超 800：全量保留且不补辅', () => {
+    const main850 = '戊'.repeat(850);
+    const b = bundle({ profiles: { p1: prof({ rulesText: main850 }), p2: prof({ rulesText: '己'.repeat(20) }) }, auxProfileIds: ['p2'] });
     const m = mergeStyleProfiles(b, 1);
-    expect(m.rulesText).toBe(main420);
+    expect(m.rulesText).toBe(main850);
   });
 
   it('术语并集主优先、上限 10 条', () => {
@@ -278,7 +278,7 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
       primaryProfileId: 'pA',
       profiles: {
         pA: prof({ rulesText: main300 }),
-        pB: prof({ rulesText: '乙'.repeat(120) }),
+        pB: prof({ rulesText: '乙'.repeat(520) }), // 800 封顶下仍超预算：300+1+520=821>800 → break（DEC-2026-1120-10 冲击清单漏列项主审补录）
         pC: prof({ rulesText: '丙'.repeat(60) }),
       },
       auxProfileIds: ['pB', 'pC'],
