@@ -78,7 +78,11 @@ export interface RouteState {
 export async function registerRoutes(app: FastifyInstance, state: RouteState): Promise<void> {
   const { db, config, provider, bus, runAborts } = state;
 
-  await app.register(cors, { origin: ['http://localhost:5173', 'tauri://localhost', 'http://tauri.localhost'] });
+  await app.register(cors, {
+    origin: ['http://localhost:5173', 'tauri://localhost', 'http://tauri.localhost'],
+    // 默认仅 GET/HEAD/POST，DELETE 预检会被浏览器拒（书架删除 Failed to fetch 根因）
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  });
   if (fs.existsSync(WEB_DIST)) {
     await app.register(fastifyStatic, { root: WEB_DIST });
     // SPA history 回退：非 /api 的 GET 未命中路由时回 index.html（深链接刷新/直开不 404）

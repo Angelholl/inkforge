@@ -124,6 +124,20 @@ describe('DELETE /api/books/:bookId', () => {
     expect((db.prepare("SELECT COUNT(*) AS n FROM style_profiles WHERE id = 'sp-del-1'").get() as { n: number }).n).toBe(1);
   });
 
+  it('CORS 预检放行 DELETE（tauri webview 跨域删除链路）', async () => {
+    const preflight = await app.inject({
+      method: 'OPTIONS',
+      url: `/api/books/${bookId}`,
+      headers: {
+        origin: 'http://tauri.localhost',
+        'access-control-request-method': 'DELETE',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+    expect(preflight.statusCode).toBe(204);
+    expect(preflight.headers['access-control-allow-methods']).toContain('DELETE');
+  });
+
   it('书不存在 → 404', async () => {
     const r = await app.inject({ method: 'DELETE', url: '/api/books/no-such-book' });
     expect(r.statusCode).toBe(404);
