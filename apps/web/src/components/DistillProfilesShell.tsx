@@ -151,6 +151,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
   const [draft, setDraft] = useState<D | null>(null);
   const [draftText, setDraftText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [msg, setMsg] = useState('');
   const [bindBook, setBindBook] = useState<Record<string, string>>({});
 
@@ -166,6 +167,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
       return;
     }
     setBusy(true);
+    setAnalyzing(true);
     try {
       const r = await api.analyze({ name: name.trim(), text });
       setDraft(r.draft);
@@ -175,6 +177,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
       setMsg(labels.analyzeFailMsg((e as Error).message));
     } finally {
       setBusy(false);
+      setAnalyzing(false);
     }
   };
 
@@ -345,8 +348,15 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
               {fileInfo && <span className="text-xs font-medium text-primary-strong">{fileInfo}</span>}
             </label>
           </div>
-          <Button variant="primary" size="md" disabled={busy} onClick={() => void analyze()}>
-            {labels.analyzeButton}
+          {/* 蒸馏=分钟级 LLM 调用，在途须给进度文案防误判卡死（owner 2026-11-21 反馈，同导入确认按钮款） */}
+          <Button
+            variant="primary"
+            size="md"
+            loading={busy}
+            disabled={busy}
+            onClick={() => void analyze()}
+          >
+            {analyzing ? '正在蒸馏，约需数分钟…' : labels.analyzeButton}
           </Button>
         </div>
 

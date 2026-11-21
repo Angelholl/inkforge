@@ -115,6 +115,42 @@ describe('PlotProfilesSection（DEC-2026-1120-03）', () => {
     expect(screen.getByText(/已按 UTF-8 解码/)).toBeTruthy();
   });
 
+  it('蒸馏在途 → 蒸馏按钮显示进度文案，草稿返回后复原（owner 2026-11-21 反馈）', async () => {
+    let resolveAnalyze!: (r: unknown) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (u.endsWith('/api/plot-profiles/analyze')) {
+          return new Promise((res) => {
+            resolveAnalyze = res;
+          });
+        }
+        if (u.endsWith('/api/plot-profiles') && (!init?.method || init.method === 'GET')) return jsonResponse(rows);
+        if (u.endsWith('/api/books')) return jsonResponse([]);
+        return jsonResponse({});
+      }),
+    );
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('剧情甲')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('剧情档案名称'), { target: { value: '剧情乙' } });
+    fireEvent.change(screen.getByLabelText('剧情蒸馏样本'), { target: { value: 'x'.repeat(200) } });
+    fireEvent.click(screen.getByRole('button', { name: '剧情蒸馏' }));
+    const busyBtn = (await waitFor(() =>
+      screen.getByRole('button', { name: '正在蒸馏，约需数分钟…' }),
+    )) as HTMLButtonElement;
+    expect(busyBtn.disabled).toBe(true);
+
+    resolveAnalyze(
+      jsonResponse({
+        draft: { name: '剧情乙', sourcePath: 'inline:ef01', sourceHash: 'e'.repeat(64), structure: ['开篇钩子：失踪。', '收束：闭环。'] },
+      }),
+    );
+    await waitFor(() => expect(screen.getByText(/草稿未入库/)).toBeTruthy());
+    expect(screen.getByRole('button', { name: '剧情蒸馏' })).toBeTruthy();
+  });
+
   it('analyze→预览结构行可编辑→确认入库：POST body 携带编辑后结构行', async () => {
     vi.stubGlobal('fetch', stubFetch());
     renderSection();
