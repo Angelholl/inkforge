@@ -32,7 +32,7 @@ import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } fro
 import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
 import type { DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto } from '@inkforge/shared';
-import { countChars, FULL_TEXT_REWRITE_MAX_CHARS } from '@inkforge/shared';
+import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, parseLandingMandate } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
@@ -364,7 +364,10 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const { bookId } = req.params as { bookId: string };
     const book = booksRepo.getBook(db, bookId);
     if (!book) return reply.code(404).send({ error: 'not found' });
-    reply.send({ ...book, styleBinding: booksRepo.getBookStyleBinding(db, bookId), chapters: chaptersRepo.listChapters(db, bookId), runs: runsRepo.listRunsByBook(db, bookId) });
+    // 落地策略（DEC-2026-1122-01）：覆盖为解析形态并删原始 JSON 串键（不向客户端泄漏 landingMandateJson）
+    const { landingMandateJson, ...bookRest } = book;
+    void landingMandateJson;
+    reply.send({ ...bookRest, landingMandate: parseLandingMandate(book.landingMandateJson), styleBinding: booksRepo.getBookStyleBinding(db, bookId), chapters: chaptersRepo.listChapters(db, bookId), runs: runsRepo.listRunsByBook(db, bookId) });
   });
 
   app.put('/api/books/:bookId/chapters/:chapterNo/blueprint', async (req, reply) => {

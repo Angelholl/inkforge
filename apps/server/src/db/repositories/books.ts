@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { LandingMandate } from '@inkforge/shared';
 import type { Database } from '../open';
 
 export interface Book {
@@ -14,6 +15,8 @@ export interface Book {
   plotProfileId: string | null;
   /** 人物光谱档案绑定（DEC-2026-1120-09）：blueprint-suggest planner 槽注入【人物光谱参考】 */
   spectrumProfileId: string | null;
+  /** 书级落地策略（DEC-2026-1122-01）：原始 JSON 串（null=off）；客户端读走 parseLandingMandate 解析形态 */
+  landingMandateJson: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入，抄用检测不受影响 */
   styleFewshotOn: boolean;
   createdAt: string;
@@ -35,13 +38,14 @@ interface BookRow {
   imitation_profile_id: string | null;
   plot_profile_id: string | null;
   spectrum_profile_id: string | null;
+  landing_mandate_json: string | null;
   style_fewshot_on: number;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, plotProfileId: r.plot_profile_id, spectrumProfileId: r.spectrum_profile_id, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, plotProfileId: r.plot_profile_id, spectrumProfileId: r.spectrum_profile_id, landingMandateJson: r.landing_mandate_json ?? null, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
@@ -59,6 +63,7 @@ export function createBook(
     imitationProfileId: null,
     plotProfileId: null,
     spectrumProfileId: null,
+    landingMandateJson: null,
     styleFewshotOn: false,
     createdAt: now,
     updatedAt: now,
@@ -219,10 +224,18 @@ export function setBookSpectrumProfile(db: Database, bookId: string, profileId: 
   );
 }
 
+/** landingMandate 归一（DEC-2026-1122-01）：null=清空；off 只存 {"mode":"off"}；cadence 归一 heavyEveryN（正整数且 ≥2，缺省 2）。 */
+function normalizeLandingMandateJson(m: LandingMandate): string {
+  if (m.mode === 'off') return '{"mode":"off"}';
+  const n = m.heavyEveryN;
+  const heavyEveryN = typeof n === 'number' && Number.isInteger(n) && n >= 2 ? n : 2;
+  return JSON.stringify({ mode: 'cadence', heavyEveryN });
+}
+
 export function updateBookMeta(
   db: Database,
   bookId: string,
-  patch: { title?: string; description?: string; outline?: string },
+  patch: { title?: string; description?: string; outline?: string; landingMandate?: LandingMandate | null },
 ): Book | undefined {
   const book = getBook(db, bookId);
   if (!book) return undefined;
@@ -230,11 +243,14 @@ export function updateBookMeta(
     title: patch.title ?? book.title,
     description: patch.description ?? book.description,
     outline: patch.outline ?? book.outline,
+    // 三态：undefined=不动；null=清空；对象=归一写入
+    landingMandateJson: patch.landingMandate === undefined ? book.landingMandateJson : patch.landingMandate === null ? null : normalizeLandingMandateJson(patch.landingMandate),
   };
-  db.prepare('UPDATE books SET title = ?, description = ?, outline = ?, updated_at = ? WHERE id = ?').run(
+  db.prepare('UPDATE books SET title = ?, description = ?, outline = ?, landing_mandate_json = ?, updated_at = ? WHERE id = ?').run(
     next.title,
     next.description,
     next.outline,
+    next.landingMandateJson,
     new Date().toISOString(),
     bookId,
   );

@@ -510,3 +510,14 @@
 **拍板（owner 直接令，主模型亲执不外派）：** 四处 16000→20000（config.ts 两槽+settings-import.ts 阈值+SettingsImportPanel.tsx 计数器）；测试钉值同步（config.test.ts 两处、超长样本 17000→21000 字、v3 断言 <20000）；draft8k/qc/rewrite/planner 档不动。
 
 **执行留痕（2026-11-21）：** 主模型亲执单提交。验证链（亲跑）：lint 零输出、typecheck 全 workspace 0 错、定向 config+settings-import.parse 39 全过、全量测试 server 429+web 144+shared 2=**575**（基线 575 持平，只增不减成立）、build:web 冒烟 3.62s 过、diff 安全扫零真实新增。GUI 未验证（owner 真实测试）点位：设定集导入预览 description 字数徽标上限显示 20000。
+
+## DEC-2026-1122-01 [OWNER] 新书无H（v6 卷级大纲）事故与落地双层防线拍板（2026-11-22）
+
+**背景：** owner 实测《少年阿磊》v6（dev 库 54a67d41）导入后新书仍无 H。取证=dev 库直查+真解析器离线实测：v6 §5 大纲按 11-21 令改为卷级叙述（outline_nodes 10 节点全卷/阶段/叙述卡，章级落地格行 0）→章骨架走 suggestOutline 模型回退→goal/beats 纯铺垫无性事节拍→mustHaveBeats=[]→beat_coverage 空集恒真通过→drafter 无落地硬要求→成品无 H；「每章必落分级制」只是 15712 字 description 里的散文（与 DEC-2026-1120-10「散文输给确定性槽」结论一致）。文风档案「主叙直露」系语气规则非节拍要求，不产出 H 场景。**根因泛化：** 强制链需求驱动——mustHaveBeats 全部三个写入方（apply 章卡/suggest 确定性叠加/PUT 并集）都以「逐章落地格已存在」为输入；书的创作硬要求若只以散文表达即蒸发，任何类型小说同理。**内容侧已修（owner 令「补回来」）：** v6 §5.1 补 23 行逐章落地表（ch1–23 峰值落地格；13 处〔追认〕/〔无〕标记待 owner 复核，清单见 .zcode/scratch/2026-11-22-noh/卷一弧1-4-逐章落地格候选.md；§3.2 钉「落地格记峰值、重场前戏自然抵轻」细则），真 parseSettingsCompendium 离线跑 PASS（23 卡全解析出 grade、无连续两章轻、warnings 空、description 16742/20000、42 人物/8 伏笔不变；probe=apps/server/data/probe-v6-table-1122.ts）。重新导入建带骨架新书=owner GUI 操作（旧 54a67d41 ch1–2 为回退废案可删）。
+
+**拍板（owner AskUserQuestion 裁决=双层防线；decision-critic 有条件支持、无 HIGH_RISK_OBJECTION，四条件全采纳钉计划）：**
+**层① 书级落地策略（landing mandate）：** books 加可空列 landing_mandate_json（migration 0014），shared 类型 {mode:'off'|'cadence', heavyEveryN?:number 默认2}；null=off=旧书零回归；纯函数 synthesizeMandateBeat(chapterNo,mandate) 章号奇偶排程（偶=H 奇=L）产 keywords=[] 带 grade 节拍；注入点=queue 拾章前**持久化**（critic 条件1：drafter 与 QC 两消费方必须同源，纯内存注入=假绿），保存语义=先剥离〔书级落地策略〕前缀条目→按当前卡重判→重追加（与 PUT 并集语义配对，防后补卡并存冲突）；BeatRequirement 加 source 标志（critic 条件4：l0「keywords 空+带 grade→只查分级词表 AND 层」的放宽仅对 mandate 条目生效；render.ts 尾部块对空 keywords 跳过「须出现关键词：」空行）；合成 H 节拍最小牙（critic 条件2：≥1 个 H 词命中或 ≥2 个不同 L 词命中才过，不动 DEC-2026-1120-10 既有条目语义）；UI=书籍设置「落地策略」下拉（关/分级制每2章重/自定义N）+ 导入 preview 全书无落地格且 description 含「分级制」字样时提示勾选启用（勾选制不自动猜）。措辞降级（critic 条件3）：不承诺「任意连续两章必现一重」（混合书卡章 L 与合成章 L 可相邻）；needs_human 红灯明细须标「书级 H 未达」归因。
+**层② planner 落地格槽（critic 替代案升为主修复）：** blueprint-suggest planner 输出协议每章强制【LANDING】行（H/L（场景）形态），服务端 parseLandingCell 校验、不合格拒收重出（有限重试）；模型落地格与卡叠加并集、卡优先（有逐章卡的书零扰动）。
+**否决项：** description 结构化提取（模型猜测违散文结论）；单层方案（owner 裁覆盖面不足）。**成本与风险：** 约 4-5 执行卡+1 migration；needs_human 洪水=低-中（默认 off+勾选闸门）；**NSIS 模板快照 hazard**（新迁移须手工同步桌面端模板，发版卡钉「0014 同步」项）。
+
+**计划真值：** docs/plans/2026-11-22-landing-mandate.md（code-planner 产出，5 任务五查 PASS）。**主审裁决（2026-11-22，计划内已就地修正）：** 层②服务端 LANDING 强制范围=「该章无确定性落地才要求模型出格」（卡有书不付重试成本、无卡书无论 mandate 开关均吃层②红利），mandate 不参与判定；既有 bs.test 三例断言实测核过零破。**裁决②（2026-11-22 T01 执行期停手裁决）**：migrate.test 随迁钉值更新=6 处 user_version 13→14+4 回拨夹具补 DROP COLUMN landing_mandate_json（沿既有 books 增量列夹具形态，先例 0012/0013 钉值更新惯例），属随迁更新非改断言语义，计划 Task-01 步骤 7 与冲击清单 #13 已就地补录。执行留痕与验证链收口时补记。

@@ -1,4 +1,5 @@
 import type { ChapterBlueprint, ChapterKind, ChapterStatus, RunStatus, StepName, StepStatus } from './domain';
+import type { LandingMandate } from './mandate';
 
 export interface CharacterInput {
   name: string;
@@ -17,6 +18,8 @@ export interface BookDto {
   imitationProfileId?: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入 */
   styleFewshotOn: boolean;
+  /** 书级落地策略（DEC-2026-1122-01）：GET 由服务端 parseLandingMandate 解析，不外泄原始 JSON 串 */
+  landingMandate?: LandingMandate | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -186,6 +189,8 @@ export interface BookMetaPutBody {
   title?: string;
   description?: string;
   outline?: string;
+  /** 三态（DEC-2026-1122-01）：undefined=不动；null=清空（off）；对象=写入 */
+  landingMandate?: LandingMandate | null;
 }
 
 export interface BlueprintPutBody {
@@ -538,6 +543,8 @@ export interface SettingsImportPreviewBody {
 export interface SettingsImportApplyBody {
   content: string;
   draft: SettingsImportDraftDto;
+  /** 导入勾选（DEC-2026-1122-01）：enabled=true 时 apply 事务内写 cadence mandate（Task-04 消费） */
+  landingMandate?: { enabled: boolean; heavyEveryN?: number };
 }
 
 export interface SettingsImportApplyResult {

@@ -264,3 +264,27 @@ describe('风格绑定关联表（0010）', () => {
     expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles').get() as { n: number }).n).toBe(0);
   });
 });
+
+describe('updateBookMeta landingMandate 三态往返（DEC-2026-1122-01）', () => {
+  it('undefined 不动 / null 清空 / 对象归一（heavyEveryN 缺省 2；off 只存 {"mode":"off"}）', () => {
+    const bid = booksRepo.createBook(db, { title: '落地策略之书' }).id;
+    // 起点：null（新书默认 off）
+    expect(booksRepo.getBook(db, bid)!.landingMandateJson).toBeNull();
+    // undefined=不动
+    booksRepo.updateBookMeta(db, bid, { title: '改名一' });
+    expect(booksRepo.getBook(db, bid)!.landingMandateJson).toBeNull();
+    // 对象=cadence，heavyEveryN 缺省归一 2
+    booksRepo.updateBookMeta(db, bid, { landingMandate: { mode: 'cadence' } });
+    expect(booksRepo.getBook(db, bid)!.landingMandateJson).toBe('{"mode":"cadence","heavyEveryN":2}');
+    // 显式 N 透传
+    booksRepo.updateBookMeta(db, bid, { landingMandate: { mode: 'cadence', heavyEveryN: 5 } });
+    expect(booksRepo.getBook(db, bid)!.landingMandateJson).toBe('{"mode":"cadence","heavyEveryN":5}');
+    // off=只存 {"mode":"off"}
+    booksRepo.updateBookMeta(db, bid, { landingMandate: { mode: 'off' } });
+    expect(booksRepo.getBook(db, bid)!.landingMandateJson).toBe('{"mode":"off"}');
+    // null=清空
+    booksRepo.updateBookMeta(db, bid, { landingMandate: null });
+    expect(booksRepo.getBook(db, bid)!.landingMandateJson).toBeNull();
+    booksRepo.deleteBook(db, bid);
+  });
+});

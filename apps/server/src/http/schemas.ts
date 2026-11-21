@@ -12,6 +12,14 @@ export const bookMetaPutSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
   outline: z.string().optional(),
+  // 书级落地策略（DEC-2026-1122-01）：无上限 max——超大 int≥2 合法入库（语义=章号难达倍数→合成恒 L，可接受配置）；0/1/负数/非整数→400
+  landingMandate: z
+    .object({
+      mode: z.enum(['off', 'cadence']),
+      heavyEveryN: z.number().int().min(2).optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const createCharacterSchema = z.object({
@@ -334,4 +342,11 @@ export const settingsImportApplySchema = z.object({
     styleSection: z.string().default(''),
     importStyle: z.boolean().default(true),
   }),
+  // 导入勾选（DEC-2026-1122-01）：body 级，enabled=true 时 apply 事务内写 cadence mandate（Task-04 消费）
+  landingMandate: z
+    .object({
+      enabled: z.boolean().default(false),
+      heavyEveryN: z.number().int().min(2).default(2),
+    })
+    .default({ enabled: false, heavyEveryN: 2 }),
 });
