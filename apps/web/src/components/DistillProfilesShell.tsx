@@ -3,6 +3,7 @@ import { useQuery, type QueryKey } from '@tanstack/react-query';
 import { Button } from './ui';
 import { inputBase, selectBase, textareaBase } from './Field';
 import { EmptyState } from './EmptyState';
+import { decodeTextFile } from './textFile';
 
 /*
  * 三份蒸馏档案分区的公共骨架（纯重构，行为不变）。
@@ -146,6 +147,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
   const books = Array.isArray(booksData) ? booksData : [];
   const [name, setName] = useState('');
   const [text, setText] = useState('');
+  const [fileInfo, setFileInfo] = useState('');
   const [draft, setDraft] = useState<D | null>(null);
   const [draftText, setDraftText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -193,6 +195,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
       setDraft(null);
       setName('');
       setText('');
+      setFileInfo('');
       void refetch();
     } catch (e) {
       setMsg(labels.saveFailMsg((e as Error).message));
@@ -309,8 +312,39 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
             rows={10}
             aria-label={labels.textAriaLabel}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setFileInfo('');
+            }}
           />
+          {/* 文件选择（owner 2026-11-21 反馈：剧情/光谱蒸馏无法选择上传）——沿 Style/SettingsImportPanel 同款：隐藏 input+虚线框+编码回显 */}
+          <div>
+            <input
+              type="file"
+              id="distill-sample-file"
+              accept=".txt,.md"
+              aria-label="导入样本文件"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const { text: decoded, encoding } = decodeTextFile(reader.result as ArrayBuffer);
+                  setText(decoded);
+                  setFileInfo(`${f.name} · 已按 ${encoding} 解码（${decoded.length} 字）`);
+                };
+                reader.readAsArrayBuffer(f);
+              }}
+            />
+            <label
+              htmlFor="distill-sample-file"
+              className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed border-line px-3 py-6 text-sm text-muted transition-colors hover:border-line-strong hover:bg-primary-soft/40"
+            >
+              <span>点击选择本地 txt / md 文件（自动识别 UTF-8 / GBK 编码）</span>
+              {fileInfo && <span className="text-xs font-medium text-primary-strong">{fileInfo}</span>}
+            </label>
+          </div>
           <Button variant="primary" size="md" disabled={busy} onClick={() => void analyze()}>
             {labels.analyzeButton}
           </Button>

@@ -100,6 +100,21 @@ describe('PlotProfilesSection（DEC-2026-1120-03）', () => {
     expect(calls.some((c) => String(c.url).includes('/analyze'))).toBe(false);
   });
 
+  it('样本文件选择：txt/md 导入回填正文并回显编码（owner 2026-11-21 反馈）', async () => {
+    vi.stubGlobal('fetch', stubFetch());
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('剧情甲')).toBeTruthy());
+    const input = screen.getByLabelText('导入样本文件') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(['# 《参考》长篇正文'.repeat(3)], '参考小说.txt', { type: 'text/plain' })] },
+    });
+    await waitFor(() =>
+      expect((screen.getByLabelText('剧情蒸馏样本') as HTMLTextAreaElement).value).toContain('《参考》长篇正文'),
+    );
+    expect(screen.getByText(/已按 UTF-8 解码/)).toBeTruthy();
+  });
+
   it('analyze→预览结构行可编辑→确认入库：POST body 携带编辑后结构行', async () => {
     vi.stubGlobal('fetch', stubFetch());
     renderSection();
