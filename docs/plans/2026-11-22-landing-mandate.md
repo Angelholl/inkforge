@@ -122,7 +122,7 @@
 **步骤**
 - [ ] 1. 核实中性夹具：`grep -n "分级制" apps/server/test/settings-import.test.ts apps/server/test/settings-import.parse.test.ts` → 预期零命中（有命中则停手上报，冲击清单 #9 三处 `warnings toEqual([])` 会破）。
 - [ ] 2. 写 pipeline/mandate.ts 三件（PREFIX/synthesize/ensure），ensure 用 booksRepo.getChapter+upsertBlueprint 现有函数，不新增 repo 函数。
-- [ ] 3. queue.ts:80-81 resume 门后插 `if (run.kind !== 'polish') ensureMandateBeat(db, run.bookId, no);`（polish 不消费蓝图节拍，零扰动；resumePoint 已 done 章 continue 跳过故不会重写已完成章）。
+- [ ] 3. queue.ts:80-81 resume 门后插 `ensureMandateBeat(db, run.bookId, no);`（**主审修正 2026-11-22**：计划原令带 `if (run.kind !== 'polish')` 守卫致 TS2367——polish 已在 :62 按 kind 分支 continue，此处 kind 已收窄为 'pipeline'，比较无重叠；终态=无条件调用+注释。resumePoint 已 done 章 continue 跳过故不会重写已完成章）。
 - [ ] 4. l0.ts:200-202 missed 计算改分支（旧回调体逐字保留为 else 路径）：
   ```ts
   if (m.source === 'mandate' && m.keywords.length === 0) {

@@ -80,7 +80,7 @@ async function processRun(deps: QueueDeps, runId: string): Promise<void> {
       }
       const resume = resumePoint(db, runId, chapter.id);
       if (!resume) continue; // 本章已完成
-      if (run.kind !== 'polish') ensureMandateBeat(db, run.bookId, no);
+      ensureMandateBeat(db, run.bookId, no); // polish run 已在上方按 kind 分支 continue，此处仅 pipeline 路径到达（DEC-2026-1122-01）
       try {
         await runChapterPipeline({ db, provider, config, emit: () => {} }, { runId, bookId: run.bookId, chapterNo: no, signal: ac.signal, resumeFrom: resume });
       } catch (e) {
