@@ -38,7 +38,7 @@ describe('openDb + migrate', () => {
   it('迁移后 user_version=13、WAL 开启、18 个核心对象存在、0007/0009 列在场、幂等', () => {
     const { db } = tmpDb();
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(13);
+    expect(db.pragma('user_version', { simple: true })).toBe(14);
     // 0007（B4 裁决④）：逐书文风示例开关列；0009：人物下线列
     expect(db.prepare("SELECT name FROM pragma_table_info('books') WHERE name = 'style_fewshot_on'").all()).toHaveLength(1);
     expect(db.prepare("SELECT name FROM pragma_table_info('characters') WHERE name = 'offline_from_chapter'").all()).toHaveLength(1);
@@ -71,14 +71,14 @@ describe('openDb + migrate', () => {
       expect(names).toContain(t);
     }
     expect(() => migrate(db)).not.toThrow();
-    expect(db.pragma('user_version', { simple: true })).toBe(13);
+    expect(db.pragma('user_version', { simple: true })).toBe(14);
     db.close();
   });
 
   it('迁移 0002：run_steps 唯一约束与 partial_outputs UPSERT 幂等', () => {
     const { db } = tmpDb();
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(13);
+    expect(db.pragma('user_version', { simple: true })).toBe(14);
     const now = new Date().toISOString();
     db.prepare(
       "INSERT INTO books(id, title, created_at, updated_at) VALUES('b1','书',?,?)",

@@ -30,7 +30,7 @@
 | 10 | apps/server/test/prompts/contract.test.ts:86/96 `parseBlueprint：合格文样往返`、`缺 GOAL → errors…` | 无 LANDING 行样例 errors/beats 形态 | parseBlueprint 新增 landingRaw/landingErrors 字段，缺 LANDING 时 landingErrors=[]、不进 errors（LANDING 缺行不算解析错），解构断言不受影响 | Task-03 复核 |
 | 11 | apps/server/test/http/api.test.ts:86 `zod 非法 body 400；未知 id 404` | bookMetaPutSchema 既有校验 | 新字段可选，旧 payload 不变 | Task-01 复核 |
 | 12 | apps/server/test/worker/queue.test.ts:77-160 场景一~四 | 无 mandate 书的 run 行为 | ensureMandateBeat 对 off 书零写入（无变化即不落库） | Task-02 复核 |
-| 13 | apps/server/test/db/migrate.test.ts:33/88/100/135/158/196 `user_version=13` 六处 + 回拨夹具 :51-68 等四处增量物清单 | 末迁移号钉 13；夹具 DROP 清单=0003-0013 | 0014 入列必破（执行期停手裁决=主审 2026-11-22 批准随迁钉值更新） | Task-01 步骤 7 随迁更新+提交正文列条 |
+| 13 | apps/server/test/db/migrate.test.ts:33/88/100/135/158/196 `user_version=13` 六处 + 回拨夹具 :51-68 等四处增量物清单 | 末迁移号钉 13；夹具 DROP 清单=0003-0013 | 0014 入列必破（执行期停手裁决=主审 2026-11-22 批准随迁钉值更新）。**执行期扩展（T02 验收发现）**：open.test.ts:41/74/81 三处同型随迁漏网（执行者误标「既有失败」，主审按裁决②口径直修 13→14；测试标题串沿 migrate.test 先例不动） | Task-01 步骤 7 随迁更新+提交正文列条 |
 
 ---
 
