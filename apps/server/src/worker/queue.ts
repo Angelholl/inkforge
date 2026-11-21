@@ -5,6 +5,7 @@ import { backupBook } from '../db/backup';
 import { getRun, resumePoint, updateRunStatus, listSteps, takeoverStaleSteps } from '../db/repositories/runs';
 import { getChapter, setChapterStatus } from '../db/repositories/chapters';
 import { runChapterPipeline } from '../pipeline/chapter';
+import { ensureMandateBeat } from '../pipeline/mandate';
 import { runPolishChapter } from '../pipeline/polish';
 import { keepSystemAwake } from '../power';
 
@@ -79,6 +80,7 @@ async function processRun(deps: QueueDeps, runId: string): Promise<void> {
       }
       const resume = resumePoint(db, runId, chapter.id);
       if (!resume) continue; // 本章已完成
+      if (run.kind !== 'polish') ensureMandateBeat(db, run.bookId, no);
       try {
         await runChapterPipeline({ db, provider, config, emit: () => {} }, { runId, bookId: run.bookId, chapterNo: no, signal: ac.signal, resumeFrom: resume });
       } catch (e) {

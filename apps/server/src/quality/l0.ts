@@ -197,10 +197,17 @@ export function runL0Checks(input: {
     const pool = grade === 'H' ? [...lw.h, ...lw.l] : lw.l;
     return pool.some((w) => input.draft.includes(w));
   };
-  const missed = input.blueprint.mustHaveBeats.filter(
-    (m) => !m.keywords.some((k) => input.draft.includes(k)) || (m.grade !== undefined && !wordHit(m.grade)),
-  );
-  checks.push({ name: 'beat_coverage', pass: missed.length === 0, details: missed.length === 0 ? '必含节拍全覆盖' : `缺失: ${missed.map((m) => m.text).join('、')}` });
+  const missed = input.blueprint.mustHaveBeats.filter((m) => {
+    if (m.source === 'mandate' && m.keywords.length === 0) {
+      if (wordsEmpty) return false; // 词表缺失 fail-open 同旧（wordHit 早退放行）
+      const lHits = lw!.l.filter((w) => input.draft.includes(w));
+      if (m.grade === 'H') return !(lw!.h.some((w) => input.draft.includes(w)) || lHits.length >= 2); // 最小牙：≥1 H 词或 ≥2 不同 L 词
+      return lHits.length === 0; // L：≥1 L 词
+    }
+    // 卡源/旧条目：旧回调体逐字保留
+    return !m.keywords.some((k) => input.draft.includes(k)) || (m.grade !== undefined && !wordHit(m.grade));
+  });
+  checks.push({ name: 'beat_coverage', pass: missed.length === 0, details: missed.length === 0 ? '必含节拍全覆盖' : `缺失: ${missed.map((m) => m.source === 'mandate' ? `${m.text}（书级${m.grade}未达·落地策略）` : m.text).join('、')}` });
 
   // 6. continuity_facts：deceased/absent 角色不得出现
   const ghosts = input.continuity.characters

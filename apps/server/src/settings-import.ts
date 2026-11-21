@@ -506,6 +506,12 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
     warnings.push(`剧情大纲现有 ${outline.length} 字，超出大纲槽预算 ${OUTLINE_BUDGET} 字的部分会被截断，建议精炼`);
   }
 
+  // 书级落地策略预览警示（DEC-2026-1122-01）：全书 0 落地格而设定集含「分级制」表述时提示可开启
+  const landingCellCount = allCards.filter((c) => parseLandingCell(c.body) !== null).length;
+  if (landingCellCount === 0 && description.includes('分级制')) {
+    warnings.push('全书大纲卡未解析出任何落地格，而设定集含「分级制」表述；如需每章落地保障，可在导入时勾选「启用书级落地策略」，或导入后在书籍设置开启');
+  }
+
   // 章级蓝图预填：带章号卡逐章展开（区间卡逐章展开共享梗概，产能=先写开场 12 章可直发审阅），章号去重升序
   const outlineItems: OutlineItemDto[] = [];
   const chapterTitles: Record<string, string> = {};

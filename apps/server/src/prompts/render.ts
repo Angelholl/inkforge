@@ -19,7 +19,7 @@ export function renderDraft(input: { chapterNo: number; targetChars: number; wor
     `【世界观要点】${input.worldview.slice(0, 100)}`,
     `【本章目标】${input.blueprint.goal}`,
     ...input.blueprint.beats.map((b, i) => `【节拍 ${i + 1}】${b}`),
-    ...input.blueprint.mustHaveBeats.map((m) => `【必含节拍】${m.text}${m.grade !== undefined ? `（落地·${m.grade}级须显性词）` : ''}（须出现关键词：${m.keywords.join('、')}）`),
+    ...input.blueprint.mustHaveBeats.map((m) => `【必含节拍】${m.text}${m.grade !== undefined ? `（落地·${m.grade}级须显性词）` : ''}${m.keywords.length > 0 ? `（须出现关键词：${m.keywords.join('、')}）` : ''}`),
     ...(input.blueprint.bannedTopics.length > 0 ? [`【禁区】本章不得涉及：${input.blueprint.bannedTopics.join('；')}`] : []),
   ];
   return lines.join('\n');
@@ -95,7 +95,7 @@ export function renderTaskSummaryBlock(input: { mustHaveBeats: BeatRequirement[]
     parts.push([
       '【本章硬要求】',
       ...input.mustHaveBeats.map(
-        (m) => `· ${m.text}${m.grade !== undefined ? `（落地·${m.grade}级须显性词）` : ''}（须出现关键词：${m.keywords.join('、')}）`,
+        (m) => `· ${m.text}${m.grade !== undefined ? `（落地·${m.grade}级须显性词）` : ''}${m.keywords.length > 0 ? `（须出现关键词：${m.keywords.join('、')}）` : ''}`,
       ),
     ].join('\n'));
   }

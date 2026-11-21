@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { countChars } from '@inkforge/shared';
+import { countChars, type BeatRequirement } from '@inkforge/shared';
 import { loadCliches, loadLandingWords, runL0Checks } from '../../src/quality/l0';
 import {
   BEAT_BP,
@@ -236,5 +236,54 @@ describe('L0 beat_coverage 分级词表 AND 层（DEC-2026-1120-10）', () => {
     expect(lw.l.length).toBeGreaterThan(0);
     const missing = loadLandingWords(path.join(process.cwd(), 'config/quality/__no_such__.txt'));
     expect(missing).toEqual({ h: [], l: [] });
+  });
+});
+
+describe('L0 书级落地策略条目（DEC-2026-1122-01）', () => {
+  const LW = { h: ['玉佩光'], l: ['铜镜摇', '铜镜暗'] }; // 中性占位词表（语义同构：H 词/L 词；L 两词测「≥2 不同 L」）
+  const run = (draft: string, mustHaveBeats: BeatRequirement[], landingWords?: { h: string[]; l: string[] }) =>
+    runL0Checks({
+      draft,
+      targetChars: 100,
+      prevTexts: [],
+      blueprint: { goal: 'g', beats: [], mustHaveBeats, bannedTopics: [] },
+      continuity: { characters: [] },
+      cliches,
+      landingWords,
+    });
+  const cover = (draft: string, mustHaveBeats: BeatRequirement[], landingWords?: { h: string[]; l: string[] }) =>
+    run(draft, mustHaveBeats, landingWords).checks.find((x) => x.name === 'beat_coverage')!;
+  const mandateBeat = (grade: 'H' | 'L', text = '落地场'): BeatRequirement => ({ text, keywords: [], grade, source: 'mandate' });
+
+  it('H 条目：1 个 H 词 → pass；0 H + 恰 1 个 L 词 → fail；0 H + 2 个不同 L 词 → pass', () => {
+    const beat = mandateBeat('H');
+    expect(cover('她抬手碰了碰床头的玉佩光。', [beat], LW).pass).toBe(true);
+    const oneL = cover('铜镜摇了一下。', [beat], LW);
+    expect(oneL.pass).toBe(false);
+    expect(oneL.details).toContain('书级H未达·落地策略');
+    expect(cover('铜镜摇了一下，铜镜暗又亮起。', [beat], LW).pass).toBe(true);
+  });
+
+  it('L 条目：1 个 L 词 → pass；无 L 词 → fail', () => {
+    const beat = mandateBeat('L');
+    expect(cover('铜镜摇了一下。', [beat], LW).pass).toBe(true);
+    expect(cover('他推开门。', [beat], LW).pass).toBe(false);
+  });
+
+  it('卡源同文条目（无 source）同正文 → 旧语义逐字节不变（1 个 L 词即满足 H 级 AND 层）', () => {
+    const cardBeat: BeatRequirement = { text: '落地场', keywords: ['铜镜摇'], grade: 'H' };
+    const draft = '铜镜摇了一下。';
+    const old = cover(draft, [cardBeat], LW);
+    expect(old.pass).toBe(true);
+    expect(old.details).not.toContain('书级');
+    // 同正文若换成 mandate 条目则最小牙不放行（≥2 不同 L）——证明放宽仅作用于 source==='mandate'
+    expect(cover(draft, [mandateBeat('H')], LW).pass).toBe(false);
+  });
+
+  it('词表空 → mandate 条目 fail-open pass', () => {
+    for (const lw of [undefined, { h: [] as string[], l: [] as string[] }]) {
+      expect(cover('他推开门。', [mandateBeat('H')], lw).pass).toBe(true);
+      expect(cover('他推开门。', [mandateBeat('L')], lw).pass).toBe(true);
+    }
   });
 });

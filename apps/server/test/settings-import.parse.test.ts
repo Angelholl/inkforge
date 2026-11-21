@@ -383,6 +383,29 @@ describe('parseSettingsCompendium', () => {
     // '### 3.1 待确认项' 是低级噪声节标题：剥到下一个更高级标题（## 6）为止，节前正文存活
     expect(d.description.indexOf('虚构港市')).toBeGreaterThan(-1);
   });
+
+  it('落地策略预览警示：全书 0 落地格 + description 含「分级制」→ warnings 含提示', () => {
+    const fixture = `# 《示例》长篇 · 扩写设定集
+
+## 3. 世界观
+
+落地采用分级制，分级明确。`;
+    const d = parseSettingsCompendium(fixture);
+    expect(d.description).toContain('分级制');
+    expect(d.warnings.some((w) => w.includes('全书大纲卡未解析出任何落地格'))).toBe(true);
+  });
+
+  it('落地策略预览警示：有落地格 → 无该警示（即便含「分级制」）', () => {
+    const withCell = V3_FIXTURE.replace('虚构港市，年代约 2003。', '虚构港市，年代约 2003。落地采用分级制。');
+    const d = parseSettingsCompendium(withCell);
+    expect(d.description).toContain('分级制');
+    expect(d.warnings.some((w) => w.includes('全书大纲卡未解析出任何落地格'))).toBe(false);
+  });
+
+  it('落地策略预览警示：无「分级制」→ 无该警示', () => {
+    const d = parseSettingsCompendium(V3_FIXTURE);
+    expect(d.warnings.some((w) => w.includes('全书大纲卡未解析出任何落地格'))).toBe(false);
+  });
 });
 
 describe('parseLandingCell（DEC-2026-1120-10 落地格解析）', () => {

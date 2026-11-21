@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
-import { renderCharacterCards, renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize } from '../../src/prompts/render';
+import { renderCharacterCards, renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize, renderTaskSummaryBlock } from '../../src/prompts/render';
 import { parseBlueprint, parseOutline } from '../../src/llm/plainproto';
+import { MANDATE_TEXT_PREFIX } from '../../src/pipeline/mandate';
 
 const BP: ChapterBlueprint = {
   goal: '主角进入书房取得密信',
@@ -154,5 +155,17 @@ describe('renderCharacterCards 契约', () => {
     const raw = renderCharacterCards([{ name: '王五', baseSetting: '不是JSON' }]);
     expect(raw).toContain('【人物卡】王五');
     expect(raw).toContain('不是JSON');
+  });
+
+  it('renderDraft/renderTaskSummaryBlock：keywords=[] 条目跳过关键词括注（DEC-2026-1122-01）', () => {
+    const text = `${MANDATE_TEXT_PREFIX}本章须完成一次高强落地（H级）重场戏，落地分级词表须显性命中`;
+    const beat = { text, keywords: [] as string[], grade: 'H' as const, source: 'mandate' as const };
+    const blueprint = { goal: 'g', beats: [], mustHaveBeats: [beat], bannedTopics: [] };
+    const draftOut = renderDraft({ chapterNo: 3, targetChars: 3000, worldview: '世界观占位', blueprint });
+    expect(draftOut).toContain(`【必含节拍】${text}（落地·H级须显性词）`);
+    expect(draftOut).not.toContain('须出现关键词：');
+    const summary = renderTaskSummaryBlock({ mustHaveBeats: [beat] });
+    expect(summary).toContain(`· ${text}（落地·H级须显性词）`);
+    expect(summary).not.toContain('须出现关键词：');
   });
 });
