@@ -36,7 +36,7 @@ import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, parseLandingMandate } from '@i
 import { runSummarizeStep } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
-import { parseBlueprint, parseOutline, parseOutlineTree } from '../llm/plainproto';
+import { parseBlueprint, parseOutline, parseOutlineTree, type ParsedBlueprint } from '../llm/plainproto';
 import { repairPrompt } from '../quality/l1';
 import { renderBlueprintTask, renderCharacterCards, renderOutlineCardSchedule, renderOutlineCheckTask, renderOutlineTask, renderOutlineTreeBrief, renderOutlineTreeTask } from '../prompts/render';
 import type { AppConfig } from '../config';
@@ -458,14 +458,29 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       meta: { step: 'summarize' as const, chapterNo },
     });
 
+    const cardLanding = outlineCard ? parseLandingCell(outlineCard.body) : null;
+    // 主审裁决 2026-11-22：仅当该章无确定性落地时才要求模型出 LANDING（卡有书零扰动零额外重试）；mandate 不参与判定，mandateOn 变量不引入
+    const expectsLanding = cardLanding === null || cardLanding.keywords.length === 0;
+    const landingOk = (r: ParsedBlueprint): boolean =>
+      r.landingRaw !== null && parseLandingCell(r.landingRaw) !== null && parseLandingCell(r.landingRaw)!.keywords.length > 0;
+    const warnings: string[] = [];
+
     const first = parseBlueprint((await plannerProvider.complete(baseReq(assembled.user))).text);
     let report = first;
-    if (first.errors.length > 0) {
+    if (first.errors.length > 0 || (expectsLanding && !landingOk(first))) {
       report = parseBlueprint(
-        (await plannerProvider.complete(baseReq(`${assembled.user}\n\n${repairPrompt(first.errors)}`))).text,
+        (await plannerProvider.complete(baseReq(`${assembled.user}\n\n${repairPrompt(first.errors)}\n输出必须含一行 LANDING: H（场景）形态落地格`))).text,
       );
     }
     if (report.errors.length > 0) return reply.code(502).send({ error: 'blueprint parse failed', errors: report.errors });
+    // 终态不合格绝不 500，走 warnings 降级
+    if (expectsLanding && !landingOk(report)) {
+      warnings.push(
+        report.landingRaw === null
+          ? 'planner 未输出 LANDING 落地格行，已按无模型落地格处理'
+          : 'planner LANDING 落地格不合格，已丢弃',
+      );
+    }
     // 确定性叠加（DEC-2026-1120-10）：落地格解析结果直接合并（含 grade），不依赖模型输出；parseBlueprint 恒产 mustHaveBeats:[]，并集语义面向未来
     if (outlineCard) {
       const landing = parseLandingCell(outlineCard.body);
@@ -473,7 +488,15 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
         report.blueprint.mustHaveBeats = [...report.blueprint.mustHaveBeats, { text: outlineCard.body.trim(), keywords: landing.keywords, grade: landing.grade }];
       }
     }
-    reply.send({ blueprint: report.blueprint, source: 'llm' });
+    // 层②模型 LANDING 叠加：卡条目排前=卡优先；模型条目不写 source（与卡同旧语义）
+    if (landingOk(report)) {
+      const cell = parseLandingCell(report.landingRaw!)!;
+      const text = report.landingRaw!.trim();
+      if (!report.blueprint.mustHaveBeats.some((m) => m.text.trim() === text)) {
+        report.blueprint.mustHaveBeats = [...report.blueprint.mustHaveBeats, { text, keywords: cell.keywords, grade: cell.grade }];
+      }
+    }
+    reply.send({ blueprint: report.blueprint, source: 'llm', ...(warnings.length > 0 ? { warnings } : {}) });
   });
 
   app.post('/api/books/:bookId/outline-suggest', async (req, reply) => {

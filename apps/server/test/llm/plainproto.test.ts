@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAnalysis, parseFindings, parseOutlineTree, parseSummary } from '../../src/llm/plainproto';
+import { parseAnalysis, parseBlueprint, parseFindings, parseOutlineTree, parseSummary } from '../../src/llm/plainproto';
 
 const SAMPLE = `OVERALL: 7
 ---
@@ -210,5 +210,29 @@ RULES: 平均句长 10-20 字。`);
     expect(messy.freqTerms).toEqual([{ term: '落雪', note: '冬日场景惯用意象' }]);
     expect(parseAnalysis('FREQTERMS: : 说明').freqTerms).toEqual([]);
     expect(parseAnalysis('FREQTERMS: : 说明').errors.some((e) => e.includes('高频词为空'))).toBe(true);
+  });
+});
+
+describe('parseBlueprint LANDING 行（DEC-2026-1122-01）', () => {
+  const BASE = 'GOAL: 主角踏入试炼第六层\nBEATS:\n- 发现入口\nHOOK: 身后石门闭合';
+
+  it('LANDING 行捕获 → landingRaw 原文', () => {
+    const r = parseBlueprint(`${BASE}\nLANDING: H（撞见场：房东×阿美）`);
+    expect(r.landingRaw).toBe('H（撞见场：房东×阿美）');
+    expect(r.landingErrors).toEqual([]);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('双 LANDING 行 → landingErrors=[\'多余 LANDING 行\']', () => {
+    const r = parseBlueprint(`${BASE}\nLANDING: H（撞见场：房东×阿美）\nLANDING: L（借宿夜：表哥家中）`);
+    expect(r.landingRaw).toBe('H（撞见场：房东×阿美）');
+    expect(r.landingErrors).toEqual(['多余 LANDING 行']);
+  });
+
+  it('无 LANDING 行 → landingRaw null 且 errors 不含 LANDING', () => {
+    const r = parseBlueprint(BASE);
+    expect(r.landingRaw).toBeNull();
+    expect(r.landingErrors).toEqual([]);
+    expect(r.errors.some((e) => e.includes('LANDING'))).toBe(false);
   });
 });

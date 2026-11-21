@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
 import { openDb } from '../../src/db/open';
-import { createDefaultMockProvider, createMockProvider } from '../../src/llm/mock';
+import { createDefaultMockProvider, createMockProvider, type MockScript } from '../../src/llm/mock';
 import { upsertBlueprint } from '../../src/db/repositories/chapters';
 import type { CompletionRequest, LlmProvider } from '../../src/llm/types';
 
@@ -137,6 +137,93 @@ describe('PUT blueprint 保存保留既有 mustHaveBeats（DEC-2026-1120-10 防�
     expect(await savedBeats()).toEqual([
       { text: 'X（场景一）', keywords: ['场景一'], grade: 'H' },
       { text: 'Y（场景二）', keywords: ['场景二'] },
+    ]);
+  });
+});
+
+describe('planner LANDING 落地格槽（DEC-2026-1122-01）', () => {
+  type Harness = {
+    app: Awaited<ReturnType<typeof buildApp>>;
+    bookId: string;
+    plannerCalls: CompletionRequest[];
+  };
+  let h: Harness;
+
+  afterEach(async () => { await h?.app.close(); });
+
+  const makeHarness = async (summarize: MockScript['summarize']): Promise<Harness> => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-bp-landing-'));
+    const config = loadConfig({
+      STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs',
+      INKFORGE_DATA_DIR: path.join(dir, 'srv'),
+    });
+    const plannerCalls: CompletionRequest[] = [];
+    const inner = createMockProvider({ summarize });
+    const plannerProvider: LlmProvider = {
+      async complete(req) { plannerCalls.push(req); return inner.complete(req); },
+    };
+    const db = openDb(path.join(config.dataDir, 'inkforge.db'));
+    const app = await buildApp({ config, provider: createDefaultMockProvider(), plannerProvider, db, inlineQueue: true });
+    const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: 'LANDING 测书' } });
+    const bookId = (created.json() as { id: string }).id;
+    const put = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/outline-tree`, payload: { tree: TREE } });
+    expect(put.statusCode).toBe(200);
+    return { app, bookId, plannerCalls };
+  };
+
+  const withLanding = (cell: string) => `${BLUEPRINT_TEXT}\nLANDING: ${cell}`;
+
+  it('模型输出合规 LANDING → 与卡并集、text 重复时卡优先', async () => {
+    h = await makeHarness({
+      sequence: [
+        { text: withLanding('H（撞见场：房东×阿美）') },
+        { text: withLanding('L（借宿夜：表哥家中）') },
+      ],
+    });
+    const dup = await h.app.inject({ method: 'POST', url: `/api/books/${h.bookId}/blueprint-suggest`, payload: { chapterNo: 1 } });
+    expect(dup.statusCode).toBe(200);
+    expect((dup.json() as { blueprint: { mustHaveBeats: Array<{ text: string }> } }).blueprint.mustHaveBeats).toEqual([
+      { text: 'H（撞见场：房东×阿美）', keywords: ['撞见场', '房东', '阿美'], grade: 'H' },
+    ]);
+    const union = await h.app.inject({ method: 'POST', url: `/api/books/${h.bookId}/blueprint-suggest`, payload: { chapterNo: 1 } });
+    expect(union.statusCode).toBe(200);
+    expect((union.json() as { blueprint: { mustHaveBeats: Array<{ text: string }> } }).blueprint.mustHaveBeats).toEqual([
+      { text: 'H（撞见场：房东×阿美）', keywords: ['撞见场', '房东', '阿美'], grade: 'H' },
+      { text: 'L（借宿夜：表哥家中）', keywords: ['借宿夜', '表哥家中'], grade: 'L' },
+    ]);
+  });
+
+  it('LANDING 不合格（LANDING: X（场景））→ 重试 1 次后丢弃 + warnings 告知，响应 200', async () => {
+    h = await makeHarness({ text: withLanding('X（场景）') });
+    const sug = await h.app.inject({ method: 'POST', url: `/api/books/${h.bookId}/blueprint-suggest`, payload: { chapterNo: 9 } });
+    expect(sug.statusCode).toBe(200);
+    expect(h.plannerCalls.length).toBe(2);
+    const body = sug.json() as { blueprint: { mustHaveBeats: unknown[] }; warnings?: string[] };
+    expect(body.warnings?.length).toBe(1);
+    expect(body.warnings?.[0]).toContain('不合格');
+    expect(body.blueprint.mustHaveBeats).toEqual([]);
+  });
+
+  it('无卡命中章（chapterNo=9）→ 有 LANDING 期望：mock 无 LANDING → 重试恰 1 次→丢弃+warnings 恰 1 条，响应 200 且 mustHaveBeats 仍 []', async () => {
+    h = await makeHarness({ text: BLUEPRINT_TEXT });
+    const sug = await h.app.inject({ method: 'POST', url: `/api/books/${h.bookId}/blueprint-suggest`, payload: { chapterNo: 9 } });
+    expect(sug.statusCode).toBe(200);
+    expect(h.plannerCalls.length).toBe(2);
+    const body = sug.json() as { blueprint: { mustHaveBeats: unknown[] }; warnings?: string[] };
+    expect(body.warnings?.length).toBe(1);
+    expect(body.warnings?.[0]).toContain('未输出 LANDING');
+    expect(body.blueprint.mustHaveBeats).toEqual([]);
+  });
+
+  it('卡命中章（chapterNo=1）→ 无 LANDING 期望：plannerCalls 恰 1、响应无 warnings 键', async () => {
+    h = await makeHarness({ text: BLUEPRINT_TEXT });
+    const sug = await h.app.inject({ method: 'POST', url: `/api/books/${h.bookId}/blueprint-suggest`, payload: { chapterNo: 1 } });
+    expect(sug.statusCode).toBe(200);
+    expect(h.plannerCalls.length).toBe(1);
+    const body = sug.json() as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(body, 'warnings')).toBe(false);
+    expect((body as { blueprint: { mustHaveBeats: Array<{ text: string }> } }).blueprint.mustHaveBeats).toEqual([
+      { text: 'H（撞见场：房东×阿美）', keywords: ['撞见场', '房东', '阿美'], grade: 'H' },
     ]);
   });
 });

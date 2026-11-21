@@ -136,11 +136,13 @@ export function parseSummary(raw: string): ParsedSummary {
 export interface ParsedBlueprint {
   blueprint: ChapterBlueprint;
   errors: string[];
+  landingRaw: string | null;
+  landingErrors: string[];
 }
 
 const MAX_BLUEPRINT_BEATS = 6;
 
-/** 蓝图行协议解析（GOAL:/BEATS - 条目/HOOK:）。容忍 CRLF、代码围栏与多余空行。 */
+/** 蓝图行协议解析（GOAL:/BEATS 条目/HOOK:/LANDING:）。容忍 CRLF、代码围栏与多余空行。LANDING 缺行不进 errors（强制在路由层）。 */
 export function parseBlueprint(raw: string): ParsedBlueprint {
   const errors: string[] = [];
   const lines = raw
@@ -150,6 +152,8 @@ export function parseBlueprint(raw: string): ParsedBlueprint {
 
   let goal = '';
   let hook = '';
+  let landingRaw: string | null = null;
+  const landingErrors: string[] = [];
   let inBeats = false;
   const beats: string[] = [];
 
@@ -164,6 +168,13 @@ export function parseBlueprint(raw: string): ParsedBlueprint {
     const hookMatch = /^HOOK\s*[:：]\s*(.*)$/.exec(text);
     if (hookMatch) {
       if (hook === '' && hookMatch[1].trim() !== '') hook = hookMatch[1].trim();
+      inBeats = false;
+      continue;
+    }
+    const landingMatch = /^LANDING\s*[:：]\s*(.*)$/.exec(text);
+    if (landingMatch) {
+      if (landingRaw === null) landingRaw = landingMatch[1].trim();
+      else landingErrors.push('多余 LANDING 行');
       inBeats = false;
       continue;
     }
@@ -196,6 +207,8 @@ export function parseBlueprint(raw: string): ParsedBlueprint {
   return {
     blueprint: { goal, beats, mustHaveBeats: [], bannedTopics: [] },
     errors,
+    landingRaw,
+    landingErrors,
   };
 }
 
