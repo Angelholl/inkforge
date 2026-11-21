@@ -110,6 +110,40 @@ describe('SettingsImportPanel', () => {
     expect(applyBody.draft.importStyle).toBe(false);
   });
 
+  it('文风步在途 → 确认按钮显示蒸馏进度文案，收口后复原（owner 2026-11-21 反馈）', async () => {
+    let resolveApply!: (r: Response) => void;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/settings-import/preview') && init?.method === 'POST') {
+        return new Response(JSON.stringify(DRAFT), { status: 200 });
+      }
+      if (url.endsWith('/api/settings-import/apply') && init?.method === 'POST') {
+        return new Promise<Response>((res) => {
+          resolveApply = res;
+        });
+      }
+      return new Response('[]', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onApplied = vi.fn<(a: SettingsImportApplied) => void>();
+    render(<SettingsImportPanel onApplied={onApplied} />);
+
+    fireEvent.change(screen.getByLabelText('设定集全文'), { target: { value: '# 《示例》设定集' } });
+    fireEvent.click(screen.getByRole('button', { name: '解析预览' }));
+    await waitFor(() => expect(screen.getByLabelText('导入文风节为风格档案并绑定本书')).toBeTruthy());
+
+    // importStyle=true + 文风节非空 → 慢路径：在途按钮=进度文案且禁用
+    fireEvent.click(screen.getByRole('button', { name: '确认导入建书' }));
+    const busyBtn = (await waitFor(() =>
+      screen.getByRole('button', { name: '正在蒸馏文风档案…约需数分钟' }),
+    )) as HTMLButtonElement;
+    expect(busyBtn.disabled).toBe(true);
+
+    // apply 返回 → 文案复原
+    resolveApply(new Response(JSON.stringify(APPLY_RESULT), { status: 201 }));
+    await waitFor(() => expect(onApplied).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: '确认导入建书' })).toBeTruthy();
+  });
+
   it('preview 失败 → 错误文案呈现', async () => {
     vi.stubGlobal(
       'fetch',

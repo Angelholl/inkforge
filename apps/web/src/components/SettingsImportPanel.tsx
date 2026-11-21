@@ -49,6 +49,7 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
   const [fileInfo, setFileInfo] = useState('');
   const [draft, setDraft] = useState<SettingsImportDraftDto | null>(null);
   const [busy, setBusy] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -68,6 +69,7 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
     if (!draft) return;
     setError('');
     setBusy(true);
+    setApplying(true);
     try {
       const result = await api.importSettingsApply({ content: rawText, draft });
       onApplied({ result, draft });
@@ -75,6 +77,7 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
       setError(String(e));
     } finally {
       setBusy(false);
+      setApplying(false);
     }
   };
 
@@ -281,7 +284,12 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
             </ul>
           )}
           <Button variant="primary" disabled={busy || draft.title.trim() === ''} onClick={() => void apply()}>
-            确认导入建书
+            {/* 文风步=服务端同步 LLM 调用（实测 2-3 分钟级），在途须给进度文案防误判卡死（owner 2026-11-21 反馈） */}
+            {applying && draft.importStyle && draft.styleSection.trim() !== ''
+              ? '正在蒸馏文风档案…约需数分钟'
+              : applying
+                ? '导入中…'
+                : '确认导入建书'}
           </Button>
         </div>
       )}
