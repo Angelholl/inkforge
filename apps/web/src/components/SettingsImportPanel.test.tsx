@@ -160,4 +160,60 @@ describe('SettingsImportPanel', () => {
     await waitFor(() => expect(screen.getByText(/500/)).toBeTruthy());
     expect(screen.queryByLabelText('书名')).toBeNull();
   });
+
+  it('勾选「启用书级落地策略」→ apply 请求体钉 landingMandate:{enabled:true,heavyEveryN:2}', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/settings-import/preview') && init?.method === 'POST') {
+        return new Response(JSON.stringify(DRAFT), { status: 200 });
+      }
+      if (url.endsWith('/api/settings-import/apply') && init?.method === 'POST') {
+        return new Response(JSON.stringify(APPLY_RESULT), { status: 201 });
+      }
+      return new Response('[]', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SettingsImportPanel onApplied={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('设定集全文'), { target: { value: '# 《示例》设定集' } });
+    fireEvent.click(screen.getByRole('button', { name: '解析预览' }));
+    const toggle = (await screen.findByLabelText('启用书级落地策略')) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: '确认导入建书' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/api/settings-import/apply'))).toBe(true),
+    );
+    const applyCall = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/settings-import/apply'))!;
+    const applyBody = JSON.parse(String(applyCall[1]?.body));
+    expect(applyBody.landingMandate).toEqual({ enabled: true, heavyEveryN: 2 });
+  });
+
+  it('默认不勾 → apply 请求体 landingMandate.enabled=false（N 固定 2）', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/settings-import/preview') && init?.method === 'POST') {
+        return new Response(JSON.stringify(DRAFT), { status: 200 });
+      }
+      if (url.endsWith('/api/settings-import/apply') && init?.method === 'POST') {
+        return new Response(JSON.stringify(APPLY_RESULT), { status: 201 });
+      }
+      return new Response('[]', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SettingsImportPanel onApplied={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('设定集全文'), { target: { value: '# 《示例》设定集' } });
+    fireEvent.click(screen.getByRole('button', { name: '解析预览' }));
+    const toggle = (await screen.findByLabelText('启用书级落地策略')) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: '确认导入建书' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/api/settings-import/apply'))).toBe(true),
+    );
+    const applyCall = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/api/settings-import/apply'))!;
+    const applyBody = JSON.parse(String(applyCall[1]?.body));
+    expect(applyBody.landingMandate).toEqual({ enabled: false, heavyEveryN: 2 });
+  });
 });

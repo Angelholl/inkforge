@@ -300,6 +300,56 @@ describe('BookDetailPage', () => {
     expect(JSON.parse(String((oneCall!.init as RequestInit).body))).toEqual({ maxRounds: 3 });
   });
 
+  it('落地策略下拉渲染当前值：book.landingMandate=cadence/N=2 → 值为 cadence-2', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/api/books/b1/characters')) return jsonResponse([]);
+        if (u.includes('/api/books/b1')) {
+          return jsonResponse({ ...book, landingMandate: { mode: 'cadence', heavyEveryN: 2 } });
+        }
+        return jsonResponse({});
+      }),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const sel = (await screen.findByLabelText('落地策略')) as HTMLSelectElement;
+    await waitFor(() => expect(sel.value).toBe('cadence-2'));
+  });
+
+  it('切到「分级制每2章重」→ PUT /meta body 钉 landingMandate:{mode:\'cadence\',heavyEveryN:2}', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    // 等 book 数据落定，避免 4s 轮询/初值同步与本次变更竞争
+    await waitFor(() => expect((screen.getByLabelText('世界观') as HTMLTextAreaElement).value).toBe('旧世界观'));
+    const sel = (await screen.findByLabelText('落地策略')) as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: 'cadence-2' } });
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.endsWith('/api/books/b1/meta') && c.init?.method === 'PUT')).toBe(true),
+    );
+    const metaPut = calls.find((c) => c.url.endsWith('/api/books/b1/meta') && c.init?.method === 'PUT')!;
+    expect(JSON.parse(String((metaPut.init as RequestInit).body))).toEqual({
+      landingMandate: { mode: 'cadence', heavyEveryN: 2 },
+    });
+  });
+
   it('删章：确认门文案 → 确认删发 DELETE /chapters/2 → 行消失（DEC-2026-1120-02）', async () => {
     installFetchStub();
     render(

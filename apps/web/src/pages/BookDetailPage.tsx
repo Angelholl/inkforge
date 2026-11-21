@@ -21,6 +21,9 @@ const SECTIONS = [
   { id: 'sec-blueprint', label: '蓝图' },
 ] as const;
 
+/** 落地策略三态（DEC-2026-1122-01 Task-04）：off=关 / cadence-2=分级制每2章重 / cadence-custom=自定义N。 */
+type MandateChoice = 'off' | 'cadence-2' | 'cadence-custom';
+
 /** 锚点条滚动跟随（评议员 R4：禁 IntersectionObserver——jsdom 无此 API；scroll 监听+rAF 节流）。 */
 function useActiveSection(enabled: boolean): string {
   const [active, setActive] = useState<string>(SECTIONS[0].id);
@@ -345,6 +348,10 @@ export default function BookDetailPage() {
   const [chapterNo, setChapterNo] = useState(1);
   // B3：本页一枚 select 统管本页三个生成入口（单章/整书/行内），默认 2 = 服务端默认
   const [maxRounds, setMaxRounds] = useState(2);
+  // 落地策略（DEC-2026-1122-01 Task-04）：三态初值由 book.landingMandate 同步一次（防 4s 轮询覆盖用户未落库的编辑）
+  const [mandateChoice, setMandateChoice] = useState<MandateChoice>('off');
+  const [mandateN, setMandateN] = useState(2);
+  const mandateSyncedRef = useRef(false);
   // 蓝图编辑区（owner 反馈②④）：章号默认接续末章；字数随章号同步（防 4s 轮询覆盖编辑，仅章号变化时重置）
   const [targetChars, setTargetChars] = useState(3000);
   const [suggesting, setSuggesting] = useState(false);
@@ -373,6 +380,19 @@ export default function BookDetailPage() {
       setOutlineText(book.outline);
       metaSyncedRef.current = true;
     }
+  }, [book]);
+
+  // 落地策略初值：null/off→off；heavyEveryN===2→cadence-2；其余→custom（沿 meta 同步一次的纪律）
+  useEffect(() => {
+    if (!book || mandateSyncedRef.current) return;
+    const m = book.landingMandate;
+    if (!m || m.mode === 'off') setMandateChoice('off');
+    else if (m.heavyEveryN === 2) setMandateChoice('cadence-2');
+    else {
+      setMandateChoice('cadence-custom');
+      setMandateN(m.heavyEveryN ?? 3);
+    }
+    mandateSyncedRef.current = true;
   }, [book]);
 
   useEffect(() => {
@@ -477,6 +497,22 @@ export default function BookDetailPage() {
       void refetch();
     } catch (e) {
       setMsg(`设定保存失败：${(e as Error).message}`);
+    }
+  };
+
+  // 落地策略变更即单独 PUT meta（off 发 {mode:'off'}；不与 saveMeta 的 description/outline 合批，互不覆盖）
+  const saveMandate = async (choice: MandateChoice, n: number) => {
+    try {
+      if (choice === 'off') {
+        await api.putBookMeta(bookId, { landingMandate: { mode: 'off' } });
+        setMsg('落地策略已保存：关闭');
+      } else {
+        const heavyEveryN = choice === 'cadence-2' ? 2 : n;
+        await api.putBookMeta(bookId, { landingMandate: { mode: 'cadence', heavyEveryN } });
+        setMsg(`落地策略已保存：分级制每${heavyEveryN}章一重`);
+      }
+    } catch (e) {
+      setMsg(`落地策略保存失败：${apiErrorText(e)}`);
     }
   };
 
@@ -620,6 +656,41 @@ export default function BookDetailPage() {
             <option value={3}>3 轮</option>
           </select>
         </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          落地策略
+          <select
+            aria-label="落地策略"
+            className={`${selectBase} w-32`}
+            value={mandateChoice}
+            onChange={(e) => {
+              const choice = e.target.value as MandateChoice;
+              setMandateChoice(choice);
+              void saveMandate(choice, mandateN);
+            }}
+          >
+            <option value="off">关</option>
+            <option value="cadence-2">分级制每2章重</option>
+            <option value="cadence-custom">自定义N</option>
+          </select>
+        </label>
+        {mandateChoice === 'cadence-custom' && (
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <input
+              type="number"
+              aria-label="每N章一重"
+              className={inputNarrow}
+              min={2}
+              max={50}
+              value={mandateN}
+              onChange={(e) => {
+                const raw = Number(e.target.value);
+                const n = Number.isInteger(raw) ? Math.max(2, Math.min(50, raw)) : 2;
+                setMandateN(n);
+                void saveMandate('cadence-custom', n);
+              }}
+            />
+          </label>
+        )}
         <Button
           variant="quiet"
           iconOnly

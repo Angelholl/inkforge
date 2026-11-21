@@ -341,3 +341,38 @@ describe('POST /api/settings-import/apply 落章骨架（DEC-2026-1120-10）', (
     expect(book.chapters[5]).toMatchObject({ title: '章十一', blueprint: { mustHaveBeats: [{ text: 'L（场景丙）', keywords: ['场景丙'], grade: 'L' }] } });
   });
 });
+
+// 勾选才写 mandate（DEC-2026-1122-01 Task-04）：apply 事务内与建书同生共死；不带字段零写入=新书 null
+describe('POST /api/settings-import/apply 勾选落地策略（DEC-2026-1122-01 Task-04）', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await makeApp('');
+  });
+  afterAll(() => teardown(h));
+
+  it('apply 带 landingMandate:{enabled:true,heavyEveryN:3} → 书 landingMandate 钉值 {mode:\'cadence\',heavyEveryN:3}', async () => {
+    const draft = await previewDraft(h.app, LANDING_COMPENDIUM);
+    const r = await h.app.inject({
+      method: 'POST',
+      url: '/api/settings-import/apply',
+      payload: { content: LANDING_COMPENDIUM, draft, landingMandate: { enabled: true, heavyEveryN: 3 } },
+    });
+    expect(r.statusCode).toBe(201);
+    const { bookId } = r.json() as { bookId: string };
+    const book = (await h.app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as { landingMandate: unknown };
+    expect(book.landingMandate).toEqual({ mode: 'cadence', heavyEveryN: 3 });
+  });
+
+  it('apply 不带 landingMandate → 新书 landingMandate null（enabled=false 零写入）', async () => {
+    const draft = await previewDraft(h.app, LANDING_COMPENDIUM);
+    const r = await h.app.inject({
+      method: 'POST',
+      url: '/api/settings-import/apply',
+      payload: { content: LANDING_COMPENDIUM, draft },
+    });
+    expect(r.statusCode).toBe(201);
+    const { bookId } = r.json() as { bookId: string };
+    const book = (await h.app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as { landingMandate: unknown };
+    expect(book.landingMandate).toBeNull();
+  });
+});

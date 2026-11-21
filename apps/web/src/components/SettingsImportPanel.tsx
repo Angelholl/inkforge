@@ -51,6 +51,8 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
   const [busy, setBusy] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState('');
+  // 勾选才写 mandate（DEC-2026-1122-01 Task-04）：默认不勾；N 固定 2，自定义 N 走书籍设置
+  const [mandateEnabled, setMandateEnabled] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const preview = async () => {
@@ -71,7 +73,11 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
     setBusy(true);
     setApplying(true);
     try {
-      const result = await api.importSettingsApply({ content: rawText, draft });
+      const result = await api.importSettingsApply({
+        content: rawText,
+        draft,
+        landingMandate: { enabled: mandateEnabled, heavyEveryN: 2 },
+      });
       onApplied({ result, draft });
     } catch (e) {
       setError(String(e));
@@ -276,6 +282,17 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
               导入文风节为风格档案并绑定本书
             </label>
           )}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className={checkboxBase}
+              aria-label="启用书级落地策略"
+              title="逐章表无落地格时按每 N 章一重的书级策略合成节拍"
+              checked={mandateEnabled}
+              onChange={(e) => setMandateEnabled(e.target.checked)}
+            />
+            启用书级落地策略
+          </label>
           {draft.warnings.length > 0 && (
             <ul className="list-disc space-y-1 pl-6 text-sm text-muted" aria-label="设定集解析警示">
               {draft.warnings.map((w, i) => (

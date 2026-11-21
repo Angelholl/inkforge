@@ -293,6 +293,13 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
         for (const f of d.foreshadowings) {
           continuityRepo.upsertForeshadowing(db, { bookId: book.id, description: f.description, plantedCh: f.plantedCh });
         }
+        // 勾选才写 mandate（DEC-2026-1122-01 Task-04）：enabled=true 时在同一事务内写 cadence（N 取钉值），
+        // 失败随建书回滚=与书同生共死；未勾选/默认 false 零写入（新书 landingMandate=null=off）
+        if (body.landingMandate.enabled) {
+          booksRepo.updateBookMeta(db, book.id, {
+            landingMandate: { mode: 'cadence', heavyEveryN: body.landingMandate.heavyEveryN },
+          });
+        }
         return book.id;
       })();
     } catch (e) {
