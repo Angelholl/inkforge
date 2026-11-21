@@ -100,7 +100,7 @@ const envSchema = z.object({
 // 现槽合计≈10k，扩容余量巨大且只对长设定内容生效（短设定按实际长度取用），溢出收缩逻辑不会触发。
 const BUDGETS_DRAFT: DraftBudgets = {
   hardRules: 500,
-  worldview: 16000,
+  worldview: 20000, // DEC-2026-1121-01：16000→20000（owner 令，长设定集余量不足）
   characters: 8000,
   styleRules: 1000,
   styleDims: 1600,
@@ -136,7 +136,7 @@ const BUDGETS_REWRITE: RewriteBudgets = {
 };
 const BUDGETS_PLANNER: PlannerBudgets = { hardRules: 300, continuity: 1500, prevTail: 1500, task: 800 }; // 300→800：renderBlueprintTask 协议行占 ~210 后书籍简介仅剩 ~90 字（DEC-2026-1120-10）
 // DEC-2026-1120-04① 同步扩槽（blueprint-suggest / outline-tree-suggest 槽）
-const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 16000, characters: 8000, outline: 8000, task: 600 };
+const BUDGETS_OUTLINE: OutlineBudgets = { hardRules: 300, worldview: 20000, characters: 8000, outline: 8000, task: 600 }; // worldview 20000：DEC-2026-1121-01
 
 export function pickBudgetProfile(contextWindow: number): 'draft' | 'draft8k' {
   return contextWindow <= 8192 ? 'draft8k' : 'draft';

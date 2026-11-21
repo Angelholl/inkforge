@@ -5,8 +5,8 @@ import { Button } from './ui';
 import { checkboxBase, inputBase, inputNarrow, textareaBase } from './Field';
 import { decodeTextFile } from './textFile';
 
-// 槽位预算（config BUDGETS_DRAFT.worldview / BUDGETS_OUTLINE.outline，DEC-2026-1120-04① 扩槽后）
-const DESCRIPTION_BUDGET = 16000;
+// 槽位预算（config BUDGETS_DRAFT.worldview / BUDGETS_OUTLINE.outline，DEC-2026-1121-01 增至 20000）
+const DESCRIPTION_BUDGET = 20000;
 const OUTLINE_BUDGET = 8000;
 
 export interface SettingsImportApplied {

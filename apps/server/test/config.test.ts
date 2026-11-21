@@ -31,7 +31,7 @@ describe('loadConfig', () => {
     });
     expect(c.budgets.draft).toEqual({
       hardRules: 500,
-      worldview: 16000,
+      worldview: 20000,
       characters: 8000,
       styleRules: 1000,
       styleDims: 1600,
@@ -149,6 +149,6 @@ describe('pickBudgetProfile', () => {
 describe('budgets.outline', () => {
   it('钉值', () => {
     const c = loadConfig(LEGAL_ENV);
-    expect(c.budgets.outline).toEqual({ hardRules: 300, worldview: 16000, characters: 8000, outline: 8000, task: 600 });
+    expect(c.budgets.outline).toEqual({ hardRules: 300, worldview: 20000, characters: 8000, outline: 8000, task: 600 });
   });
 });

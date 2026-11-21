@@ -157,10 +157,10 @@ describe('parseSettingsCompendium', () => {
     expect(d.warnings).toEqual([]);
   });
 
-  it('超长 description/outline → 预算 warning（拍板①扩槽阈值 16000/8000）', () => {
-    const longWorld = `# 《长文》设定集\n\n> 定位一句话。\n\n## 3. 世界观\n\n${'长'.repeat(17000)}\n\n## 6. 总大纲\n\n### 卷一 《题》（第 1–2 章）——${'纲'.repeat(9000)}\n`;
+  it('超长 description/outline → 预算 warning（扩槽阈值 20000/8000，DEC-2026-1121-01）', () => {
+    const longWorld = `# 《长文》设定集\n\n> 定位一句话。\n\n## 3. 世界观\n\n${'长'.repeat(21000)}\n\n## 6. 总大纲\n\n### 卷一 《题》（第 1–2 章）——${'纲'.repeat(9000)}\n`;
     const w = parseSettingsCompendium(longWorld);
-    expect(w.warnings.some((x) => x.includes('16000'))).toBe(true);
+    expect(w.warnings.some((x) => x.includes('20000'))).toBe(true);
     expect(w.warnings.some((x) => x.includes('8000'))).toBe(true);
   });
 
@@ -281,7 +281,7 @@ describe('parseSettingsCompendium', () => {
 | 主角×阿珍 | 3 | B·2 | B·4/6 |
 `;
 
-  it('v3 description：全文精炼前置（定位句起头、文档序、表格压行、无 markdown 残留、<16000 零警示）', () => {
+  it('v3 description：全文精炼前置（定位句起头、文档序、表格压行、无 markdown 残留、<20000 零警示）', () => {
     const d = parseSettingsCompendium(V3_FIXTURE);
     expect(d.description).toContain('定位一句话：多线穿插的都市群像连载');
     expect(d.description).toContain('虚构港市');
@@ -293,7 +293,7 @@ describe('parseSettingsCompendium', () => {
     expect(d.description).not.toContain('#');
     expect(d.description).not.toContain('**');
     expect(d.description).not.toContain('`[前置注]`');
-    expect(d.description.length).toBeLessThan(16000);
+    expect(d.description.length).toBeLessThan(20000);
     expect(d.warnings).toEqual([]);
   });
 

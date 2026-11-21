@@ -8,8 +8,8 @@ import type {
   SettingsImportForeshadowingDraft,
 } from '@inkforge/shared';
 
-// ── 预算警示阈值：与 config.ts BUDGETS_DRAFT.worldview / BUDGETS_OUTLINE.outline 对齐（DEC-2026-1120-04① 完全加载扩槽）──
-const DESCRIPTION_BUDGET = 16000;
+// ── 预算警示阈值：与 config.ts BUDGETS_DRAFT.worldview / BUDGETS_OUTLINE.outline 对齐（DEC-2026-1120-04① 扩槽；DEC-2026-1121-01 增至 20000）──
+const DESCRIPTION_BUDGET = 20000;
 const OUTLINE_BUDGET = 8000;
 const CARDS_CAP = 200;
 const FORESHADOWINGS_CAP = 50;
@@ -484,7 +484,7 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
     title = doc.h1.replace(/[·\-\s]*(?:扩写)?设定集\s*$/, '').trim().slice(0, 40);
   }
 
-  // description = 全文精炼前置（追加裁决：定位句起头、文档序、表格压行，v3 全文≈1.3 万字恰在 16000 预算内）
+  // description = 全文精炼前置（追加裁决：定位句起头、文档序、表格压行；v3 全文≈1.3 万字，v4 至 20000 预算内）
   const description = refineForDescription(raw);
   if (description.length > DESCRIPTION_BUDGET) {
     warnings.push(`description 现有 ${description.length} 字，超出世界观槽预算 ${DESCRIPTION_BUDGET} 字的部分在生成时会被截断，建议精炼`);
