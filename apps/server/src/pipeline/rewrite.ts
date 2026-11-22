@@ -58,9 +58,15 @@ export function buildRewriteSlots(input: RewriteSlotsInput, budgets: AppConfig['
   const slots: ContextSlot[] = [
     { name: 'hardRules', content: input.hardRules ?? '', budgetChars: budgets.hardRules, stable: true, keep: 'head' },
   ];
-  // B1：targeted 重写同样注入风格精简槽（有值才插，紧随 hardRules，stable 进 system）
+  // B1：targeted 重写同样注入风格精简槽（有值才插，紧随 hardRules，stable 进 system）；styleDims/fewShot 同（DEC-2026-1122-03①）
   if (input.styleRules && input.styleRules.length > 0) {
     slots.push({ name: 'styleRules', content: input.styleRules, budgetChars: budgets.styleRules, stable: true, keep: 'head' });
+  }
+  if (input.styleDims && input.styleDims.length > 0) {
+    slots.push({ name: 'styleDims', content: input.styleDims, budgetChars: budgets.styleDims, stable: true, keep: 'head' });
+  }
+  if (input.fewShot) {
+    slots.push({ name: 'fewShot', content: input.fewShot, budgetChars: budgets.fewShot, stable: false, keep: 'head' });
   }
   slots.push(
     { name: 'original', content: input.original, budgetChars: budgets.original, stable: false, keep: 'head' },

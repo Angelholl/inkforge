@@ -204,9 +204,9 @@ export async function runChapterPipeline(
       styleSamples = merged.samples;
       styleSampleIds = styleSamples.map((x) => x.id);
     }
-    // B1：七维六轴画像文本与 fewShot 块提前装配（draft 与 full 重写共用同一块；targeted 只补 styleRules 精简槽）
+    // B1：七维六轴画像文本与 fewShot 块提前装配（draft 与 full 重写共用同一块；targeted 补 styleRules+styleDims+fewShot 精简槽，DEC-2026-1122-03①）
     const styleDimsText = styleDims && styleAxes ? renderStyleDimsBlock(styleDims, styleAxes, config.budgets.draft.styleDims) : '';
-    // B4 裁决④：fewShot 块受逐书开关控制（默认关）；styleSamples 采集、styleSampleIds 记录、抄用检测（:289 referenceTexts）一概不看开关
+    // B4 裁决④：fewShot 块受逐书开关控制（默认关）；styleSamples 采集、styleSampleIds 记录、抄用检测（:289 referenceTexts）一概不看开关；绑定默认开由 DEC-2026-1122-03③ 落地
     const fewShotBlock =
       book.styleFewshotOn && styleSamples.length > 0
         ? renderStyleBlock('', styleSamples, config.budgets.draft.fewShot, styleTerms)
@@ -323,15 +323,27 @@ export async function runChapterPipeline(
       const clicheFix = l0.clicheHits.length > 0 ? `以下套话句必须整句删除或改写（不得保留原句式）：${l0.clicheHits.map((h) => `「${h}」`).join('、')}。` : '';
       const echoFix = l0.checks.find((c) => c.name === 'echo_20gram' && !c.pass) ? '正文与前文存在 20 字以上连续复文，必须彻底改写复文段，不得换皮复用。' : '';
       const landingPreserve = blueprint.mustHaveBeats.length > 0 ? '蓝图必含节拍（含关键词）不得在修订中丢失，缺失必须补写。' : '';
+      // D-A（DEC-2026-1122-03①）：few-shot 样本仅供腔调与尺度参照，prompt 层防逐字搬运（plagiarism 检查器零改动）
+      const fewShotGuard = fewShotBlock ? '范例片段仅供腔调与尺度参照，不得复用其中连续 15 字以上的原文（去空白比对，plagiarism 闸门硬拦）。' : '';
       const taskInstruction =
         mode === 'targeted'
-          ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}${landingPreserve}直接输出修订后的完整章节正文。`
-          : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${echoFix}${clicheFix}${landingPreserve}直接输出完整章节正文。`;
+          ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${fewShotGuard}${echoFix}${clicheFix}${landingPreserve}直接输出修订后的完整章节正文。`
+          : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${fewShotGuard}${echoFix}${clicheFix}${landingPreserve}直接输出完整章节正文。`;
       const taskText = renderRewrite({ findings: l1.findings, taskInstruction }) + renderTaskSummaryBlock({ mustHaveBeats: blueprint.mustHaveBeats, styleRulesText: styleRulesText });
       const rwSlots =
         mode === 'targeted'
           ? buildRewriteSlots(
-              { original: currentVersion.content, findings: l1.findings, factBaselineText: continuityText, mode, taskInstruction: taskText, hardRules, styleRules: styleRulesText || undefined },
+              {
+                original: currentVersion.content,
+                findings: l1.findings,
+                factBaselineText: continuityText,
+                mode,
+                taskInstruction: taskText,
+                hardRules,
+                styleRules: styleRulesText || undefined,
+                styleDims: styleDimsText || undefined,
+                fewShot: fewShotBlock,
+              },
               config.budgets.rewrite,
             )
           : buildRewriteSlots(

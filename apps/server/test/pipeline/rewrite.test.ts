@@ -46,7 +46,7 @@ describe('chooseRewriteMode 表驱动 4 例', () => {
 });
 
 describe('buildRewriteSlots', () => {
-  it('targeted 槽名集钉死；findings 槽含 blocker 不含 minor', () => {
+  it('targeted 未传 styleDims/fewShot → 槽名集维持精简集（兜底证不传不插、零回归）；findings 槽含 blocker 不含 minor', () => {
     const slots = buildRewriteSlots(
       {
         original: '原稿正文',
@@ -107,6 +107,30 @@ describe('buildRewriteSlots', () => {
     expect(st.keep).toBe('head');
     expect(st.budgetChars).toBe(400);
     expect(st.content).toBe('节奏偏缓，少用感叹。');
+  });
+
+  it('targeted 传入 styleDims+fewShot → 双槽插 styleRules 后（DEC-2026-1122-03①）', () => {
+    const slots = buildRewriteSlots(
+      {
+        original: '原稿正文',
+        findings: [f('major')],
+        factBaselineText: '事实基线',
+        mode: 'targeted',
+        taskInstruction: '仅修复所列问题',
+        hardRules: '硬规则',
+        styleRules: '节奏偏缓，少用感叹。',
+        styleDims: '【文风画像】\n· 尺度：高直白度',
+        fewShot: '【范例片段】\n样本',
+      },
+      config.budgets.rewrite,
+    );
+    expect(slots.map((s) => s.name)).toEqual(['hardRules', 'styleRules', 'styleDims', 'fewShot', 'original', 'findings', 'factBaseline', 'task']);
+    const sd = slots.find((s) => s.name === 'styleDims')!;
+    expect(sd.stable).toBe(true);
+    expect(sd.budgetChars).toBe(1600); // 对齐 draft 槽（config.ts BUDGETS_DRAFT.styleDims）
+    const fs = slots.find((s) => s.name === 'fewShot')!;
+    expect(fs.stable).toBe(false);
+    expect(fs.budgetChars).toBe(2500); // 对齐 draft 槽（config.ts BUDGETS_DRAFT.fewShot）
   });
 
   it('full 传入 styleDims 时经 draftSlots 产出 styleDims 槽', () => {

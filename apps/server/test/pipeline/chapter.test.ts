@@ -273,7 +273,7 @@ describe('B1 风格注入接线（T7B）', () => {
     expect(draft.user).not.toContain('【文风规则】');
   }, 30000);
 
-  it('重写轮（targeted）：rewrite system 含 styleRules 精简槽，且不带七维画像槽', async () => {
+  it('重写轮（targeted 关 fewshot）：rewrite system 含 styleRules 精简槽+文风画像、无范例片段（DEC-2026-1122-03①）', async () => {
     const bid = boundProfileBook('b');
     const runId = runFor(bid);
     const majorQc = `OVERALL: 6
@@ -293,13 +293,39 @@ COMMENT: 节奏拖沓，需压缩。`;
     expect(outcome.rounds).toBeGreaterThanOrEqual(1);
     const rw = cap.calls.find((c) => c.step === 'rewrite')!;
     expect(rw.system).toContain('短句为主，克制抒情。');
-    expect(rw.system).not.toContain('【文风画像】');
+    expect(rw.system).toContain('【文风画像】'); // styleDimsText 不受 fewshot 开关门控，targeted 槽补齐后进 system（critic 条件 1，DEC-2026-1122-03①）
+    expect(rw.user).not.toContain('【范例片段】'); // fs=0 → fewShotBlock=undefined
+  }, 30000);
+
+  it('重写轮（targeted 开 fewshot）：rewrite user 含【范例片段】且 system 含【文风画像】（DEC-2026-1122-03①）', async () => {
+    const bid = boundProfileBook('tfew');
+    db.prepare('UPDATE books SET style_fewshot_on = 1 WHERE id = ?').run(bid); // 沿 :259 先例
+    const runId = runFor(bid);
+    const majorQc = `OVERALL: 6
+---
+SEVERITY: major
+DIMENSION: 节奏
+QUOTE: 【章
+COMMENT: 节奏拖沓，需压缩。`;
+    const inner = createMockProvider({
+      draft: { textFn: (m) => `【章${m.chapterNo}修】独有开头。` + '线'.repeat(480) },
+      qc: { sequence: [{ text: majorQc }, { repeat: { text: 'OVERALL: 9' } }] },
+      rewrite: { textFn: (m) => `【章${m.chapterNo}改】重写开头。` + '改'.repeat(480) },
+      summarize: { text: 'SUMMARY: 第1章推进完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
+    });
+    const cap = capturing(inner);
+    const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    expect(outcome.rounds).toBeGreaterThanOrEqual(1);
+    const rw = cap.calls.find((c) => c.step === 'rewrite')!;
+    expect(rw.system).toContain('【文风画像】');
+    expect(rw.user).toContain('【范例片段】');
+    expect(rw.user).toContain('不得复用其中连续 15 字以上的原文'); // D-A 防抄护栏进任务指令
   }, 30000);
 
   it('文风示例开关默认关：draft user 不含【范例片段】，但抄用检测仍以绑定样本为参考（plagiarism_ngram 仍判抄）', async () => {
     // 样本文本必须 ≥15 连续字（hasLongCopy 的窗口长度），否则「恒开的抄用检测」无从证明
     const bid = boundProfileBook('fewoff', '范例长样本：少年推开木门，庭院的积水映着冷月，他没有回头。');
-    // 不动 style_fewshot_on：迁移 DEFAULT 0 = 默认关（B4 裁决④）
+    // 夹具裸 SQL 置 style_profile_id 不经绑定路径 → 保持列默认 0；绑定即置 1 由 repositories/style 测试钉（DEC-2026-1122-03③）
     // `on` 是 SQL 保留字，别名不得用它
     expect((db.prepare('SELECT style_fewshot_on AS fs FROM books WHERE id = ?').get(bid) as { fs: number }).fs).toBe(0);
     const runId = runFor(bid);
