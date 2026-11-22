@@ -540,3 +540,23 @@
 - **R7（采纳）** 范围 fence：不做逐书词表（backlog 候选记一笔）；UI v1=textarea 原文编辑+解析摘要（H/L 计数+其它节列表+空池"闸门不判定"提示+「H 判=L词∪H词」说明），不做词条 chip 网格；grade 枚举 'H'|'L' 与落地格机制不动；上批重构 backlog 三项（parseLandingCell 缓存/landingErrors 删候选/heavyEveryN 归一）不并入本批。
 
 **计划真值：** docs/plans/2026-11-22-landing-words-user.md（主模型亲任 planner，writing-plans 粒度，呈 owner 批后执行）。**执行留痕（2026-11-22 收口，主模型亲执全链）：** 计划 5 任务全落地——T1 服务层 quality/landing-words.ts 五函数+chapter.ts 接线改 resolveLandingWordsPath() 按章解析+新测试 8 例；T2 一次性迁移两份（943 字节=源一致：`~/.inkforge/landing-words.txt` 与 `%APPDATA%\dev.inkforge.app\landing-words.txt`）+默认词表中性化（750 字节注释+[H]/[L] 两空节）+l0.test ⑥⑦改钉（⑥=空表语义留痕、两节解析能力夹具承接；⑦=护栏夹具化，原吃默认文件断言段删除）；T3 GET/PUT /api/landing-words+路由测试 6 例（env 注入隔离、400 双例、PUT 空串=清空合法）；T4 设置页「落地分级词表」区块+web 测试 3 例；T5 NSIS 模板补 File(:1512)/Delete(:5371) 两行+壳 main.rs:85 注入 INKFORGE_LANDING_WORDS_USER_PATH=cfg_dir/landing-words.txt（cargo check 过）。**收口验证链：** lint 零→全量 **server 480+web 154+shared 2=636**（基线 619 净 +17 只增不减）→typecheck 全 0→knip 0→秘密扫零命中；push 前 code-review 两轴主模型亲审：**Standards 零硬违反**+2 judgement call（routes.ts schemas import 整行字母序重排=diff 噪音可接受；l0.test ⑦ 双读盘钉值形态可辩护），**Spec PASS**（R1–R7 逐条落实无 scope creep）。**GUI 未验证（owner 真实测试）点位：** ①设置页词表区块 GET 渲染摘要与生效路径（dev=~/.inkforge/landing-words.txt）；②编辑+保存→下一次生成 run 生效（进行中 run 不受影响）；③清空词表保存→「闸门不判定」提示；④非法输入（超 8KB/半括号节头）→400 错误文案；⑤装机版实测：词表落 %APPDATA%\dev.inkforge.app\landing-words.txt（迁移件已就位，与 dev 互不影响）。主提交 `cb82be9` push 推清（ls-remote 一致）。**挂账：** 逐书词表=backlog 候选；上批重构 backlog 三项不变；makensis 直编译验证挂下批发版卡（release-022 静检硬门届时跑）。
+
+## DEC-2026-1122-03 [OWNER] 显性度注入修复四方向拍板：targeted 喂样本+QC 评准+显性词池进 prompt+few-shot 默认开+蒸馏尺度维（2026-11-22）
+
+**背景：** owner 反馈（2026-11-22 晚）：《少年阿磊》（v6 设定集导入书）生成正文色情程度远低于源书（仙家/舍友/阿美），即使勾选蒸馏档案。实测诊断（同口径 23 露骨词/万字，读库只读探针）：源书密度 113–179；档案 rules 文本保住露骨词（仙家档案 177.7，内含高硬规则）；ch1 版本链=注入原文样本的 draft 密度 242（超全部源书）→ QC 改写后 revised 43.4（UI 当前展示版），改写回路砍 3–5 倍。主因（planner 复核收窄）：**targeted 重写**（QC 仅报 major 时走的路径）零样本零画像（chapter.ts:332-336；full 模式早已透传 :350-351）；few-shot 开关默认关且重绑静默归零（books.ts:123/:144）；落地词池只进 l0 校验不进 prompt（render.ts:90-107「须显性词」=空要求）；蒸馏七维无尺度维（analysis.ts:15-22）；freqTerms 仅展示不注入。
+
+**owner 拍板（2026-11-22 晚）：** 四方向全修——①改写端喂样本+QC 评准（主因）②词池进 prompt ③few-shot 绑定默认开 ④蒸馏加尺度维（存量档案=owner UI 手动重蒸，不写批量脚本）。时机=词表外置化批次先收口（已满足：cb82be9+0421670 已推）。执行=11 卡全派，**新会话开工**。
+
+**设计定断（owner 四项全部追认，执行时不得擅改）：**
+- **D-A plagiarism 零改动：** 检查器（≥15 连续字、QC 循环对 draft 与 revised 全查，chapter.ts:283-294/:384）不动；防改写端误咬走 prompt 护栏（「不得复用连续 15 字以上原文」）。误咬失败形态=hardFail→full→maxRounds=2→needs_human，可见非静默（critic 核实 gate.ts:26-31；best 版本可取 revised，豁免=发布版本失去查抄底线）。观测期记录 needs_human 中 plagiarism 占比，显著上升先改样本摘录方式（分句打散）、检查器仍不动。
+- **D-B 重绑语义：** 绑定/重绑→style_fewshot_on=1；解绑→0；手动关闭被尊重至下次重绑；新建未绑定书保持列 DEFAULT 0（不迁移）。
+- **D-C 词池预算：** LANDING_POOL_BUDGET_CHARS=300 贪心填充（H 池在前、至少收 1 词）；l0 AND 层仅要求「≥1 H 词或 ≥2 不同 L 词」（l0.ts:191-192），词池=可执行清单非全量字典。
+- **D-D 词池/铁则次序：** 【显性词参考】块末位（【文风铁则】之后），task 槽 keep:'head' 截尾时词池先于文风铁则让位；双钉=契约次序断言+管线 4 节拍挤压断言（critic 条件 2 采顺序对调案，否决预算 800→1100 案）。
+
+**评议（decision-critic，2026-11-22）：** APPROVE_WITH_CONDITIONS。条件 1（必修，已修入计划）：任务 06 chapter.test.ts:296 `not.toContain('【文风画像】')` 在任务 05 后必翻红——styleDimsText 不受 fewshot 门控（chapter.ts:208 只判 dims&&axes），计划原「断言保持」论证漏了此半，已改翻钉用例名并纳入预期红标注。条件 2：词池块可把铁则挤出 task 槽（800，截尾）→主模型裁=D-D 对调+双钉，已修入。条件 3（可选）：StyleProfilesSection.test.tsx「七维」用例名文案陈旧并入任务 11 grep 自查。critic 独立复跑全量 636 绿；核实 D-A 链路可见非静默；核实老档案无尺度键优雅降级（inject.ts:60 `?? ''`、parseAnalysis 缺维补 ''、UI fromEntries 全兜底）；预算自洽（BUDGETS_REWRITE 9500→13600，成本约 +30-40%/重写轮，maxRounds=2 封顶）。
+
+**计划真值：** docs/plans/2026-11-22-explicitness-injection.md（11 卡：01-03=③、04-07=①、08-09=②、10-11=④；强依赖 01→02/03、04→05→06、07→08、10→11；测试基线 636 只增不减）。卡面=docs/design/card-exp-2026-1122-01..11.md。执行通道=opencode/hy4-flash-free 限时窗（dispatch_guard 已过；同工作树≤1 卡串行）。收口主审亲执（验证链全序+code-review 两轴+提交五步+GUI 点位清单）。
+
+**观测验收（owner 实测口径，非卡验收线）：** 重跑《少年阿磊》ch1（勾蒸馏档案+词表含 H 池），revised 相对 draft 密度比应从 43.4/242≈0.18 显著回升（建议目标 revised ≥100/万字或 ≥draft 60%，owner 实测定夺）；若仍含蓄化，残留病灶排查序=QC 评准线被忽略→full 重写温度→档案尺度维缺失（未重蒸）。
+
+**执行留痕：**（新会话执行，收口后补记）
