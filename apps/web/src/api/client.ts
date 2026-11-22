@@ -42,6 +42,8 @@ import type {
   CreateCharacterBody,
   UpdateCharacterBody,
   SettingsQualityDto,
+  LandingWordsDto,
+  LandingWordsPutResult,
   VersionQcDto,
   RunVersionsDto,
   SettingsImportPreviewBody,
@@ -225,6 +227,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ scoreThreshold }),
     }),
+  getLandingWords: () => req<LandingWordsDto>('/api/landing-words'),
+  putLandingWords: (text: string) =>
+    req<LandingWordsPutResult>('/api/landing-words', { method: 'PUT', body: JSON.stringify({ text }) }),
   versionQc: (versionId: string) => req<VersionQcDto>(`/api/versions/${versionId}/qc`),
   listStyleProfiles: () => req<StyleProfileDto[]>('/api/style-profiles'),
   // 档案详情（DEC-2026-1120-08）：查看面板懒加载，只读展示分析细节

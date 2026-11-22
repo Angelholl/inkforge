@@ -232,24 +232,28 @@ describe('L0 beat_coverage 分级词表 AND 层（DEC-2026-1120-10）', () => {
     }
   });
 
-  it('⑥ loadLandingWords：默认文件解析出两节；缺失路径 → 空表不抛', () => {
+  it('⑥ loadLandingWords：出厂默认文件已中性化=空表（DEC-2026-1122-02）；两节解析能力由夹具承接；缺失路径 → 空表不抛', () => {
+    // 默认词表中性化（DEC-2026-1122-02）：项目不带默认词表，空表=AND 层 fail-open 放行=新用户零落地判定
     const lw = loadLandingWords(path.join(process.cwd(), 'config/quality/landing-words.default.txt'));
-    expect(lw.h.length).toBeGreaterThan(0);
-    expect(lw.l.length).toBeGreaterThan(0);
+    expect(lw).toEqual({ h: [], l: [] });
+    // 「默认文件解析出两节」能力改由夹具承接（原断言依赖默认词表非空，已随中性化改钉）
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-lw-'));
+    const f = path.join(dir, 'w.txt');
+    fs.writeFileSync(f, '[H]\n玉佩光\n[L]\n窗棂摇\n', 'utf8');
+    expect(loadLandingWords(f)).toEqual({ h: ['玉佩光'], l: ['窗棂摇'] });
+    fs.rmSync(dir, { recursive: true, force: true });
     const missing = loadLandingWords(path.join(process.cwd(), 'config/quality/__no_such__.txt'));
     expect(missing).toEqual({ h: [], l: [] });
   });
 
   it('⑦ loadLandingWords 调情档护栏（DEC-2026-1122-01）：未知 [X] 节=节头识别但不入库，其下行忽略', () => {
-    const lw = loadLandingWords(path.join(process.cwd(), 'config/quality/landing-words.default.txt'));
-    // 默认文件 [调情] 节的手交词不得进判定池（否则调情又变落地，白删）
-    expect(lw.l).not.toContain('手');
-    expect(lw.l).not.toContain('握');
-    expect(lw.l).not.toContain('套弄');
-    expect(lw.h).not.toContain('揉');
+    // 默认文件已中性化（DEC-2026-1122-02），护栏语义改由夹具钉：[调情] 节词不得进判定池（否则调情又变落地）
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-lw-'));
     const f = path.join(dir, 'w.txt');
     fs.writeFileSync(f, '# 注释\n[H]\n甲\n[调情]\n乙\n丙\n[L]\n丁\n', 'utf8');
+    const lw = loadLandingWords(f);
+    expect(lw.l).not.toContain('乙');
+    expect(lw.l).not.toContain('丙');
     expect(loadLandingWords(f)).toEqual({ h: ['甲'], l: ['丁'] });
     fs.rmSync(dir, { recursive: true, force: true });
   });

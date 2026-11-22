@@ -1509,6 +1509,7 @@ Section Install
     CreateDirectory "$INSTDIR\resources\server\node_modules\fast-json-stringify"
     File /a "/oname=resources\runtime\node.exe" "I:\inkforge\apps\desktop\src-tauri\resources\runtime\node.exe"
     File /a "/oname=resources\server\config\quality\cliches.default.txt" "I:\inkforge\apps\desktop\src-tauri\resources\server\config\quality\cliches.default.txt"
+    File /a "/oname=resources\server\config\quality\landing-words.default.txt" "I:\inkforge\apps\desktop\src-tauri\resources\server\config\quality\landing-words.default.txt"
     File /a "/oname=resources\server\db\migrations\0001_core.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0001_core.sql"
     File /a "/oname=resources\server\db\migrations\0002_runs.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0002_runs.sql"
     File /a "/oname=resources\server\db\migrations\0003_indices.sql" "I:\inkforge\apps\desktop\src-tauri\resources\server\db\migrations\0003_indices.sql"
@@ -5367,6 +5368,7 @@ Section Uninstall
   ; Delete resources
     Delete "$INSTDIR\resources\runtime\node.exe"
     Delete "$INSTDIR\resources\server\config\quality\cliches.default.txt"
+    Delete "$INSTDIR\resources\server\config\quality\landing-words.default.txt"
     Delete "$INSTDIR\resources\server\db\migrations\0001_core.sql"
     Delete "$INSTDIR\resources\server\db\migrations\0002_runs.sql"
     Delete "$INSTDIR\resources\server\db\migrations\0003_indices.sql"

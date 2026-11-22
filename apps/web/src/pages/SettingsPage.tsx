@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, API_BASE, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
-import { fieldLabel, inputBase, numberBase } from '../components/Field';
+import { fieldLabel, inputBase, numberBase, textareaBase } from '../components/Field';
 import { SectionHeader } from '../components/Section';
 
 type SettingsResponse = {
@@ -22,6 +22,12 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [scoreThreshold, setScoreThreshold] = useState('8');
   const [qualityMsg, setQualityMsg] = useState('');
+  const [lwText, setLwText] = useState('');
+  const [lwCounts, setLwCounts] = useState({ h: 0, l: 0 });
+  const [lwSections, setLwSections] = useState<string[]>([]);
+  const [lwPath, setLwPath] = useState('');
+  const [lwSaving, setLwSaving] = useState(false);
+  const [lwMsg, setLwMsg] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +59,26 @@ export default function SettingsPage() {
       })
       .catch(() => {
         /* 服务未连：保持默认显示，保存时再报错 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 落地分级词表（DEC-2026-1122-02）：GET 载入实际生效词表；保存写用户文件，下一次生成 run 生效
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getLandingWords()
+      .then((lw) => {
+        if (cancelled) return;
+        setLwText(lw.text);
+        setLwCounts(lw.counts);
+        setLwSections(lw.sections);
+        setLwPath(lw.path);
+      })
+      .catch(() => {
+        /* 服务未连：保持空显示，保存时再报错 */
       });
     return () => {
       cancelled = true;
@@ -96,6 +122,21 @@ export default function SettingsPage() {
       setQualityMsg('已保存：每个 run 的章节管线开始时读取新阈值；进行中的 run 不受影响。');
     } catch (e) {
       setQualityMsg(apiErrorText(e));
+    }
+  };
+
+  const saveLw = async (): Promise<void> => {
+    setLwSaving(true);
+    setLwMsg('');
+    try {
+      const r = await api.putLandingWords(lwText);
+      setLwCounts(r.counts);
+      setLwSections(r.sections);
+      setLwMsg('已保存：下一次生成 run 生效；进行中 run 不受影响。');
+    } catch (e) {
+      setLwMsg(apiErrorText(e));
+    } finally {
+      setLwSaving(false);
     }
   };
 
@@ -180,6 +221,33 @@ export default function SettingsPage() {
           </Button>
         </div>
         {qualityMsg && <p className="mt-2 text-sm text-ok">{qualityMsg}</p>}
+      </section>
+      <section className="mt-8">
+        <SectionHeader title="落地分级词表" size="lg" />
+        <div className="mt-3 space-y-3">
+          <label htmlFor="settings-landing-words" className={fieldLabel}>
+            落地分级词表
+          </label>
+          <textarea
+            id="settings-landing-words"
+            rows={10}
+            className={textareaBase}
+            value={lwText}
+            onChange={(e) => setLwText(e.target.value)}
+          />
+          <p className="text-xs text-muted">
+            [H]/[L] 分节，每行一词；# 注释与空行跳过；其它 [X] 节=识别不入库。H 池 {lwCounts.h} 词 · L 池 {lwCounts.l} 词 · 其它节：
+            {lwSections.filter((s) => s !== 'H' && s !== 'L').join('、') || '无'}
+            {lwCounts.h === 0 && lwCounts.l === 0 && '　词表为空：落地闸门不判定（放行）'}
+          </p>
+          <p className="text-xs text-muted">
+            判定时 H 档命中=L 词∪H 词；保存后下一次生成 run 生效，进行中 run 不受影响。生效文件：{lwPath || '…'}
+          </p>
+          <Button type="button" variant="primary" loading={lwSaving} onClick={() => void saveLw()}>
+            保存词表
+          </Button>
+        </div>
+        {lwMsg && <p className="mt-2 text-sm text-ok">{lwMsg}</p>}
       </section>
       {message && <p className="mt-4 text-sm text-ok">{message}</p>}
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}

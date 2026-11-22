@@ -154,6 +154,9 @@ export const distillTemplatePutSchema = z.object({
 // B3：入库分阈值（1-10）；持久化在 app_meta，改值不重启
 export const qualityPutSchema = z.object({ scoreThreshold: z.number().min(1).max(10) });
 
+// 落地分级词表（DEC-2026-1122-02）：用户数据层，PUT 写用户文件，下一次生成 run 生效
+export const landingWordsPutSchema = z.object({ text: z.string() });
+
 export const outlineTreeSuggestSchema = z.object({ chapterCount: z.number().int().min(1).max(50) });
 
 // 整树替换：seq 不收（repo 归一）；chapterFrom/To 可空；缺省字段兜底空串/空数组

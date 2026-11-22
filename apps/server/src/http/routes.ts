@@ -19,11 +19,12 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, rewriteSelectionSchema, qualityPutSchema, settingsImportApplySchema, settingsImportPreviewSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
 import { analyzeSpectrum } from '../spectrum';
 import { parseLandingCell, parseSettingsCompendium } from '../settings-import';
+import { parseLandingWordsText, readLandingWordsUserFile, resolveLandingWordsPath, validateLandingWordsText, writeLandingWordsUserFile } from '../quality/landing-words';
 import { analyzeStyle } from '../style/analysis';
 import * as plotRepo from '../db/repositories/plot';
 import * as spectrumRepo from '../db/repositories/spectrum';
@@ -1427,6 +1428,34 @@ ${repairPrompt(first.errors)}`))).text,
     if (!body) return;
     writeScoreThreshold(db, body.scoreThreshold);
     reply.send({ saved: true, restartRequired: false });
+  });
+
+  // ── 落地分级词表（DEC-2026-1122-02：用户数据层，设置页可视化编辑）──
+  // GET 展示「实际生效」的词表（resolve 解析序=用户文件>env>仓库默认），PUT 写用户文件；
+  // 生效=下一次生成 run（chapter.ts 按章装载，非热切），进行中 run 不受影响。
+  app.get('/api/landing-words', async () => {
+    const p = resolveLandingWordsPath();
+    const text = readLandingWordsUserFile(p);
+    const parsed = parseLandingWordsText(text);
+    return { text, counts: { h: parsed.h.length, l: parsed.l.length }, sections: parsed.sections, path: p };
+  });
+
+  app.put('/api/landing-words', async (req, reply) => {
+    const body = parseBody(reply, landingWordsPutSchema, req.body ?? {});
+    if (!body) return;
+    const v = validateLandingWordsText(body.text);
+    if (!v.ok) {
+      reply.code(400).send({ error: v.error });
+      return;
+    }
+    try {
+      writeLandingWordsUserFile(body.text);
+    } catch {
+      reply.code(500).send({ error: '词表写入失败' });
+      return;
+    }
+    const parsed = parseLandingWordsText(body.text);
+    return { saved: true, counts: { h: parsed.h.length, l: parsed.l.length }, sections: parsed.sections };
   });
 }
 

@@ -66,6 +66,21 @@ export interface SettingsQualityDto {
   isDefault: boolean;
 }
 
+/** 落地分级词表（DEC-2026-1122-02 用户数据层）：GET 展示「实际生效」词表（resolve 解析序=用户文件>env>仓库默认）；
+ *  sections=识别到的节头大写列表（含 H/L 与自定义节如「调情」，自定义节不入判定池）。 */
+export interface LandingWordsDto {
+  text: string;
+  counts: { h: number; l: number };
+  sections: string[];
+  path: string;
+}
+
+export interface LandingWordsPutResult {
+  saved: boolean;
+  counts: { h: number; l: number };
+  sections: string[];
+}
+
 /** 一个版本的某轮质检明细（来自 run_steps.qc.outputJson）。 */
 export interface VersionQcAttemptDto {
   attempt: number;

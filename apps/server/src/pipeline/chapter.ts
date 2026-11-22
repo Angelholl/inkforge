@@ -14,6 +14,7 @@ import type { LlmProvider } from '../llm/types';
 import { hashPrompt } from '../llm/hash';
 import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite, renderTaskSummaryBlock } from '../prompts/render';
 import { loadCliches, loadLandingWords, runL0Checks } from '../quality/l0';
+import { resolveLandingWordsPath } from '../quality/landing-words';
 import { runL1Qc } from '../quality/l1';
 import { decideGate, type L1Report } from '../quality/gate';
 import { readScoreThreshold } from '../settings';
@@ -26,10 +27,6 @@ import { computeStyleMetrics, type StyleMetrics } from '../style/metrics';
 import { runSummarizeStep } from './summarize';
 
 const CLIQUES_PATH = process.env.INKFORGE_CLIQUES_PATH ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/cliches.default.txt');
-
-const LANDING_WORDS_PATH =
-  process.env.INKFORGE_LANDING_WORDS_PATH ??
-  path.join(path.dirname(fileURLToPath(import.meta.url)), '../../config/quality/landing-words.default.txt');
 
 export interface RunOutcome {
   status: 'done' | 'needs_human' | 'failed';
@@ -90,7 +87,7 @@ export async function runChapterPipeline(
   const blueprint = chapter.blueprint;
   const targetChars = chapter.targetChars;
   const cliches = loadCliches(CLIQUES_PATH);
-  const landingWords = loadLandingWords(LANDING_WORDS_PATH);
+  const landingWords = loadLandingWords(resolveLandingWordsPath());
   const model = config.providers.local.model;
   const runRow = runsRepo.getRun(db, args.runId);
   const runMode = runRow?.mode ?? 'generate';

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { countChars, type ChapterBlueprint } from '@inkforge/shared';
+import { parseLandingWordsText } from './landing-words';
 
 interface L0Check {
   name: 'length' | 'cliche' | 'replay_ngram' | 'plagiarism_ngram' | 'beat_coverage' | 'continuity_facts' | 'style_drift' | 'tail_replay' | 'echo_20gram';
@@ -45,21 +46,8 @@ export interface LandingWords {
  *  文件缺失/不可读 → 空表：AND 层跳过（fail-open 保守放行）。镜像 loadCliches 先例，无额外警告通道（cliches 亦无）。 */
 export function loadLandingWords(path: string): LandingWords {
   try {
-    const lines = fs.readFileSync(path, 'utf8').split(/\r?\n/);
-    const out: LandingWords = { h: [], l: [] };
-    let cur: 'h' | 'l' | null = null;
-    for (const raw of lines) {
-      const t = raw.trim();
-      if (t === '' || t.startsWith('#')) continue;
-      const sec = /^\[([^\]]+)\]$/.exec(t);
-      if (sec) {
-        const name = sec[1].toUpperCase();
-        cur = name === 'H' ? 'h' : name === 'L' ? 'l' : null;
-        continue;
-      }
-      if (cur !== null && !out[cur].includes(t)) out[cur].push(t);
-    }
-    return out;
+    const parsed = parseLandingWordsText(fs.readFileSync(path, 'utf8'));
+    return { h: parsed.h, l: parsed.l };
   } catch {
     return { h: [], l: [] };
   }
