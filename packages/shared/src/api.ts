@@ -396,8 +396,8 @@ export interface StyleProfileCreateBody {
   evaluation?: SelfEvalItemDto[];
 }
 
-// ── 蒸馏结构化档案（七维文本 + 六轴量化，MirrorNovel 对标；RULES 行保留为文本补充）──
-export const STYLE_DIMENSIONS = ['节奏', '对话', '描写', '情感基调', '写作特点', '特色词汇', '章节结构'] as const;
+// ── 蒸馏结构化档案（八维文本 + 六轴量化，MirrorNovel 对标；RULES 行保留为文本补充）──
+export const STYLE_DIMENSIONS = ['节奏', '对话', '描写', '情感基调', '尺度', '写作特点', '特色词汇', '章节结构'] as const; // 八维，尺度=直白度/性描写尺度（DEC-2026-1122-03④）
 export const STYLE_AXES = ['叙述温度', '语言密度', '叙述者姿态', '节奏', '幽默', '情绪表达'] as const;
 
 /** 七维来源「共存」哨兵（DEC-2026-1118-03）：dimsSource[dim]=该值 → 该维文本按绑定序（主→辅）拼接各勾选档案的非空文本（全等段去重，'；' 连接）。双下划线包边，不会与真实档案 id 冲突。 */

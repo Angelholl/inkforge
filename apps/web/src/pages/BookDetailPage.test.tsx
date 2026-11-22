@@ -658,7 +658,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     );
   }
 
-  it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 七键 dimsSource + weights 均分', async () => {
+  it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 八键 dimsSource + weights 均分', async () => {
     installBindStub({});
     renderPanel();
     fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
@@ -678,21 +678,21 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({
       primaryProfileId: 'p1',
       auxProfileIds: ['p2'],
-      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
+      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 尺度: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
       weights: { p1: 50, p2: 50 },
     });
   });
 
-  it('高级设置共存选项（DEC-2026-1118-03）：勾 2 档案时七维各追加「共存」，选共存保存 → 该维=__coexist__；单档案不出现', async () => {
+  it('高级设置共存选项（DEC-2026-1118-03）：勾 2 档案时八维各追加「共存」，选共存保存 → 该维=__coexist__；单档案不出现', async () => {
     installBindStub({});
     renderPanel();
     // 单档案：无共存选项
     fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
     (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
     expect(screen.queryByRole('option', { name: /共存/ })).toBeNull();
-    // 勾第 2 档案：七维各出现一个「共存」选项
+    // 勾第 2 档案：八维各出现一个「共存」选项（DEC-2026-1122-03④ 七→八）
     fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
-    expect(screen.getAllByRole('option', { name: /共存/ })).toHaveLength(7);
+    expect(screen.getAllByRole('option', { name: /共存/ })).toHaveLength(8);
     fireEvent.change(screen.getByLabelText('维度来源-特色词汇'), { target: { value: '__coexist__' } });
     expect((screen.getByLabelText('维度来源-特色词汇') as HTMLSelectElement).value).toBe('__coexist__');
     fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
@@ -723,7 +723,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: null });
   });
 
-  it('已绑书初值渲染：binding 非空 → 勾选/基准档案/七维值全部落对（legacy 提示在场）', async () => {
+  it('已绑书初值渲染：binding 非空 → 勾选/基准档案/八维值全部落对（legacy 提示在场）', async () => {
     installBindStub({
       firstFrameUndefined: true,
       bookOverride: {
@@ -806,7 +806,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({
       primaryProfileId: 'p1',
       auxProfileIds: ['p2', 'p3'],
-      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
+      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 尺度: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
     });
   });
 

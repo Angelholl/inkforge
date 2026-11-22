@@ -91,18 +91,19 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
     expect(r.statusCode).toBe(202);
     await waitJob((r.json() as { jobId: string }).jobId);
     expect(captured[0]).toContain(CUSTOM_TEMPLATE);
-    expect(captured[0]).not.toContain('七维：节奏、对话'); // 默认指令被模板覆盖
+    expect(captured[0]).not.toContain('八维：节奏、对话'); // 默认指令被模板覆盖
     // 样本段仍拼接在模板后
     expect(captured[0]).toContain('山风掠过松林');
   });
 
-  it('distill 空串模板 → 回落默认指令（含七维六轴说明）', async () => {
+  it('distill 空串模板 → 回落默认指令（含八维六轴说明与尺度维指导行）', async () => {
     await app.inject({ method: 'PUT', url: '/api/settings/distill-template', payload: { template: '' } });
     captured = [];
     const r = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '默认测', text: SAMPLE_TEXT } });
     expect(r.statusCode).toBe(202);
     await waitJob((r.json() as { jobId: string }).jobId);
-    expect(captured[0]).toContain('七维：节奏、对话、描写、情感基调、写作特点、特色词汇、章节结构');
+    expect(captured[0]).toContain('八维：节奏、对话、描写、情感基调、尺度、写作特点、特色词汇、章节结构');
+    expect(captured[0]).toContain('尺度维=直白度与性描写尺度的画像'); // DEC-2026-1122-03④ 露骨用词证据要求
     expect(captured[0]).toContain('六轴：叙述温度、语言密度、叙述者姿态、节奏、幽默、情绪表达');
   });
 
