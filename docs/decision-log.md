@@ -559,4 +559,4 @@
 
 **观测验收（owner 实测口径，非卡验收线）：** 重跑《少年阿磊》ch1（勾蒸馏档案+词表含 H 池），revised 相对 draft 密度比应从 43.4/242≈0.18 显著回升（建议目标 revised ≥100/万字或 ≥draft 60%，owner 实测定夺）；若仍含蓄化，残留病灶排查序=QC 评准线被忽略→full 重写温度→档案尺度维缺失（未重蒸）。
 
-**执行留痕：**（新会话执行，收口后补记）
+**执行留痕：**（2026-11-23 补记）owner 令本会话主模型独自完成（不派 opencode/hy4，执行通道变更）。11 卡按强依赖序全部落地，7 提交：c7fa297（③repo+测试改钉）→e017ef8（③UI 文案，GUI 未验证 owner 真实测试）→5bed503（①槽+护栏）→23c32a6（①②评准线+词池）→bac2eeb（④八维+指令）→f870d10（config 钉值连锁：rewrite 预算 deep-equal 补两键，计划外）→d50703d（knip：contract.test 消费 LANDING_POOL_BUDGET_CHARS 导出）。验证链全序绿：lint 零告警→定向各卡→全量 **648**（server 491+web 155+shared 2，=基线 636+12 新用例精确命中，只增不减）→typecheck 三包过→knip 零告警→diff 秘密扫描零新增。code-review 两轴主模型亲执（子代理通道回避露骨过滤器风险）：标准轴 0 硬违规+2 判断项（fewshotOn 三元小重复=卡面逐字形态；taskInstruction 双份模板串=先存形态）；规格轴四方向逐条对症核实、D-A/B/C/D 与 critic 双条件全落、1301 纪律全 diff 中性夹具、l0/gate/landing-words.ts/迁移零改动经 diff 复核。流程偏差如实记录：卡 03/07/08/09/10→11「先红」未单独跑红（红态由断言字符串不存在性保证），卡 01 实测红→绿、05→06 跨卡红实测；计划 grep 三文件漏 NewBookPage.test.tsx（八键连锁）与 config.test.ts（预算钉）、web 共存计数 7→8——均按钉值更新惯例修复。遗留=观测验收（owner 实测）+GUI 五点位（见完成通知）。
