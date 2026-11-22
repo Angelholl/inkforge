@@ -482,8 +482,8 @@ export default function BookDetailPage() {
   const bindStyle = async (body: StyleBindBody): Promise<void> => {
     try {
       await api.bindStyle(bookId, body);
-      // 解绑必须真发出去（缺陷⑦）：文案分两条；保存成功显性化 fewshot 归零，不静默
-      setMsg(body.profileId === null ? '风格档案已解绑（persona 快照一并清除）' : '风格档案已绑定；绑定保存后文风示例开关已归零');
+      // 解绑必须真发出去（缺陷⑦）：文案分两条；保存成功显性化 fewshot 默认开，不静默
+      setMsg(body.profileId === null ? '风格档案已解绑（persona 快照一并清除）' : '风格档案已绑定；文风示例注入已默认开启（可手动关闭）');
       void refetch();
     } catch (e) {
       setMsg(`绑定失败：${(e as Error).message}`);
@@ -916,7 +916,7 @@ export default function BookDetailPage() {
                 文风示例注入
               </label>
               <p className="mt-1 text-xs text-faint">
-                关闭后不向写手注入范文片段；抄用检测仍以绑定样本为参考，不随开关关闭。新绑定默认关。
+                新绑定/重绑默认开启；关闭后不向写手注入范文片段；抄用检测仍以绑定样本为参考，不随开关关闭。
               </p>
             </div>
           )}

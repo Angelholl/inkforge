@@ -108,7 +108,7 @@ function installFetchStub() {
   );
 }
 
-/** 风格绑定/解绑/开关专用桩：bound 与 fewshot 可变，PUT 后 GET 回读新值（模拟服务端归零语义 + refetch）。 */
+/** 风格绑定/解绑/开关专用桩：bound 与 fewshot 可变，PUT 后 GET 回读新值（模拟服务端绑定默认开语义 + refetch）。 */
 function installStyleStub() {
   let bound: string | null = null;
   let fewshot = false;
@@ -125,6 +125,7 @@ function installStyleStub() {
         // body 双形态：多选 {primaryProfileId} 与 legacy {profileId}
         const parsed = JSON.parse(String(init.body)) as { profileId?: string | null; primaryProfileId?: string };
         bound = parsed.profileId ?? parsed.primaryProfileId ?? null;
+        fewshot = bound !== null; // 绑定/重绑置 1、解绑置 0（DEC-2026-1122-03③ 服务端语义）
         return jsonResponse({ ok: true, styleProfileId: bound });
       }
       if (u.endsWith('/api/style-profiles')) {
@@ -445,22 +446,30 @@ describe('BookDetailPage', () => {
       expect(el).toBeTruthy();
       return el as HTMLInputElement;
     });
-    expect(cb.checked).toBe(false); // 绑定即归零（服务端语义），所以此刻未勾
-    expect(await screen.findByText(/关闭后不向写手注入范文片段/)).toBeTruthy();
+    expect(cb.checked).toBe(true); // 绑定默认开（DEC-2026-1122-03③ 服务端语义）
+    expect(await screen.findByText(/新绑定\/重绑默认开启/)).toBeTruthy();
 
-    fireEvent.click(cb);
+    fireEvent.click(cb); // 初始已勾选 → 点击即关闭
     await waitFor(() =>
       expect(
         calls.some(
           (c) =>
             c.url.endsWith('/api/books/b1/style-fewshot') &&
             c.init?.method === 'PUT' &&
-            JSON.parse(String(c.init?.body)).on === true,
+            JSON.parse(String(c.init?.body)).on === false,
         ),
       ).toBe(true),
     );
-    await waitFor(() => expect((screen.getByLabelText('文风示例注入') as HTMLInputElement).checked).toBe(true));
-    expect(await screen.findByText('文风示例注入已开启')).toBeTruthy();
+    await waitFor(() => expect((screen.getByLabelText('文风示例注入') as HTMLInputElement).checked).toBe(false));
+    expect(await screen.findByText('文风示例注入已关闭')).toBeTruthy();
+  });
+
+  it('绑定成功 toast 显性化默认开启（DEC-2026-1122-03③）', async () => {
+    installStyleStub();
+    stylePage();
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-测试档案'));
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    expect(await screen.findByText('风格档案已绑定；文风示例注入已默认开启（可手动关闭）')).toBeTruthy();
   });
 
   it('蓝图编辑区（owner 反馈②④）：章号默认接续末章；字数随章号同步；AI 建议蓝图回填；保存透传 targetChars', async () => {
