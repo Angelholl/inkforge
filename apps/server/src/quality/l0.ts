@@ -41,6 +41,7 @@ export interface LandingWords {
 }
 
 /** 落地分级词表装载（DEC-2026-1120-10）：[H]/[L] 分节词表，每行一词，# 注释与空行跳过。
+ *  其它 [X] 分节（如 [调情]）= 识别为节头但不入库：其下行忽略（DEC-2026-1122-01 词表调情档护栏，防被吸进上一节）。
  *  文件缺失/不可读 → 空表：AND 层跳过（fail-open 保守放行）。镜像 loadCliches 先例，无额外警告通道（cliches 亦无）。 */
 export function loadLandingWords(path: string): LandingWords {
   try {
@@ -50,12 +51,10 @@ export function loadLandingWords(path: string): LandingWords {
     for (const raw of lines) {
       const t = raw.trim();
       if (t === '' || t.startsWith('#')) continue;
-      if (t === '[H]') {
-        cur = 'h';
-        continue;
-      }
-      if (t === '[L]') {
-        cur = 'l';
+      const sec = /^\[([^\]]+)\]$/.exec(t);
+      if (sec) {
+        const name = sec[1].toUpperCase();
+        cur = name === 'H' ? 'h' : name === 'L' ? 'l' : null;
         continue;
       }
       if (cur !== null && !out[cur].includes(t)) out[cur].push(t);

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { countChars, type BeatRequirement } from '@inkforge/shared';
@@ -236,6 +238,20 @@ describe('L0 beat_coverage 分级词表 AND 层（DEC-2026-1120-10）', () => {
     expect(lw.l.length).toBeGreaterThan(0);
     const missing = loadLandingWords(path.join(process.cwd(), 'config/quality/__no_such__.txt'));
     expect(missing).toEqual({ h: [], l: [] });
+  });
+
+  it('⑦ loadLandingWords 调情档护栏（DEC-2026-1122-01）：未知 [X] 节=节头识别但不入库，其下行忽略', () => {
+    const lw = loadLandingWords(path.join(process.cwd(), 'config/quality/landing-words.default.txt'));
+    // 默认文件 [调情] 节的手交词不得进判定池（否则调情又变落地，白删）
+    expect(lw.l).not.toContain('手');
+    expect(lw.l).not.toContain('握');
+    expect(lw.l).not.toContain('套弄');
+    expect(lw.h).not.toContain('揉');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-lw-'));
+    const f = path.join(dir, 'w.txt');
+    fs.writeFileSync(f, '# 注释\n[H]\n甲\n[调情]\n乙\n丙\n[L]\n丁\n', 'utf8');
+    expect(loadLandingWords(f)).toEqual({ h: ['甲'], l: ['丁'] });
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 
