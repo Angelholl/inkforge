@@ -5,8 +5,14 @@ import type { Database } from '../db/open';
 
 export type ExportFormat = 'chapters-md' | 'combined-md' | 'txt';
 
+/** 文件系统段安全化：非法字符→'_'；纯点号段（'.'/'..'）→'_'（audit 2026-11-23 F-3：书名 '..' 曾把 outDir 解析到 dataDir 根）。 */
+export function safeSegment(name: string): string {
+  const s = name.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 50);
+  return s === '.' || s === '..' ? '_' : s;
+}
+
 function safeTitle(title: string): string {
-  return title.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 50);
+  return safeSegment(title);
 }
 
 /**

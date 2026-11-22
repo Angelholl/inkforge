@@ -17,7 +17,7 @@ import * as outlineRepo from '../db/repositories/outline';
 import * as imitationRepo from '../db/repositories/imitation';
 import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
-import { exportBook } from '../export/export';
+import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
 import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
@@ -1371,7 +1371,7 @@ ${repairPrompt(first.errors)}`))).text,
     if (!formats.includes(rawFormat as (typeof formats)[number])) {
       return reply.code(400).send({ error: `format 须为 ${formats.join('/')}` });
     }
-    const outDir = path.join(config.dataDir, 'exports', book.title.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 50));
+    const outDir = path.join(config.dataDir, 'exports', safeSegment(book.title)); // 纯点号书名防目录越级（audit 2026-11-23 F-3）
     const result = await exportBook(db, bookId, outDir, rawFormat as (typeof formats)[number]);
     // D3 澄清（DEC-2026-1117-05）：回传落盘目录绝对路径，前端 toast 报位
     reply.send({ ...result, outDir: path.resolve(outDir) });

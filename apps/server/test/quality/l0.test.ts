@@ -307,3 +307,18 @@ describe('L0 书级落地策略条目（DEC-2026-1122-01）', () => {
     }
   });
 });
+
+describe('loadCliches 容错（audit 2026-11-23 F-1）', () => {
+  it('缺文件 → 空表 fail-open（镜像 loadLandingWords，不再炸整章管线）', () => {
+    expect(loadCliches(path.join(os.tmpdir(), `no-such-cliches-${Date.now()}.txt`))).toEqual({ hard: [], soft: [] });
+  });
+
+  it('坏正则行跳过、合法行保留；soft 前缀坏行同样容错', () => {
+    const p = path.join(os.tmpdir(), `cliches-bad-${Date.now()}.txt`);
+    fs.writeFileSync(p, '不是.*而是\n!坏括号(未闭合\n这一刻，他明白了\n', 'utf8');
+    const r = loadCliches(p);
+    expect(r.hard.map((re) => re.source)).toEqual(['不是.*而是', '这一刻，他明白了']);
+    expect(r.soft).toEqual([]);
+    fs.rmSync(p, { force: true });
+  });
+});

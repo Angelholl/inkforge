@@ -83,6 +83,23 @@ describe('REST API', () => {
     expect((hits.json() as unknown[]).length).toBeGreaterThanOrEqual(1);
   });
 
+  it('纯点号书名导出不越出 exports 根（audit 2026-11-23 F-3）', async () => {
+    const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: '..' } });
+    expect(created.statusCode).toBe(201);
+    const dotBookId = (created.json() as { id: string }).id;
+    const ex = await app.inject({ method: 'POST', url: `/api/books/${dotBookId}/export` });
+    expect(ex.statusCode).toBe(200);
+    const body = ex.json() as { outDir: string };
+    // '..' 经 safeSegment 归 '_'：解析后 outDir 必须仍在 {dataDir}/exports 之下（修复前=越级到 dataDir 根）
+    expect(path.resolve(body.outDir).startsWith(path.resolve(path.join(dir, 'exports')))).toBe(true);
+  });
+
+  it('run scope 倒挂（from>to）400（audit 2026-11-23 F-4）', async () => {
+    const r = await app.inject({ method: 'POST', url: '/api/runs', payload: { bookId, fromChapter: 3, toChapter: 1, mode: 'generate' } });
+    expect(r.statusCode).toBe(400);
+    expect((r.json() as { error: string }).error).toContain('fromChapter 不得大于 toChapter');
+  });
+
   it('zod 非法 body 400；未知 id 404', async () => {
     const bad = await app.inject({ method: 'POST', url: '/api/books', payload: { title: '' } });
     expect(bad.statusCode).toBe(400);

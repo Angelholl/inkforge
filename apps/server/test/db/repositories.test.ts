@@ -139,6 +139,8 @@ describe('fts 仓储', () => {
     expect(hits[0].chapterId).toBe(ch.id);
     expect(ftsRepo.searchChapters(db, bookId, '雨停')).toEqual([]);
     expect(ftsRepo.searchChapters(db, bookId, '雨')).toEqual([]);
+    // FTS5 MATCH 语法错误（含引号）→ 空结果而非抛错裸 500（audit 2026-11-23 F-2）
+    expect(ftsRepo.searchChapters(db, bookId, '不存在的"引号')).toEqual([]);
   });
 });
 

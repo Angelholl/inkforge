@@ -24,14 +24,24 @@ export interface L0Report {
   clicheHits: string[];
 }
 
-/** 套话表：每行一条 JS 正则 source；`!` 前缀=建议级。 */
+/** 套话表：每行一条 JS 正则 source；`!` 前缀=建议级。缺文件/不可读 → 空表 fail-open（镜像 loadLandingWords，
+ *  audit 2026-11-23 F-1：此前缺文件/坏正则行会炸整章管线）；坏正则行跳过不炸管线。 */
 export function loadCliches(path: string): { hard: RegExp[]; soft: RegExp[] } {
-  const lines = fs.readFileSync(path, 'utf8').split(/\r?\n/).filter((l) => l.trim() !== '');
+  let lines: string[] = [];
+  try {
+    lines = fs.readFileSync(path, 'utf8').split(/\r?\n/).filter((l) => l.trim() !== '');
+  } catch {
+    return { hard: [], soft: [] };
+  }
   const hard: RegExp[] = [];
   const soft: RegExp[] = [];
   for (const line of lines) {
-    if (line.startsWith('!')) soft.push(new RegExp(line.slice(1)));
-    else hard.push(new RegExp(line));
+    try {
+      if (line.startsWith('!')) soft.push(new RegExp(line.slice(1)));
+      else hard.push(new RegExp(line));
+    } catch {
+      /* 坏正则行跳过（容错优先于硬崩） */
+    }
   }
   return { hard, soft };
 }

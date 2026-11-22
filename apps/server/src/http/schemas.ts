@@ -47,13 +47,15 @@ export const generateSchema = z.object({
   maxRounds: z.number().int().min(1).max(5).optional(),
 });
 
-export const createRunSchema = z.object({
-  bookId: z.string().min(1),
-  fromChapter: z.number().int().positive(),
-  toChapter: z.number().int().positive(),
-  mode: z.enum(['generate', 'continue']).default('generate'),
-  maxRounds: z.number().int().min(1).max(5).optional(),
-});
+export const createRunSchema = z
+  .object({
+    bookId: z.string().min(1),
+    fromChapter: z.number().int().positive(),
+    toChapter: z.number().int().positive(),
+    mode: z.enum(['generate', 'continue']).default('generate'),
+    maxRounds: z.number().int().min(1).max(5).optional(),
+  })
+  .refine((v) => v.fromChapter <= v.toChapter, { message: 'fromChapter 不得大于 toChapter（audit 2026-11-23 F-4：倒挂 scope=空 run）' });
 
 export const importOriginalSchema = z.object({
   chapters: z.array(z.object({ title: z.string().min(1), content: z.string().min(1) })).min(1).max(500),

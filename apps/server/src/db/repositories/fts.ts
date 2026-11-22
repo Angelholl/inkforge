@@ -20,14 +20,19 @@ export interface ChapterSearchHit {
 
 export function searchChapters(db: Database, bookId: string, query: string): ChapterSearchHit[] {
   if (query.replace(/\s/g, '').length < 3) return []; // trigram 最短 3 字
-  return db
-    .prepare(
-      `SELECT f.chapter_id AS chapterId, c.chapter_no AS chapterNo,
+  try {
+    return db
+      .prepare(
+        `SELECT f.chapter_id AS chapterId, c.chapter_no AS chapterNo,
               snippet(chapter_fts, 1, '[', ']', '…', 12) AS snippet
        FROM chapter_fts f
        JOIN chapters c ON c.id = f.chapter_id
        WHERE chapter_fts MATCH ? AND c.book_id = ?
        ORDER BY c.chapter_no`,
-    )
-    .all(query, bookId) as ChapterSearchHit[];
+      )
+      .all(query, bookId) as ChapterSearchHit[];
+  } catch {
+    // FTS5 MATCH 语法错误（用户输入引号/操作符等）→ 空结果而非裸 500（audit 2026-11-23 F-2）
+    return [];
+  }
 }
