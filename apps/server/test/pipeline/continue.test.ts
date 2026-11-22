@@ -85,6 +85,7 @@ describe('continue 模式管线', () => {
       new Date().toISOString(),
     );
     setBookStyleProfile(db, bookId, 'mock-profile');
+    setBookFewshot(db, bookId, false); // 绑定即置 1（DEC-2026-1122-03③），显式关闭保住 fewshot 关不注入分支覆盖
     // 第 3 章待续写
     upsertBlueprint(db, {
       bookId,

@@ -210,14 +210,14 @@ describe('人物卡仓储 + 书籍 meta', () => {
 });
 
 describe('风格绑定关联表（0010）', () => {
-  it('setBookStyleBinding/getBookStyleBinding 往返：主辅行+dims 映射+fewshot 归零', () => {
+  it('setBookStyleBinding/getBookStyleBinding 往返：主辅行+dims 映射+绑定默认开 fewshot', () => {
     const bid = booksRepo.createBook(db, { title: '绑定之书' }).id;
-    booksRepo.setBookFewshot(db, bid, true);
+    booksRepo.setBookFewshot(db, bid, false); // 先手动关，证明绑定强制置 1（DEC-2026-1122-03③）
     booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB', 'pC'], dimsSource: { 对话: 'pB' }, weights: {} }, '{"v":2}');
     const b = booksRepo.getBook(db, bid)!;
     expect(b.styleProfileId).toBe('pA');
     expect(b.styleSnapshotJson).toBe('{"v":2}');
-    expect(b.styleFewshotOn).toBe(false);
+    expect(b.styleFewshotOn).toBe(true); // 绑定/重绑置 1（DEC-2026-1122-03③，翻转自 B4 裁决④）
     expect(booksRepo.getBookStyleBinding(db, bid)).toEqual({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB', 'pC'],

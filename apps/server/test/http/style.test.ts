@@ -287,7 +287,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     expect(r.statusCode).toBe(404);
   });
 
-  it('PUT style-fewshot：默认关 → 开 → 绑定/解绑都归零；非法 body 400、未知书 404', async () => {
+  it('PUT style-fewshot：默认关 → 开 → 绑定/重绑置 1、解绑归零；非法 body 400、未知书 404', async () => {
     const pid = await newProfile('开关试验档');
     const book = await newBook('开关试验书');
     // GET /api/books/:bookId 走 {...book} 展开 → 新字段自动透出
@@ -299,10 +299,10 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     const g1 = await app.inject({ method: 'GET', url: `/api/books/${book.id}` });
     expect((g1.json() as { styleFewshotOn: boolean }).styleFewshotOn).toBe(true);
 
-    // 绑定归零
+    // 绑定置 1
     await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: pid } });
     const g2 = await app.inject({ method: 'GET', url: `/api/books/${book.id}` });
-    expect((g2.json() as { styleFewshotOn: boolean }).styleFewshotOn).toBe(false);
+    expect((g2.json() as { styleFewshotOn: boolean }).styleFewshotOn).toBe(true); // 重绑归零→置 1 的语义翻转留痕（DEC-2026-1122-03③）
 
     // 解绑同样归零
     await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style-fewshot`, payload: { on: true } });
@@ -319,13 +319,13 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     expect(cleanup.statusCode).toBe(200); // 解绑后档案可删，不给后面的用例留脏引用
   });
 
-  it('多绑 body：1 主 2 辅 + dimsSource 落库，GET 回显 styleBinding，fewshot 归零', async () => {
+  it('多绑 body：1 主 2 辅 + dimsSource 落库，GET 回显 styleBinding，fewshot 置 1', async () => {
     const p1 = await newProfile('多绑主档');
     const p2 = await newProfile('多绑辅档甲');
     const p3 = await newProfile('多绑辅档乙');
     const book = await newBook('多绑书');
 
-    // 先开后绑：绑定归零（B4 裁决④ 语义经 setBookStyleBinding 保持）
+    // 绑定置 1（DEC-2026-1122-03③ 语义经 setBookStyleBinding 保持）
     await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style-fewshot`, payload: { on: true } });
     const bind = await app.inject({
       method: 'PUT',
@@ -342,7 +342,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     expect(g.styleProfileId).toBe(p1);
     expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['对话']: p2, ['节奏']: p3 }, weights: {} });
     const row = db.prepare('SELECT style_fewshot_on FROM books WHERE id = ?').get(book.id) as { style_fewshot_on: number };
-    expect(row.style_fewshot_on).toBe(0);
+    expect(row.style_fewshot_on).toBe(1); // 绑定/重绑置 1（DEC-2026-1122-03③）
 
     // 清理：解绑 + 删三档案，不留脏引用
     await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });

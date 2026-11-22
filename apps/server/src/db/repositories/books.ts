@@ -119,16 +119,19 @@ export function setBookStyleProfile(
   snapshot?: { profileId: string; version: number; rulesJson: string; samplesJson: string } | null,
 ): void {
   const snapshotJson = profileId && snapshot ? JSON.stringify({ ...snapshot, boundAt: new Date().toISOString() }) : null;
-  // B4 裁决④：绑定与解绑都把文风示例开关归零（新绑定默认关）
-  db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, style_fewshot_on = 0, updated_at = ? WHERE id = ?').run(
+  const ts = new Date().toISOString();
+  // DEC-2026-1122-03③：绑定/重绑置 1、解绑置 0（列 DEFAULT 0 不动，默认开由绑定路径写入）
+  const fewshotOn = profileId === null ? 0 : 1;
+  db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, style_fewshot_on = ?, updated_at = ? WHERE id = ?').run(
     profileId,
     snapshotJson,
-    new Date().toISOString(),
+    fewshotOn,
+    ts,
     bookId,
   );
 }
 
-/** 风格绑定（0010 关联表，引用真相）：books.style_profile_id 为主镜像。binding=null 解绑清三处；重绑/解绑均把 fewshot 开关归零（B4 裁决④）。 */
+/** 风格绑定（0010 关联表，引用真相）：books.style_profile_id 为主镜像。binding=null 解绑清三处；绑定/重绑置 1、解绑置 0（DEC-2026-1122-03③）。 */
 export interface StyleBinding {
   primaryProfileId: string;
   auxProfileIds: string[];
@@ -140,10 +143,13 @@ export interface StyleBinding {
 
 export function setBookStyleBinding(db: Database, bookId: string, binding: StyleBinding | null, snapshotJson: string | null): void {
   const ts = new Date().toISOString();
+  // DEC-2026-1122-03③：绑定/重绑置 1、解绑置 0（列 DEFAULT 0 不动，默认开由绑定路径写入）
+  const fewshotOn = binding ? 1 : 0;
   const tx = db.transaction(() => {
-    db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, style_fewshot_on = 0, updated_at = ? WHERE id = ?').run(
+    db.prepare('UPDATE books SET style_profile_id = ?, style_snapshot_json = ?, style_fewshot_on = ?, updated_at = ? WHERE id = ?').run(
       binding?.primaryProfileId ?? null,
       binding ? snapshotJson : null,
+      fewshotOn,
       ts,
       bookId,
     );
