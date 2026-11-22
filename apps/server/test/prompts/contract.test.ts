@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
-import { renderCharacterCards, renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize, renderTaskSummaryBlock } from '../../src/prompts/render';
+import { LANDING_POOL_BUDGET_CHARS, renderCharacterCards, renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize, renderTaskSummaryBlock } from '../../src/prompts/render';
 import { parseBlueprint, parseOutline } from '../../src/llm/plainproto';
 import { MANDATE_TEXT_PREFIX } from '../../src/pipeline/mandate';
 
@@ -207,7 +207,7 @@ describe('renderCharacterCards 契约', () => {
       });
       const poolLine = out.split('\n').find((l) => l.startsWith('落地词池'))!;
       const acc = poolLine.slice(poolLine.indexOf('：') + 1);
-      expect(acc.length).toBeLessThanOrEqual(300);
+      expect(acc.length).toBeLessThanOrEqual(LANDING_POOL_BUDGET_CHARS);
       expect(acc.startsWith('玉光甲0')).toBe(true);
       expect(acc).toContain('、');
     });
