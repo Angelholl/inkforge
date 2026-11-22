@@ -58,6 +58,8 @@ describe('loadConfig', () => {
     expect(c.budgets.rewrite).toEqual({
       hardRules: 500,
       styleRules: 400,
+      styleDims: 1600, // DEC-2026-1122-03①：targeted 补画像与样本槽，预算对齐 draft
+      fewShot: 2500,
       original: 6000,
       findings: 800,
       factBaseline: 1000,
