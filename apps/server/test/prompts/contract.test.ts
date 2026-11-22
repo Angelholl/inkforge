@@ -43,6 +43,13 @@ describe('prompt 渲染契约', () => {
     expect(out).not.toContain(DRAFT);
   });
 
+  it('renderQcTask：文风贴合评准线钉死方向（DEC-2026-1122-03①）', () => {
+    const out = renderQcTask();
+    expect(out).toContain('【文风贴合评准】');
+    expect(out).toContain('露骨直白的表达即为贴合');
+    expect(out).toContain('不得以「过于直白」');
+  });
+
   it('renderDraft：含世界观前 20 字符与禁区文本', () => {
     const worldview = '九州修真界，灵气自东而来，宗门林立，凡人如草芥。';
     const out = renderDraft({ chapterNo: 3, targetChars: 3000, worldview, blueprint: BP });
@@ -167,5 +174,52 @@ describe('renderCharacterCards 契约', () => {
     const summary = renderTaskSummaryBlock({ mustHaveBeats: [beat] });
     expect(summary).toContain(`· ${text}（落地·H级须显性词）`);
     expect(summary).not.toContain('须出现关键词：');
+  });
+
+  describe('renderTaskSummaryBlock 显性词参考块（DEC-2026-1122-03②，夹具词全中性）', () => {
+    const beatH = { text: '高强落地重场戏', keywords: ['密信'], grade: 'H' as const, source: 'mandate' as const };
+    const beatL = { text: '轻度落地场景', keywords: [], grade: 'L' as const, source: 'mandate' as const };
+    const pool = { h: ['玉佩光'], l: ['铜镜摇', '窗棂摇'] };
+
+    it('① grade H → 词池 H∪L 全量+H 命中口径句', () => {
+      const out = renderTaskSummaryBlock({ mustHaveBeats: [beatH], styleRulesText: '短句为主。', landingWords: pool });
+      expect(out).toContain('【显性词参考】');
+      expect(out).toContain('落地词池（H∪L）：玉佩光、铜镜摇、窗棂摇');
+      expect(out).toContain('2 个不同 L 池词');
+    });
+
+    it('② 仅 grade L → 词池只用 L 池，不含 H 池词', () => {
+      const out = renderTaskSummaryBlock({ mustHaveBeats: [beatL], landingWords: pool });
+      expect(out).toContain('落地词池（L）：铜镜摇、窗棂摇');
+      expect(out).not.toContain('玉佩光');
+      expect(out).toContain('L级场景至少 1 个 L 池词');
+    });
+
+    it('③ 不传 landingWords → 不产出词池块（向后兼容回归钉）', () => {
+      const out = renderTaskSummaryBlock({ mustHaveBeats: [beatH], styleRulesText: '短句为主。' });
+      expect(out).not.toContain('【显性词参考】');
+    });
+
+    it('④ 贪心预算 300 字符截断：至少收 1 词且不超预算', () => {
+      const out = renderTaskSummaryBlock({
+        mustHaveBeats: [beatH],
+        landingWords: { h: Array.from({ length: 120 }, (_, i) => `玉光甲${i}`), l: [] },
+      });
+      const poolLine = out.split('\n').find((l) => l.startsWith('落地词池'))!;
+      const acc = poolLine.slice(poolLine.indexOf('：') + 1);
+      expect(acc.length).toBeLessThanOrEqual(300);
+      expect(acc.startsWith('玉光甲0')).toBe(true);
+      expect(acc).toContain('、');
+    });
+
+    it('⑤ 词池全空 → 不产出词池块（fail-open 镜像 l0）', () => {
+      const out = renderTaskSummaryBlock({ mustHaveBeats: [beatH], landingWords: { h: [], l: [] } });
+      expect(out).not.toContain('【显性词参考】');
+    });
+
+    it('⑥ 次序钉（D-D）：词池块居末位，文风铁则先于显性词参考', () => {
+      const out = renderTaskSummaryBlock({ mustHaveBeats: [beatH], styleRulesText: '短句为主。', landingWords: pool });
+      expect(out.indexOf('【文风铁则】')).toBeLessThan(out.indexOf('【显性词参考】'));
+    });
   });
 });

@@ -237,7 +237,7 @@ export async function runChapterPipeline(
             continuity: continuityText,
             prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
             fewShot: fewShotBlock,
-            task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }) + (runMode === 'continue' ? '\n前文腔调优先，文风档案作质感参照。' : '') + renderTaskSummaryBlock({ mustHaveBeats: blueprint.mustHaveBeats, styleRulesText: styleRulesText }),
+            task: renderDraft({ chapterNo: args.chapterNo, targetChars, worldview: '', blueprint }) + (runMode === 'continue' ? '\n前文腔调优先，文风档案作质感参照。' : '') + renderTaskSummaryBlock({ mustHaveBeats: blueprint.mustHaveBeats, styleRulesText: styleRulesText, landingWords }),
           },
           config.budgets.draft,
         ),
@@ -329,7 +329,7 @@ export async function runChapterPipeline(
         mode === 'targeted'
           ? `仅修复所列问题，其余内容保持原样；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${fewShotGuard}${echoFix}${clicheFix}${landingPreserve}直接输出修订后的完整章节正文。`
           : `按硬规则与蓝图整章重写，消除全部所列问题；输出前清点正文字数，必须落在 ${Math.round(targetChars * 0.9)}-${Math.round(targetChars * 1.1)} 字之间（绝对上限 ${Math.round(targetChars * 1.2)} 字）；章尾不得与前文章尾段落复现；${fewShotGuard}${echoFix}${clicheFix}${landingPreserve}直接输出完整章节正文。`;
-      const taskText = renderRewrite({ findings: l1.findings, taskInstruction }) + renderTaskSummaryBlock({ mustHaveBeats: blueprint.mustHaveBeats, styleRulesText: styleRulesText });
+      const taskText = renderRewrite({ findings: l1.findings, taskInstruction }) + renderTaskSummaryBlock({ mustHaveBeats: blueprint.mustHaveBeats, styleRulesText: styleRulesText, landingWords });
       const rwSlots =
         mode === 'targeted'
           ? buildRewriteSlots(

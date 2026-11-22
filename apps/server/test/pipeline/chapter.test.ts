@@ -553,3 +553,108 @@ COMMENT: 引文锚定测试块（blocker）`;
     expect(rewrite.user).toContain('【本章硬要求】');
   }, 30000);
 });
+
+describe('显性词池接线（DEC-2026-1122-03②）', () => {
+  // 必须走 USER_PATH env：resolveLandingWordsPath 用户路径优先级最高，防开发机 ~/.inkforge/landing-words.txt 真词表窜入夹具
+  let savedEnv: string | undefined;
+  const wordDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-lw-'));
+  const wordsPath = path.join(wordDir, 'landing-words.txt');
+
+  beforeAll(() => {
+    savedEnv = process.env.INKFORGE_LANDING_WORDS_USER_PATH;
+    fs.writeFileSync(wordsPath, '[H]\n玉佩光\n[L]\n窗棂摇\n', 'utf8'); // 夹具词全中性（1301 纪律）
+    process.env.INKFORGE_LANDING_WORDS_USER_PATH = wordsPath;
+  });
+
+  afterAll(() => {
+    if (savedEnv === undefined) delete process.env.INKFORGE_LANDING_WORDS_USER_PATH;
+    else process.env.INKFORGE_LANDING_WORDS_USER_PATH = savedEnv;
+  });
+
+  function lwBook(tag: string, description: string): string {
+    return createBook(db, { title: `词池之书${tag}`, description }).id;
+  }
+
+  function lwChapter(bid: string, mustHaveBeats: Array<{ text: string; keywords: string[]; grade?: 'H' | 'L' }>): void {
+    db.prepare(
+      'INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)',
+    ).run(
+      `lw-ch-${bid}`,
+      bid,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '推进落地', beats: [], mustHaveBeats, bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+  }
+
+  function lwRun(bid: string): string {
+    db.prepare("INSERT INTO runs(id, book_id, mode, chapter_scope_json, max_rounds, created_at) VALUES(?,?, 'generate', ?, 1, ?)").run(
+      `run-${Math.random().toString(36).slice(2)}`,
+      bid,
+      JSON.stringify({ from: 1, to: 1 }),
+      new Date().toISOString(),
+    );
+    return (db.prepare('SELECT id FROM runs ORDER BY rowid DESC LIMIT 1').get() as { id: string }).id;
+  }
+
+  it('grade H 章 + 用户词表 → draft 与 rewrite task 均含【显性词参考】（DEC-2026-1122-03②）', async () => {
+    const bid = lwBook('a', '这是一个修真世界的测试设定。');
+    lwChapter(bid, [{ text: '祠堂对峙重场戏', keywords: ['场景一'], grade: 'H' }]);
+    const runId = lwRun(bid);
+    const blockerQc = `OVERALL: 7
+---
+SEVERITY: blocker
+DIMENSION: 设定一致
+QUOTE: 【章
+COMMENT: 引文锚定测试块（blocker）`;
+    const provider = createMockProvider({
+      draft: { textFn: (m) => `【章${m.chapterNo}改】独有开头。` + '线'.repeat(480) },
+      qc: { repeat: { text: blockerQc } },
+      rewrite: { textFn: (m) => `【章${m.chapterNo}修】重写后开头。` + '改'.repeat(480) },
+      summarize: { text: 'SUMMARY: 第1章推进完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
+    });
+    const cap = capturing(provider);
+    await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.user).toContain('【显性词参考】');
+    expect(draft.user).toContain('玉佩光'); // H∪L 池全量（含 L 池词 窗棂摇）
+    const rw = cap.calls.find((c) => c.step === 'rewrite')!;
+    expect(rw.user).toContain('【显性词参考】'); // 改写端同吃词池=改写不丢显性词
+    expect(rw.user).toContain('玉佩光');
+  }, 30000);
+
+  it('4 节拍+词表：task 槽截尾保铁则（D-D 挤压钉：词池居末先让位）', async () => {
+    const bid = lwBook('b', '这是一个修真世界的测试设定。');
+    // 铁则来自档案 rulesText：绑档案（生产路径，顺带验 DEC-2026-1122-03③ 绑定置 1 无副作用）
+    db.prepare(
+      'INSERT INTO style_profiles(id, name, source_path, source_hash, version, rules_json, samples_json, metrics_json, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+    ).run(
+      'lw-profile',
+      '词池档案',
+      'src/lw.txt',
+      'lwhash',
+      1,
+      JSON.stringify({ rulesText: '短句为主。', dims: {}, axes: {} }),
+      JSON.stringify([]),
+      JSON.stringify({}),
+      new Date().toISOString(),
+    );
+    db.prepare('UPDATE books SET style_profile_id = ? WHERE id = ?').run('lw-profile', bid);
+    // 4 条长节拍（每条 ~70 字）令硬要求+铁则+词池合计超 task 槽 800（keep:head 从尾截）
+    const longBeat =
+      '雪夜长街灯火将熄，他抱着剑穿过三个坊门，每一步都踩在积水与碎冰之间，谁也没有说话，风把幡旗吹得猎猎作响，远处的更鼓敲过三巡';
+    lwChapter(bid, [
+      { text: longBeat, keywords: [], grade: 'H' },
+      { text: longBeat, keywords: [], grade: 'L' },
+      { text: longBeat, keywords: [], grade: 'H' },
+      { text: longBeat, keywords: [], grade: 'L' },
+    ]);
+    const runId = lwRun(bid);
+    const cap = capturing(createDefaultMockProvider());
+    await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.user).toContain('【文风铁则】'); // 词池居末先让位，铁则不得被挤出
+  }, 30000);
+});

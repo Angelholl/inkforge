@@ -58,6 +58,7 @@ export function renderQcTask(): string {
   return [
     `【评审任务】请逐项检查以下七个维度，找出正文中存在的问题：`,
     ...DIMENSIONS.map((d) => `- ${d}`),
+    `【文风贴合评准】该维以本书文风档案的规则与范例方向为基准：档案要求高直白度或高露骨度时，露骨直白的表达即为贴合；不得以「过于直白」「应改含蓄」为由出 finding 或压低 OVERALL。`,
     `【输出格式】第一行输出 OVERALL: <1-10 整数>（整体评分）；若存在问题，随后每个问题输出一块，块间以单独一行 --- 分隔，每块恰好四行：`,
     `SEVERITY: blocker|major|minor`,
     `DIMENSION: <维度名，取自上述七维度之一>`,
@@ -87,9 +88,13 @@ export function renderRewrite(input: { findings: Finding[]; taskInstruction: str
   ].join('\n');
 }
 
-/** task 槽尾部 recency 摘要块（DEC-2026-1120-10）：必含节拍文本+关键词（带 grade 显示落地分级）、文风铁则（rulesText 前 3 非空行）。
- *  两块全空返回 ''——无蓝图硬要求且无档案的书零污染。签名不动 renderDraft/renderRewrite（contract.test 钉其形态）。 */
-export function renderTaskSummaryBlock(input: { mustHaveBeats: BeatRequirement[]; styleRulesText?: string }): string {
+/** 显性词池贪心预算（D-C，DEC-2026-1122-03②）：词池作用=可执行词清单非全量字典，不得挤压任务协议（task 槽 800）。 */
+export const LANDING_POOL_BUDGET_CHARS = 300;
+
+/** task 槽尾部 recency 摘要块（DEC-2026-1120-10）：必含节拍文本+关键词（带 grade 显示落地分级）、文风铁则（rulesText 前 3 非空行）、
+ *  显性词参考（落地词池，DEC-2026-1122-03②：H∪L 池随 grade 选池、300 字符贪心、居块末位让位铁则 D-D）。
+ *  块全空返回 ''——无蓝图硬要求且无档案的书零污染。签名不动 renderDraft/renderRewrite（contract.test 钉其形态）。 */
+export function renderTaskSummaryBlock(input: { mustHaveBeats: BeatRequirement[]; styleRulesText?: string; landingWords?: { h: string[]; l: string[] } }): string {
   const parts: string[] = [];
   if (input.mustHaveBeats.length > 0) {
     parts.push([
@@ -102,6 +107,23 @@ export function renderTaskSummaryBlock(input: { mustHaveBeats: BeatRequirement[]
   const ironRules = (input.styleRulesText ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '').slice(0, 3);
   if (ironRules.length > 0) {
     parts.push(['【文风铁则】', ...ironRules].join('\n'));
+  }
+  const gradeH = input.mustHaveBeats.some((m) => m.grade === 'H');
+  const gradeL = input.mustHaveBeats.some((m) => m.grade === 'L');
+  const lw = input.landingWords;
+  const poolRaw = gradeH ? [...(lw?.h ?? []), ...(lw?.l ?? [])] : lw?.l ?? [];
+  if ((gradeH || gradeL) && poolRaw.length > 0) {
+    // 贪心：逐词 '、' 连接，超预算且已收词即停（至少收 1 词，D-C）
+    let acc = '';
+    for (const cand of poolRaw) {
+      const next = acc ? `${acc}、${cand}` : cand;
+      if (next.length > LANDING_POOL_BUDGET_CHARS && acc !== '') break;
+      acc = next;
+    }
+    const hitRule = gradeH
+      ? 'H级场景至少使用 1 个 H 池词或 2 个不同 L 池词；L级场景至少 1 个 L 池词。整章自然分布，不得堆砌单句。'
+      : 'L级场景至少 1 个 L 池词。整章自然分布，不得堆砌单句。';
+    parts.push([`【显性词参考】`, `落地词池（${gradeH ? 'H∪L' : 'L'}）：${acc}`, hitRule].join('\n'));
   }
   return parts.join('\n\n');
 }
