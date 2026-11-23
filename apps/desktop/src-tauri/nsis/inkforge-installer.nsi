@@ -5239,6 +5239,8 @@ Section Install
     File /a "/oname=resources\server\node_modules\zod\v4-mini\package.json" "I:\inkforge\apps\desktop\src-tauri\resources\server\node_modules\zod\v4-mini\package.json"
     File /a "/oname=resources\server\server.mjs" "I:\inkforge\apps\desktop\src-tauri\resources\server\server.mjs"
     File /a "/oname=resources\server\worker\worker.mjs" "I:\inkforge\apps\desktop\src-tauri\resources\server\worker\worker.mjs"
+    ; Inkforge* (DEC-2026-1123-01): $INSTDIR\data\ 为壳首建的用户数据（sqlite 书稿/词表/config/备份），
+    ; 安装/升级逻辑永不递归删除它（全模板无 RMDir /r "$INSTDIR"）；仅卸载器 DeleteAppData 勾选删除（见 Uninstall 段 Inkforge* hunk）。
     SetOutPath "$INSTDIR\resources\web\dist"
     ; Inkforge: purge stale hashed bundles left by previous installs (root-flattened legacy layout)
     Delete "$INSTDIR\resources\web\dist\index-*.js"
@@ -9702,6 +9704,8 @@ Section Uninstall
     SetShellVarContext current
     RmDir /r "$APPDATA\${BUNDLEID}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    ; Inkforge* (DEC-2026-1123-01): 书稿/词表/设置已迁至 $INSTDIR\data\——勾选=连新数据一并删（语义同旧版：勾=全删，不勾=全留）
+    RmDir /r "$INSTDIR\data"
   ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL
