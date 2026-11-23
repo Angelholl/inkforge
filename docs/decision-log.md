@@ -583,3 +583,13 @@
 **裁决②（模板机制）：** 0.2.2 挂账「NSIS 静态快照固化盘符」本轮修——已证 tauri build 对模板**原样拷贝**（生成 NSI :30-60 与模板零差异），机器依赖面=3736 条 resources 绝对前缀 + `!define MAINBINARYSRCPATH`（I:\ target）+ `!define ADDITIONALPLUGINSPATH`（C:\Users\57850 tauri 缓存）+ ICON 两行；修法收敛为模板头 5 条 define，由 stamp-nsi.mjs 以脚本相对（import.meta.url）/环境变量（LOCALAPPDATA）计算改写全部六行。失败模式安全（忘 stamp→makensis 对 File 缺源硬报错非静默）。执行=卡 t06（opencode/hy4-flash-free，打包层非禁入型），主审亲跑编译日志清点+全量 664。
 
 **执行留痕补记（主模型亲执发版链）：** bump 0.2.3 八处、stamp 盖章、默认词表头注释 :2 路径修正、.gitignore 加固（*.db±wal/shm）、验证链硬序、build-dist→tauri build、发版静检、变体演练、提交五步→push→tag v0.2.3→Release 上载→digest 三验、docs/release/0.2.3-release.md 存证。
+
+## DEC-2026-1123-03 — 发版链 CI 化两拍板（owner 直答，2026-11-23）
+
+**背景：** 0.2.3 发版门本地已全绿（两轴 code-review 0 硬违反；演练二轮取证：首启前 4131 文件落盘清点个人面零命中、双默认表 cmp 与仓库 tracked 一致、词表生效路径=出厂默认、books=0、env=placeholder、互锁「本安装全新初始化不迁移」行在案、卸载回净后 ARP 正式装机注册无损；卸载残留 19 项系 Delete 行历史混合风格，挂账非本轮引入）。owner 问「打包与测试为何不在 GitHub 完成」；主审答：硬阻碍（模板盘符/用户名硬编码）已由 t06 宏化清除，CI 全新 runner 对「包零个人数据」是**结构性保证**（比事后清点更强），public 仓 Windows 分钟免费、GitHub 直连免代理波动、GITHUB_TOKEN 免 PAT 手工链；CI 替代不了 owner 真实测试与本机旧数据升级路径演练（CI 只能模拟净装）。1123-02 末段留痕系计划态误写为完成态（Spec 轴发现），以本条为准修正。
+
+**裁决①：** 0.2.3 等 CI 链建成再发——本地已验证包（inkforge_0.2.3_x64-setup.exe，sha=eed2a8b4c576f5ca9878b94325536d6d05fee5d74049548b7ed77a0ab35bd3f4）作废为参考件、不上载；发版物由流水线从 tag 提交重打。
+
+**裁决②：** 排卡建 `.github/workflows/release.yml` 全链上 CI：tag `v*.*.*` 触发→依赖安装（pnpm 缓存+rust 缓存）→版本门（tag==tauri.conf.version）→全量测试+typecheck+lint+audit --prod→build-dist→tauri build→PE Subsystem 回归→生成 NSI 静态清点（宏形态计数/迁移对/依赖覆盖/个人面零命中）→**正式包验证装演练**（/P /D 净装→落盘清点→首启 health+词表 path+books+env 取证→杀树→卸载）→artifact 存档→Release 自动上载（GITHUB_TOKEN）→digest 回读比对→公开三验；`workflow_dispatch`=验证模式不建 Release。0.2.4 起发版=push tag，验收放行与 GUI 真实测试仍在 owner。
+
+**执行安排：** 计划真值=docs/plans/2026-11-23-ci-release.md（code-planner 产出→critic 评议→owner 审→派卡）；卡拆两张：t07=CI 支撑脚本两文件（release-inventory.mjs 通用化+ci-verify-install.sh 参数化，本地可自证）、t08=release.yml+PE 脚本 CI 适配；首跑调试主模型亲执（REST+git-credential PAT 直连，gh CLI 本机无、不装）。
