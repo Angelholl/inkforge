@@ -12,14 +12,32 @@ export interface ParsedLandingWords {
 
 export type LandingWordsValidation = { ok: true } | { ok: false; error: string };
 
-/** 用户词表路径（DEC-2026-1122-02 A 案，owner 呈批裁决「以普通用户为准」）：
+/** 用户词表路径（DEC-2026-1122-02 A 案 / DEC-2026-1123-01，owner 呈批裁决「以普通用户为准」）：
  *  `INKFORGE_LANDING_WORDS_USER_PATH` env 优先（装机壳注入 cfg_dir，词表与库/config.json 同目录）、
- *  `~/.inkforge/landing-words.txt` 兜底（dev）。形态沿 configFilePath 先例（settings.ts）。 */
-export function landingWordsUserPath(opts?: { home?: string; env?: string | undefined }): string {
+ *  dev 兜底 `INKFORGE_DATA_DIR` 相对目录默认 `data`（cwd 解析沿 config.ts:87 同口径，落 apps/server/data 与库同仓）。
+ *  DEC-2026-1123-01：dev 兜底改 dataDir 相对目录，旧 ~/.inkforge 文件 ensure 只拷不删迁移；装机壳注入 env 优先事实保留。 */
+export function landingWordsUserPath(opts?: { home?: string; env?: string | undefined; dataDir?: string | undefined }): string {
   const env = opts?.env ?? process.env.INKFORGE_LANDING_WORDS_USER_PATH;
   if (env) return env;
-  const home = opts?.home ?? os.homedir();
-  return path.join(home, '.inkforge', 'landing-words.txt');
+  return path.resolve(opts?.dataDir ?? process.env.INKFORGE_DATA_DIR ?? 'data', 'landing-words.txt');
+}
+
+/** 旧 dev 词表迁移（DEC-2026-1123-01）：新位缺失且旧 ~/.inkforge 文件存在时只拷不删；
+ *  全程吞错不抛，迁移失败不挡主流程；env 已设（装机壳注入/显式注入）则零迁移直接返回 env 路径。 */
+export function ensureLandingWordsUserFile(opts?: { home?: string; env?: string | undefined; dataDir?: string | undefined }): string {
+  const p = landingWordsUserPath(opts);
+  const env = opts?.env ?? process.env.INKFORGE_LANDING_WORDS_USER_PATH;
+  if (env) return p;
+  try {
+    const legacy = path.join(opts?.home ?? os.homedir(), '.inkforge', 'landing-words.txt');
+    if (!fs.existsSync(p) && fs.existsSync(legacy) && legacy !== p) {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.copyFileSync(legacy, p);
+    }
+  } catch {
+    /* 迁移失败不影响主流程（吞错不抛） */
+  }
+  return p;
 }
 
 /** 解析词表文本：split 容 CRLF；'' 与 '#' 开头跳过；`[X]` 节头切换当前节（未知节=识别入 sections 但不入池，
@@ -84,8 +102,9 @@ export function resolveLandingWordsPath(opts?: {
   home?: string;
   env?: string | undefined;
   userEnv?: string | undefined;
+  dataDir?: string | undefined;
 }): string {
-  const userPath = landingWordsUserPath({ home: opts?.home, env: opts?.userEnv ?? process.env.INKFORGE_LANDING_WORDS_USER_PATH });
+  const userPath = ensureLandingWordsUserFile({ home: opts?.home, env: opts?.userEnv ?? process.env.INKFORGE_LANDING_WORDS_USER_PATH, dataDir: opts?.dataDir });
   if (fs.existsSync(userPath)) return userPath;
   const env = opts?.env ?? process.env.INKFORGE_LANDING_WORDS_PATH;
   if (env && fs.existsSync(env)) return env;

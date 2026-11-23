@@ -24,7 +24,7 @@ import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
 import { analyzeSpectrum } from '../spectrum';
 import { parseLandingCell, parseSettingsCompendium } from '../settings-import';
-import { parseLandingWordsText, readLandingWordsUserFile, resolveLandingWordsPath, validateLandingWordsText, writeLandingWordsUserFile } from '../quality/landing-words';
+import { ensureLandingWordsUserFile, parseLandingWordsText, readLandingWordsUserFile, resolveLandingWordsPath, validateLandingWordsText, writeLandingWordsUserFile } from '../quality/landing-words';
 import { analyzeStyle } from '../style/analysis';
 import * as plotRepo from '../db/repositories/plot';
 import * as spectrumRepo from '../db/repositories/spectrum';
@@ -1449,7 +1449,7 @@ ${repairPrompt(first.errors)}`))).text,
       return;
     }
     try {
-      writeLandingWordsUserFile(body.text);
+      writeLandingWordsUserFile(body.text, ensureLandingWordsUserFile());
     } catch {
       reply.code(500).send({ error: '词表写入失败' });
       return;
