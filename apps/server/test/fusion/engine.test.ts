@@ -151,6 +151,29 @@ describe('computeFusionRows / applyStripping（A 类剥节引擎，规格 §2 v2
     expect(a.headWindowWarn).toBe(b.headWindowWarn);
   });
 
+  it('嵌套 H3 全承载节（主审对码修正②）：H2 段跨子节标题剥尽，子标题行作段锚保留', () => {
+    const desc = [HEAD, '2. 人物节', CARRIED_CHAR, '2.1 子节', CARRIED_TRAIT, '3. 场景节', UNCARRIED].join('\n');
+    const input = {
+      description: desc,
+      sections: [
+        { heading: '2. 人物节', level: 2 as const, lines: [CARRIED_CHAR, '2.1 子节', CARRIED_TRAIT] },
+        { heading: '2.1 子节', level: 3 as const, lines: [CARRIED_TRAIT] },
+        { heading: '3. 场景节', level: 2 as const, lines: [UNCARRIED] },
+      ],
+      consumedHeadings: ['2. 人物节'],
+      carriers: makeCarriers(),
+    };
+    const { rows, previewDescription } = computeFusionRows(input);
+    const row = rowOf(rows, '2. 人物节');
+    expect(row.verdict).toBe('fully-carried'); // 子标题行为结构锚，不入残段
+    expect(row.strippableLines).toEqual([CARRIED_CHAR, CARRIED_TRAIT]);
+    const lines = previewDescription.split('\n');
+    expect(lines).not.toContain(CARRIED_CHAR);
+    expect(lines).not.toContain(CARRIED_TRAIT); // 旧缺陷会被 '2.1 子节' 截段而残留——现剥尽
+    expect(lines).toContain('2.1 子节');
+    expect(lines).toContain(UNCARRIED);
+  });
+
   it('consumedHeadings 未包含的节 → 不产行（载体驱动，无内容猜测）', () => {
     const input = makeInput();
     input.consumedHeadings = ['2. 人物节'];

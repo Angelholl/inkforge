@@ -58,6 +58,7 @@
     removable: boolean;
     strippableLines: string[];
     residualLines: string[];
+    level?: 2 | 3; // 主审对码修正②：段尾 level-aware 判据（缺省 2）
   }
   /** 张力行（Task-03 产物） */
   export interface TensionRowDto {
@@ -184,7 +185,7 @@
   4. preset（规格 §4 裁决2）：`fully-carried` → `'strip'`；其余 → `'keep'`。标签行残段（如「**X**：一句话」类解析器有意跳过不成卡的行）天然不承载 → 落 `residualLines`（v2.2 残段保留钉）。
   5. **首标题行之前的行（H1 题名行 + 定位句 blockquote——主审对码修正 11-24：精炼文行 0 实为题名行，定位句 blockquote 的 `> ` 前缀保留、在其后）恒不可剥**：引擎段匹配天然不覆盖节外行，另加显式钉「节外行不入任何节 strippableLines」（N4 头窗保护，双保险）。
   6. `headWindowWarn` = 按当前 preset 合成的剥除稿前 90 字 ≠ 原前 90 字（planner task 简介头窗 ≈90 字，`config.ts:141` task=800 装配截断；规格 N4「首节即被消费须显式示警」）。
-  7. `previewDescription` = `applyStripping(description, rows, rows.filter(preset==='strip' && removable).map(heading))`；**`applyStripping` 必须限段删除**（主审对码修正 11-24）：对每个所选 heading，先在 description 中定位其标题行（trim 全等，标题行在精炼文中保留——`settings-import.ts:121`，interim 实测 11 锚点全中可证），段尾=下一标题行（H2 或 H3，同法匹配）或文末；**只删该段内** `normLine` 命中该节 strippableLines 的行——防跨节同文本短行被全局集合误删（裸集合匹配会把别节相同行一并剥掉）。段外行一律逐字节保留。尾处理 `replace(/\n{3,}/g,'\n\n').trim()`（与 refine 尾处理同形，确定性钉）。
+  7. `previewDescription` = `applyStripping(description, rows, rows.filter(preset==='strip' && removable).map(heading))`；**`applyStripping` 必须限段删除**（主审对码修正 11-24）：对每个所选 heading，先在 description 中定位其标题行（trim 全等，标题行在精炼文中保留——`settings-import.ts:121`，interim 实测 11 锚点全中可证），**段尾=下一「同级或更浅」标题行（level-aware，主审对码修正② 11-24：嵌套 H3 不得截断 H2 段——否则《人物圣经》类带子节的全承载节剥除空转，T02 平铺夹具测不到、T04 归档组装才暴露）或文末**；**只删该段内** `normLine` 命中该节 strippableLines 的行——防跨节同文本短行被全局集合误删（裸集合匹配会把别节相同行一并剥掉）；**任何标题行=段锚恒保留**（不分类、不删除）。段外行一律逐字节保留。尾处理 `replace(/\n{3,}/g,'\n\n').trim()`（与 refine 尾处理同形，确定性钉）。行→level 经 `FusionAClassRow.level`（可选，缺省 2）由引擎输入 sections 携带。
 - Consumes：Task-01 `FusionAClassRowDto`（形状一致）；Task-04 路由组装 carriers 与 sections 调 `computeFusionRows`。
 
 **步骤**
@@ -297,7 +298,7 @@
   //   stored = parseGenGate(book.genGateJson)；stored && stored.fingerprint === fingerprint → reply { action:'pass', fingerprint }
   //   否则 show：归档存在（path.join(config.dataDir,'imports',`${bookId}-settings.md)`，routes.ts:313 同源）→
   //     raw=读档 → splitCompendiumSections + parseSettingsCompendium(raw).consumedSections →
-  //     sections 精炼行=refineForDescription(sec.lines.join('\n')).split('\n')（h3 块同法）→
+    //     sections 精炼行=refineForDescription(sec.lines.join('\n')).split('\n')（h3 块同法；level 随 CompendiumSectionRaw 传入引擎——主审对码修正②）→
   //     carriers 组装（listCharacters :103 / book.outline / listChapters 蓝图 goal / listForeshadowings continuity.ts:70 /
   //     style_sources.text 按 bound profile source_hash，routes.ts:1008 同源）→ computeFusionRows →
   //     reply { action:'show', fingerprint, aClass: rows, previewDescription, headWindowWarn, hasArchive: true, binding: {...} }

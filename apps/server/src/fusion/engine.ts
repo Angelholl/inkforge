@@ -18,7 +18,7 @@ export interface FusionCarriers {
   styleSourcesText: string;
 }
 
-/** 同 shared FusionAClassRowDto 六键（heading / verdict / preset / removable / strippableLines / residualLines）。 */
+/** 同 shared FusionAClassRowDto（六键 + 可选 level）。 */
 export interface FusionAClassRow {
   heading: string;
   verdict: 'fully-carried' | 'partially-carried' | 'not-carried';
@@ -26,6 +26,8 @@ export interface FusionAClassRow {
   removable: boolean;
   strippableLines: string[];
   residualLines: string[];
+  /** 节层级（主审对码修正② 11-24：限段删除的段尾判据；缺省按 2=H2）。 */
+  level?: 2 | 3;
 }
 
 export interface FusionAClassResult {
@@ -56,7 +58,7 @@ function carrierNorms(carriers: FusionCarriers): string[] {
  */
 export function computeFusionRows(input: {
   description: string;
-  sections: Array<{ heading: string; lines: string[] }>;
+  sections: Array<{ heading: string; lines: string[]; level?: 2 | 3 }>;
   consumedHeadings: string[];
   carriers: FusionCarriers;
 }): FusionAClassResult {
@@ -85,6 +87,8 @@ export function computeFusionRows(input: {
     for (const line of sec.lines) {
       const n = normLine(line);
       if (n === '') continue; // 规则 1：空行不参与
+      // 主审对码修正②（11-24）：任何节标题行（含嵌套 H3 子标题）=段锚——不分类、不删除
+      if (headingTexts.has(line.trim())) continue;
       // 规则 2：归一化后作为子串出现在任一载体即「承载」。
       // 规则 4：标签行（如「**X**：一句话」）解析器有意跳过不成卡 → 天然不承载 → 残段保留。
       const carried = norms.some((c) => c.includes(n));
@@ -107,6 +111,7 @@ export function computeFusionRows(input: {
       removable: strippableLines.length > 0,
       strippableLines,
       residualLines,
+      level: sec.level ?? 2,
     });
   }
 
@@ -125,6 +130,7 @@ export function computeFusionRows(input: {
       removable: false,
       strippableLines: [],
       residualLines: [],
+      level: s.level ?? 2,
     }));
   const previewDescription = applyStripping(description, [...rows, ...boundaryRows], stripHeadings);
 
@@ -145,6 +151,9 @@ export function applyStripping(
 ): string {
   const lines = description.split('\n');
   const headingSet = new Set(rows.map((r) => r.heading));
+  // 主审对码修正②：heading→level 映射（首现优先），段尾=下一「同级或更浅」标题行
+  const levelOf = new Map<string, number>();
+  for (const r of rows) if (!levelOf.has(r.heading)) levelOf.set(r.heading, r.level ?? 2);
   const headingIdx = lines
     .map((l, i) => (headingSet.has(l.trim()) ? i : -1))
     .filter((i) => i >= 0);
@@ -156,10 +165,13 @@ export function applyStripping(
     // 定位所选节标题行；找不到锚点则整节跳过（安全侧：宁可不剥，不误删段外行）。
     const start = headingIdx.find((i) => lines[i]?.trim() === heading);
     if (start === undefined) continue;
-    const end = headingIdx.find((i) => i > start) ?? lines.length;
+    const rowLevel = row.level ?? 2;
+    const end = headingIdx.find((i) => i > start && (levelOf.get(lines[i]?.trim() ?? '') ?? 2) <= rowLevel) ?? lines.length;
     const strippable = new Set(row.strippableLines.map(normLine).filter((n) => n !== ''));
     for (let i = start + 1; i < end; i++) {
-      if (strippable.has(normLine(lines[i] ?? ''))) drop.add(i);
+      const l = lines[i] ?? '';
+      if (headingSet.has(l.trim())) continue; // 段锚恒保留（主审对码修正②）
+      if (strippable.has(normLine(l))) drop.add(i);
     }
   }
 

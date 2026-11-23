@@ -1337,6 +1337,7 @@ ${repairPrompt(first.errors)}`))).text,
       const raw = await fs.promises.readFile(archivePath, 'utf8');
       const sections = splitCompendiumSections(raw).map((s) => ({
         heading: s.heading,
+        level: s.level,
         lines: refineForDescription(s.lines.join('\n')).split('\n'),
       }));
       const consumedHeadings = parseSettingsCompendium(raw).consumedSections ?? [];

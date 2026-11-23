@@ -150,6 +150,7 @@ const ARCHIVE_MD = [
   '',
   '## 1. 人物圣经',
   CARRIED_CHAR,
+  '### 1.1 群像',
   CARRIED_TRAIT,
   '',
   '## 2. 剧情大纲',
@@ -169,6 +170,7 @@ const EXPECTED_ACLASS = [
     removable: true,
     strippableLines: [CARRIED_CHAR, CARRIED_TRAIT],
     residualLines: [],
+    level: 2,
   },
   {
     heading: '2. 剧情大纲',
@@ -177,6 +179,7 @@ const EXPECTED_ACLASS = [
     removable: true,
     strippableLines: [PARTIAL_CARRIED],
     residualLines: [PARTIAL_RESIDUAL],
+    level: 2,
   },
   {
     heading: '3. 文风规范',
@@ -185,6 +188,7 @@ const EXPECTED_ACLASS = [
     removable: false,
     strippableLines: [],
     residualLines: [UNCARRIED],
+    level: 2,
   },
 ];
 
@@ -263,6 +267,8 @@ describe('GET/POST /api/books/:bookId/fusion-gate（Task-04；指纹三态 + 单
     expect(body.headWindowWarn).toBe(true);
     preview = body.previewDescription;
     expect(preview).not.toContain(CARRIED_TRAIT);
+    expect(preview).not.toContain(CARRIED_CHAR);
+    expect(preview).toContain('1.1 群像'); // 主审对码修正②：嵌套子标题=段锚恒保留，其下承载行仍剥
     expect(preview).toContain(PARTIAL_RESIDUAL);
   });
 

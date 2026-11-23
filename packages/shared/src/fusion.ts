@@ -12,6 +12,8 @@ export interface FusionAClassRowDto {
   removable: boolean;
   strippableLines: string[];
   residualLines: string[];
+  /** 节层级（主审对码修正② 11-24：限段删除段尾=下一「同级或更浅」标题行；缺省按 2）。 */
+  level?: 2 | 3;
 }
 
 /** 张力行（Task-03 产物） */
