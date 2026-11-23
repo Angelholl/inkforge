@@ -611,3 +611,11 @@
 **裁决：** 新增 spectrum 蒸馏沿 plot 五端点同构：ROLE/NAMES 单行协议（匿名化人物原型 3–8 条；NAMES 不入库、仅程序脱敏兜底校验）；绑定列 `books.spectrum_profile_id`（migration 0013）；注入面=blueprint-suggest planner 槽 `spectrumReference`（drafter/related 红线不注入，与 PLOT 同）；三提交已推，基线 402+144。
 
 **补录说明：** 本条为销账补录（代码注释 `schemas.ts:252`、`books.ts:16/224`、`spectrum.ts:51`、`routes.ts:426/1124` 引用本 ID 而日志无档），全文以 [[spectrum-distill-batch-state]] 批次账为准。
+
+## DEC-2026-1124-01 [OWNER] 生成前融合确认门批次收口（2026-11-24）
+
+**背景：** owner 由 v6 设定集瘦身问题引出「世界观大纲文档 × 蒸馏档案 重合/冲突清洗」功能诉求，追加指认「v6 只是举例，功能不得围绕单份 md 定制」，再痛点陈述「生成前二次确认定偏向，避免正式生成不符合需求（当前反复迭代=没很好融合蒸馏档案）」。方案三轮演进（v1 A/B 类切分→critic HIGH_RISK 采纳降格 v2/v2.1 泛型/v2.2 片段级→owner 痛点重构门形态 v3→critic 复议**撤回异议** v3.1→owner 终拍）；库内诊断实证：今晚书仅绑主档文风规范、weights/dims 空、当晚重蒸阿美/仙家 v2 未绑入——融合机构全在、缺生成前强制过目的门。
+
+**裁决：** MVP=生成前融合确认门（A 类载体驱动片段级剥节行+绑定快照/style 同槽行+LLM 张力对照行〔行协议、可见降级、超时不阻断〕+注入面指纹触发〔直通/重弹/不再提示；mandate 词表不入〕+单事务批量 confirm〔失败中止不入队、门内回显可重试〕；写全复用既有端点，planner 参考类只给绑/不绑不造假选项）。范围外：向导内嵌与书设置清洗按钮（P1 入口变体）、B 类四选一 LLM 裁决（P2）、fewshot 门内管理、词表、mandate 建议、LLM 改写正典。真实测试一律延批次收口（owner 11-24 令，卡级链不变）。
+
+**执行留痕：** 六卡全收（FG-01 迁移型走 ZCode 通道避 hy4 禁入；FG-02~05 hy4 契约 exit0 无 flags；FG-06 主模型亲执）。主审对码修正四枚各带红绿留痕：①限段删除预修、②level-aware 段尾+段锚（嵌套 H3 全承载节剥除空转，计划层缺陷）、③confirm 失败门保持打开（原实现违 N5 门内回显）、④比对键剥编号前缀与行尾；（活体冒烟发现）。基线 664→**710**（server 543+web 165+shared 2 只增不减），knip/lint/typecheck 零，全批秘密扫零；migration 0015 真实库实测。活体冒烟（今晚书真数据）：§7+§10 自动剥、§4/§5/§11 尾行保守保留——P1 原则解挂账=解析器抽取时申报 carriedLines 替代事后字符串匹配；另挂门内逐节组合、向导内嵌、书设置清洗入口、B 类裁决 P2。commit 链 57a816b→3e6b10b→9ac548c→d4045f0→edcba19→7907333→bb9cda7→3a7d468+收口 docs 批；台账=artifacts/dispatch-ledger-hy4.txt；计划完成记录=docs/plans/2026-11-24-gen-fusion-gate.md 尾部。**开放：owner 真实测试点位七项（见计划完成记录）+今晚书门首弹实况验。**

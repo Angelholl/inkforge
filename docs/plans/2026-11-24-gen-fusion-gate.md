@@ -411,4 +411,12 @@
 2. **步骤唯一性**：每步一个动作+可核对结果（命令+用例名+断言钉值/精确签名+落点行号），无 TBD；剥 MD 行的 MVP 简化单一决策钉死（Task-05 步骤 2，前端零引擎）；不确定处（splitDoc 字段形态、单文件基线数、open.test 命中面）均给「核实步+随迁规则+执行时主审实测填」，非空话。——**通过**。
 3. **类型一致**：全部跨端 DTO 单点定义于 `packages/shared/src/fusion.ts`；confirm body 与 zod schema、apply.ts 入参、client.ts 类型三层同源；引擎 `FusionAClassRow` 与 DTO 五键一致；`InjectionFace` 七键与 GET gate 组装面逐一对应且注释钉死排除 mandate/词表；gen_gate 存储 `{fingerprint,suppressed,updatedAt}` 沿指令倾向 books 加列（0015，hy4 禁入已标注）。——**通过**。
 4. **咬人输入**：五类全部具名测试（见上表），另加指纹七要素敏感性与重蒸直通（Task-01 步骤 12）。——**通过**。
-5. **比例**：预计净增代码 ~600 行（server fusion 模块 ~350、routes/schemas/repo/settings-import ~120、shared ~80、web ~250）+ 测试 ~700 行 + migration/NSIS ~10 行；计划 6 任务均独立可测可评审（基座/引擎/张力/端点/UI/收口）；计划篇幅约为代码预期量级，无抄代码段（引用均为签名与规则清单）。——**通过**。
+5. **比例**：预计净增代码 ~600 行（server fusion 模块 ~350、routes/schemas/repo/settings-import ~120、shared ~80、web ~250）+ 测试 ~700 行 + migration/NSIS ~10 行；计划 6 任务均独立可测可评审（基座/引擎/张力/端点/UI/收口）；计划篇幅约为代码预期量级，无抄代码段（引用均为签名与规则清单）。——**通过**
+
+## 完成记录（2026-11-24 收口）
+
+- **执行链**：FG-01 基座〔ZCode 通道，迁移型 hy4 禁入〕57a816b → FG-02 引擎〔hy4〕3e6b10b → FG-03 张力〔hy4〕9ac548c → FG-04 端点〔hy4〕d4045f0 → FG-05 门 UI〔hy4〕7907333 → FG-06 收口主模型亲执。五张 hy4 卡契约全部 exit0 无 flags 零轮转，逐卡主审逐块 diff 审+亲跑验证链，台账=`artifacts/dispatch-ledger-hy4.txt`。
+- **主审对码修正四枚**（各带红→绿留痕）：①计划文本预修=applyStripping 限段删除+回归钉（防跨节同文本误删）；②`edcba19`=level-aware 段尾+标题行恒段锚（嵌套 H3 全承载节剥除空转，计划层缺陷，红 2 枚反证）；③`bb9cda7`=confirm 失败门保持打开+role=alert 门内回显+就地重试（原实现关门丢裁决，违 helper 自述与 N5，红 2 枚反证）；④`3a7d468`=承载比对键剥「N.」前缀与行尾；（活体冒烟发现，§11 承载 0/8→7/8）。
+- **基线终账**：710 = server 543 + web 165 + shared 2（批次起点 664，只增不减成立）；lint/typecheck/knip 全零；全批 diff 秘密扫零命中；migration 0015 于真实 dev 库实测（user_version=15、gen_gate_json 列在、今晚书门态 null）。
+- **活体冒烟（真数据首验，服务测毕已停释放 8787）**：GET 今晚《少年阿磊》门 → 200 show：§7 矩阵 60 行+§10 文风 6 行 fully-carried 预置剥（preview 16841→14194，头窗无恙），§4/§5 与 §11 尾行保守保留——载体文本与原文形态差异（卡文本含名剥括号、伏笔抽取切分）超出事后字符串匹配能力，方向安全。**P1 原则解挂账：解析器抽取时即申报 carriedLines（消费声明，替代事后匹配）**；另挂：门内逐节组合剥除、向导内嵌、书设置清洗按钮、B 类 LLM 裁决（P2）、fewshot 门内管理、指纹写失败严格化（现 fingerprintStored:false 宁重弹已采）。
+- **GUI 未验证（owner 真实测试）点位**（批次收口一次验）：门三态（首弹/直通/变化重弹/取消重弹）、A 类预置勾选与「保持」全维持=零写现状、style 权重/维归属行、planner 绑/不绑行、张力行只读+降级横幅、确认失败门内 alert 重试、不再提示开关；今晚书首弹即得 §7+§10 剥除与辅档配权入口（手工对照样=10836 字剥节稿，差异即 P1 挂账的具象）。。
