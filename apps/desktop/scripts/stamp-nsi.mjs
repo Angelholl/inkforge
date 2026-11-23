@@ -1,5 +1,6 @@
-// nsi stamp 脚本（0.2-T13，DEC-2026-1113-05 M1/M10）：VERSION/VERSIONWITHBUILD/INSTALLERICON/UNINSTALLERICON
-// 默认（无 INKFORGE_STAMP_NSI=1）no-op 退出 0 不落盘；开关开启时就地改写四行；
+// nsi stamp 脚本（0.2-T13/T14，DEC-2026-1113-05 M1/M10 / DEC-2026-1123-02）：
+// VERSION/VERSIONWITHBUILD/INSTALLERICON/UNINSTALLERICON/INKFORGE_RES/MAINBINARYSRCPATH/ADDITIONALPLUGINSPATH/!addincludedir
+// 默认（无 INKFORGE_STAMP_NSI=1）no-op 退出 0 不落盘；开关开启时就地改写上述行；
 // --out <path> 模式不改原文件，落一份盖章副本（T14 芽构建用，可与 --version 连用）。
 // 与 cwd 无关：全部路径以 import.meta.url 相对解析。任一定位失败/多命中 → exit 1 不落盘；幂等。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -35,8 +36,6 @@ if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
   process.exit(1);
 }
 
-const ICON_ABS = 'I:\\inkforge\\apps\\desktop\\src-tauri\\icons\\icon.ico';
-
 function replaceLine(text, prefix, newValue, label) {
   // 恰一行命中；0 或多命中即失败
   const re = new RegExp(`^${prefix} .*$`, 'm');
@@ -59,8 +58,20 @@ stamped = replaceLine(stamped, '!define VERSIONWITHBUILD', versionWithBuild, 'VE
 if (productNameArg) {
   stamped = replaceLine(stamped, '!define PRODUCTNAME', productNameArg, 'PRODUCTNAME');
 }
-stamped = replaceLine(stamped, '!define INSTALLERICON', ICON_ABS, 'INSTALLERICON');
-stamped = replaceLine(stamped, '!define UNINSTALLERICON', ICON_ABS, 'UNINSTALLERICON');
+stamped = replaceLine(stamped, '!define INSTALLERICON', resolve(here, '../src-tauri/icons/icon.ico'), 'INSTALLERICON');
+stamped = replaceLine(stamped, '!define UNINSTALLERICON', resolve(here, '../src-tauri/icons/icon.ico'), 'UNINSTALLERICON');
+// 以下三条机器路径 define：全部由脚本自身位置与本机 env 计算，源码无盘符字面量（DEC-2026-1123-02 裁决②）
+stamped = replaceLine(stamped, '!define INKFORGE_RES', resolve(here, '../src-tauri/resources'), 'INKFORGE_RES');
+stamped = replaceLine(stamped, '!define MAINBINARYSRCPATH', resolve(here, '../src-tauri/target/release/inkforge-desktop.exe'), 'MAINBINARYSRCPATH');
+// ADDITIONALPLUGINSPATH 由 LOCALAPPDATA 计算；缺失即中止，不落盘
+const localAppData = process.env.LOCALAPPDATA;
+if (!localAppData) {
+  console.error('stamp: LOCALAPPDATA 缺失，无法定位 ADDITIONALPLUGINSPATH');
+  process.exit(1);
+}
+stamped = replaceLine(stamped, '!define ADDITIONALPLUGINSPATH', `${localAppData}\\tauri\\NSIS\\Plugins\\x86-unicode\\additional`, 'ADDITIONALPLUGINSPATH');
+// 模板头 build-aid include 目录同样机器相对（直编模板时引 tauri 生成件的 include——DEC-2026-1123-02 主审补列）
+stamped = replaceLine(stamped, '!addincludedir', resolve(here, '../src-tauri/target/release/nsis/x64'), 'ADDINCLUDEDIR');
 
 if (outPath) {
   mkdirSync(dirname(resolve(outPath)), { recursive: true });
