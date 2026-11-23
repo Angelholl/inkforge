@@ -1,7 +1,7 @@
 import { api } from './api/client';
 import type { FusionGateReportDto, FusionTensionDto, FusionGateConfirmBody } from '@inkforge/shared';
 
-/** 门视图状态：宿主只渲染这五个字段，不含任何引擎/裁决逻辑（前端零引擎钉）。 */
+/** 门视图状态：宿主只渲染以下字段，不含任何引擎/裁决逻辑（前端零引擎钉）。 */
 export interface GateView {
   report: FusionGateReportDto;
   tension?: FusionTensionDto;
@@ -9,6 +9,8 @@ export interface GateView {
   busy: boolean;
   onConfirm(body: FusionGateConfirmBody): void;
   onCancel(): void;
+  /** confirm 失败错误文案（主审直修③：单事务整体回滚=零半写，门保持打开、门内回显、可重试可取消）。 */
+  error?: string;
 }
 
 /** 门挂载点：由页面注入（setState 三件套），helper 负责数据/直通/顺序钉。 */
@@ -23,8 +25,9 @@ export interface GateMount {
  * **startFn 必须是「发 run」的闭包**（内部调 api.generateChapter / generateAll / createRun 原方法，不得预发）。
  * confirm 200 → startFn()；confirm 非 200 / 取消 → 不调 startFn（中止不入队）。
  *
- * 返回的 Promise 在「直通 startFn 完成 / 门 confirm + startFn 完成 / 取消」时 settle；
- * confirm 失败则复位 busy、保持门打开并 reject（调用方决定如何回显），绝不提前发 run。
+ * 返回的 Promise 在「直通 startFn 完成 / 门 confirm 成功 + startFn 完成 / 取消」时 settle；
+ * confirm 失败（主审直修③）：busy 复位、error 置入门内回显，门保持打开供就地重试或取消，
+ * 外层 Promise 悬置至成功/取消——绝不提前发 run，绝不因失败关门丢裁决。
  */
 export function startRunWithGate(bookId: string, startFn: () => Promise<void>, mount: GateMount): Promise<void> {
   return (async () => {
@@ -58,9 +61,9 @@ export function startRunWithGate(bookId: string, startFn: () => Promise<void>, m
             await startFn();
             finish('resolve');
           } catch (e) {
+            // 主审直修③：失败=整体回滚未入队——门保持打开，错误进门内，可重试可取消
             busy = false;
-            mount.patch({ busy: false });
-            finish('reject', e);
+            mount.patch({ busy: false, error: e instanceof Error ? e.message : String(e) });
           }
         })();
       };

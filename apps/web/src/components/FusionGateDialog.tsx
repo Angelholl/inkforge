@@ -21,6 +21,8 @@ export interface FusionGateDialogProps {
   busy: boolean;
   onConfirm(body: FusionGateConfirmBody): void;
   onCancel(): void;
+  /** 门内失败回显（主审直修③）：confirm 失败时置入，重试成功或取消即消失。 */
+  error?: string;
 }
 
 type StyleChoice = 'keep' | 'weights' | 'dims' | 'strip';
@@ -32,7 +34,7 @@ const PLANNER_ROWS: Array<{ key: PlannerKey; label: string }> = [
   { key: 'imitationProfileId', label: '仿写档案' },
 ];
 
-export default function FusionGateDialog({ report, tension, analyzing, busy, onConfirm, onCancel }: FusionGateDialogProps) {
+export default function FusionGateDialog({ report, tension, analyzing, busy, error, onConfirm, onCancel }: FusionGateDialogProps) {
   const binding = report.binding;
   // A 类逐行裁决草稿：preset='strip' 且可剥才预置勾选
   const [stripped, setStripped] = useState<Record<string, boolean>>(() =>
@@ -256,6 +258,12 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, onC
 
         {/* fewshot 只读展示，无控件 */}
         <p className="mt-4 text-xs text-muted">文风示例注入：{binding.styleFewshotOn ? '开' : '关'}（门内只读，如需修改请回书籍设置面板）</p>
+
+        {error ? (
+          <p role="alert" className="mt-4 text-danger text-xs">
+            确认失败（已整体回滚，未入队）：{error}——可调整后重试，或取消（取消零写）。
+          </p>
+        ) : null}
 
         <footer className="mt-5 flex items-center gap-3 border-t border-line pt-4">
           <label className="flex items-center gap-1.5 text-xs text-muted">

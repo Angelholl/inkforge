@@ -97,6 +97,13 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     expect(screen.getByText(/张力对照分析中/)).toBeTruthy();
   });
 
+  it('error → 门内 role=alert 错误行渲染，确认按钮仍在（主审直修③：失败保持打开可重试）', () => {
+    renderDialog({ error: 'profile not found: p-x' });
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.getByText(/profile not found: p-x/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '确认并开始生成' })).toBeTruthy();
+  });
+
   it('勾「不再提示」+确认 → onConfirm body 钉 { suppress: true, ...裁决 }', () => {
     const { onConfirm } = renderDialog();
     fireEvent.click(screen.getByLabelText('不再提示（当前注入面不变时）'));

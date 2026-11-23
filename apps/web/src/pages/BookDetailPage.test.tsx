@@ -43,6 +43,7 @@ type Call = { url: string; init?: RequestInit };
 const calls: Call[] = [];
 // Task-05 随迁：默认直通（pass）；新增顺序断言例置 show 验证 confirm→run 顺序。
 let gateMode: 'pass' | 'show' = 'pass';
+let confirmFails = false; // 主审直修③：confirm 失败门保持打开用例
 const GATE_SHOW_REPORT = {
   action: 'show',
   fingerprint: 'fp-test',
@@ -117,7 +118,8 @@ function installFetchStub() {
         return jsonResponse({ ok: true });
       }
       // Task-05 随迁：门端点 stub（直通形态保持既有 run 端点断言真实命中）
-      if (u.endsWith('/fusion-gate/confirm') && init?.method === 'POST') return jsonResponse({ results: {}, fingerprint: 'fp-test' });
+      if (u.endsWith('/fusion-gate/confirm') && init?.method === 'POST')
+        return confirmFails ? jsonResponse({ error: 'profile not found: 不存在' }, 400) : jsonResponse({ results: {}, fingerprint: 'fp-test' });
       if (u.endsWith('/fusion-gate/analyze') && init?.method === 'POST') return jsonResponse({ rows: [], degraded: false });
       if (u.endsWith('/fusion-gate')) return jsonResponse(gateMode === 'pass' ? { action: 'pass', fingerprint: 'fp-test' } : GATE_SHOW_REPORT);
       if (u.endsWith('/api/runs') && init?.method === 'POST') return jsonResponse({ runId: 'r1234567890' }, 202);
@@ -168,6 +170,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   calls.length = 0;
   gateMode = 'pass';
+  confirmFails = false;
 });
 
 function setInput(sel: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -349,6 +352,32 @@ describe('BookDetailPage', () => {
     const runIdx = calls.findIndex((c) => c.url.endsWith('/generate-all'));
     expect(confirmIdx).toBeGreaterThanOrEqual(0);
     expect(runIdx).toBeGreaterThan(confirmIdx);
+  });
+
+  it('融合门：confirm 失败 → 门保持打开+门内 alert 回显、不发 run；重试成功才发（主审直修③）', async () => {
+    gateMode = 'show';
+    confirmFails = true;
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '整书生成' }));
+    await screen.findByRole('button', { name: '确认并开始生成' });
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    await screen.findByRole('alert');
+    expect(screen.getByRole('button', { name: '确认并开始生成' })).toBeTruthy(); // 门仍开着，裁决不丢
+    expect(calls.some((c) => c.url.endsWith('/generate-all'))).toBe(false);
+
+    confirmFails = false; // 就地重试
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/generate-all'))).toBe(true));
   });
 
   it('落地策略下拉渲染当前值：book.landingMandate=cadence/N=2 → 值为 cadence-2', async () => {
