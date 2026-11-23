@@ -89,6 +89,10 @@ Var InkforgeFreeBytes
 Var InkforgePathIn
 Var InkforgePathOut
 Var InkforgeResolvedPath
+Var InkforgePrevDir
+Var InkforgePrevChar
+Var InkforgePrevLen
+Var InkforgePrevReused
 Var InkforgeResolvedRoot
 Var InkforgeResolvedIsSystem
 Var InkforgeBadDir
@@ -839,18 +843,43 @@ Function .onInit
         StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
       ${EndIf}
     !else if "${INSTALLMODE}" == "currentUser"
-      ; Inkforge: default to a writable fixed non-system drive (A' decision)
-      Call InkforgePickInstallDir
-      ${If} $InkforgeNoDrive == 1
-        ${If} ${Silent}
-          SetErrorLevel 3
-          Quit
-        ${Else}
-          MessageBox MB_ICONSTOP "未找到可安装的非 C 盘固定磁盘（需可写且剩余空间不少于 1GB），安装已中止。"
-          Quit
+      ; Inkforge* (DEC-2026-1123-01): silent/passive/update 优先复用上次的安装目录（注册表 InstallLocation，须存在且解析为非 C:），
+      ; 防守卫在静默模式把升级选到另一块盘（实测 /P 曾被选往 I:\inkforge 仓根）。复用不成再走 A' 案选盘。
+      StrCpy $InkforgePrevReused 0
+      ReadRegStr $InkforgePrevDir HKCU "${UNINSTKEY}" "InstallLocation"
+      ${If} $InkforgePrevDir != ""
+        StrCpy $InkforgePrevChar $InkforgePrevDir 1
+        ${If} $InkforgePrevChar == '"'
+          StrLen $InkforgePrevLen $InkforgePrevDir
+          IntOp $InkforgePrevLen $InkforgePrevLen - 2
+          StrCpy $InkforgePrevDir $InkforgePrevDir "" 1
+          StrCpy $InkforgePrevDir $InkforgePrevDir $InkforgePrevLen
+        ${EndIf}
+        ${If} ${FileExists} "$InkforgePrevDir\*.*"
+          StrCpy $InkforgePathIn "$InkforgePrevDir"
+          Call InkforgeResolveRoot
+          ${If} $InkforgeResolvedIsSystem == 0
+            StrCpy $INSTDIR "$InkforgePrevDir"
+            StrCpy $InkforgePrevReused 1
+            StrCpy $InkforgeLogText "[inkforge] reuse-previous=$INSTDIR"
+            Call InkforgeLog
+          ${EndIf}
         ${EndIf}
       ${EndIf}
-      StrCpy $INSTDIR "$InkforgeChosenDir"
+      ${If} $InkforgePrevReused == 0
+        ; Inkforge: default to a writable fixed non-system drive (A' decision)
+        Call InkforgePickInstallDir
+        ${If} $InkforgeNoDrive == 1
+          ${If} ${Silent}
+            SetErrorLevel 3
+            Quit
+          ${Else}
+            MessageBox MB_ICONSTOP "未找到可安装的非 C 盘固定磁盘（需可写且剩余空间不少于 1GB），安装已中止。"
+            Quit
+          ${EndIf}
+        ${EndIf}
+        StrCpy $INSTDIR "$InkforgeChosenDir"
+      ${EndIf}
     !endif
 
     Call RestorePreviousInstallLocation
@@ -860,6 +889,10 @@ Function .onInit
       StrCpy $InkforgePathIn "$INSTDIR"
       Call InkforgeResolveRoot
       ${If} $InkforgeResolvedIsSystem == 1
+        ; Inkforge*: 复用分支跳过选盘时 ChosenDir 为空——补选一次，防 INSTDIR 被置空
+        ${If} "$InkforgeChosenDir" == ""
+          Call InkforgePickInstallDir
+        ${EndIf}
         StrCpy $INSTDIR "$InkforgeChosenDir"
       ${EndIf}
     !endif
