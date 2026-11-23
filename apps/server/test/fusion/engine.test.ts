@@ -174,6 +174,23 @@ describe('computeFusionRows / applyStripping（A 类剥节引擎，规格 §2 v2
     expect(lines).toContain(UNCARRIED);
   });
 
+  it('编号串节比对键剥「N.」前缀与行尾；（主审直修④，活体冒烟发现）：载体存净文仍可承载', () => {
+    const numbered = {
+      description: [HEAD, '9. 长线账', '9.1 悬置线清单', '1. 旧城拆讯：卷二起 → 卷三结算；', '2. 怀孕存疑：卷三虚惊起 → 终章留白。'].join('\n'),
+      sections: [
+        { heading: '9.1 悬置线清单', level: 3 as const, lines: ['1. 旧城拆讯：卷二起 → 卷三结算；', '2. 怀孕存疑：卷三虚惊起 → 终章留白。'] },
+      ],
+      consumedHeadings: ['9.1 悬置线清单'],
+      carriers: { ...makeCarriers(), outlineText: '', charactersText: '', blueprintGoalsText: '', styleSourcesText: '', foreshadowingsText: '旧城拆讯：卷二起 → 卷三结算\n怀孕存疑：卷三虚惊起 → 终章留白。' },
+    };
+    const { rows, previewDescription } = computeFusionRows(numbered);
+    const row = rowOf(rows, '9.1 悬置线清单');
+    expect(row.strippableLines).toEqual(['1. 旧城拆讯：卷二起 → 卷三结算；', '2. 怀孕存疑：卷三虚惊起 → 终章留白。']);
+    expect(row.verdict).toBe('fully-carried');
+    expect(previewDescription).not.toContain('1. 旧城拆讯：卷二起 → 卷三结算；');
+    expect(previewDescription).not.toContain('2. 怀孕存疑：卷三虚惊起 → 终章留白。');
+  });
+
   it('consumedHeadings 未包含的节 → 不产行（载体驱动，无内容猜测）', () => {
     const input = makeInput();
     input.consumedHeadings = ['2. 人物节'];

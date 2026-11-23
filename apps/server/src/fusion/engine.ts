@@ -90,8 +90,11 @@ export function computeFusionRows(input: {
       // 主审对码修正②（11-24）：任何节标题行（含嵌套 H3 子标题）=段锚——不分类、不删除
       if (headingTexts.has(line.trim())) continue;
       // 规则 2：归一化后作为子串出现在任一载体即「承载」。
+      // 主审直修④（11-24 活体冒烟发现）：编号串节（悬置线清单）的载体文本由解析器剥了
+      // 「N. 前缀与行尾；」，比对键同步剥除（仅比对用，行体原文入 strippableLines 供限段删除）。
       // 规则 4：标签行（如「**X**：一句话」）解析器有意跳过不成卡 → 天然不承载 → 残段保留。
-      const carried = norms.some((c) => c.includes(n));
+      const key = n.replace(/^\d{1,3}[.、．]/, '').replace(/[；;]+$/, '');
+      const carried = key !== '' && norms.some((c) => c.includes(key));
       if (carried && !headNorms.has(n)) strippableLines.push(line);
       else residualLines.push(line);
     }
