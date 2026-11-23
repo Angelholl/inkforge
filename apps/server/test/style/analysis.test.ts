@@ -196,8 +196,11 @@ FREQTERMS: 沉默: 高频收尾用语，承担留白`;
     // 分析输入并入程序统计参考块（词组×次数）
     expect(captured[0]).toContain('样本高频词组统计');
     expect(captured[0]).toContain('×');
-    // prompt 模板含 FREQTERMS 行协议
+    // prompt 模板含 FREQTERMS 行协议与 NAMES 报备行、TERMS/FREQTERMS 禁人名口径（DEC-2026-1123-01）
     expect(captured[0]).toContain('FREQTERMS:');
+    expect(captured[0]).toContain('抽取地名/专有词/称谓/器物/组织等世界观术语与用法偏好 3-10 条，严禁人物姓名');
+    expect(captured[0]).toContain('与 TERMS 的世界观术语区分，同样严禁人物姓名');
+    expect(captured[0]).toContain('NAMES: <原文人物姓名列表，顿号分隔，仅报备不入档案；无则省略本行>');
     // 落库 rules_json.freqTerms 非空
     const rules1 = JSON.parse((db.prepare('SELECT rules_json FROM style_profiles WHERE id = ?').get(id) as { rules_json: string }).rules_json) as {
       freqTerms: Array<{ term: string; note: string }>;

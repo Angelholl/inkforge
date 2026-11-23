@@ -1,5 +1,6 @@
 import type { ChapterBlueprint, Finding, OutlineCardDto, OutlineStageDto, StyleTermDto, OutlineTreeDto, OutlineVolumeDto } from '@inkforge/shared';
 import { STYLE_AXES, STYLE_DIMENSIONS } from '@inkforge/shared';
+import { findNameLeak } from '../spectrum';
 
 const KEYS = ['SEVERITY', 'DIMENSION', 'QUOTE', 'COMMENT'] as const;
 const SEVERITIES = new Set(['blocker', 'major', 'minor']);
@@ -345,8 +346,9 @@ export interface ParsedAnalysis {
   errors: string[];
 }
 
-/** 蒸馏分析解析：DIM: <维度>: <文本> / AXIS: <轴名>: <0-100> / RULES: <规则> / TERMS: <术语>: <用法说明> / FREQTERMS: <词组>: <总结说明>。
- *  缺行容错不抛——数值轴缺/非法补 0，文本维缺补 ''，术语/高频词缺补 []，越界钳制 0-100；未知维度/轴与非标记行记 errors。 */
+/** 蒸馏分析解析：DIM: <维度>: <文本> / AXIS: <轴名>: <0-100> / RULES: <规则> / TERMS: <术语>: <用法说明> / FREQTERMS: <词组>: <总结说明> / NAMES: <人名报备行，不入库>。
+ *  缺行容错不抛——数值轴缺/非法补 0，文本维缺补 ''，术语/高频词缺补 []，越界钳制 0-100；未知维度/轴与非标记行记 errors。
+ *  NAMES 仅函数内消费：名单非空时按 findNameLeak 口径剔除含人名术语/高频词（命中记 errors），名单为空则零过滤。 */
 export function parseAnalysis(raw: string): ParsedAnalysis {
   const errors: string[] = [];
   const dims: Record<string, string> = {};
@@ -354,6 +356,7 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
   const rules: string[] = [];
   const terms: StyleTermDto[] = [];
   const freqTerms: StyleTermDto[] = [];
+  const names: string[] = [];
   for (const line of raw.replace(/\r\n/g, '\n').split('\n')) {
     const text = line.trim();
     if (text === '' || text.startsWith('```')) continue;
@@ -399,7 +402,24 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
       if (m[1].trim() !== '') rules.push(m[1].trim());
       continue;
     }
+    m = /^NAMES\s*[:：]\s*(.*)$/.exec(text);
+    if (m) {
+      names.push(...m[1].split(/[、,，;；\s]+/).map((s) => s.trim()).filter((s) => s !== ''));
+      continue;
+    }
     errors.push(`无法识别的行: ${text}`);
+  }
+  if (names.length > 0) {
+    for (const list of [terms, freqTerms]) {
+      for (let i = list.length - 1; i >= 0; i--) {
+        const t = list[i];
+        const hit = findNameLeak(`${t.term} ${t.note}`, names);
+        if (hit !== undefined) {
+          errors.push(`术语含人名被过滤: ${t.term}（命中 ${hit}）`);
+          list.splice(i, 1);
+        }
+      }
+    }
   }
   for (const d of STYLE_DIMENSIONS) if (dims[d] === undefined) dims[d] = '';
   for (const a of STYLE_AXES) if (axes[a] === undefined) axes[a] = 0;

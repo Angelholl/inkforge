@@ -236,3 +236,58 @@ describe('parseBlueprint LANDING 行（DEC-2026-1122-01）', () => {
     expect(r.errors.some((e) => e.includes('LANDING'))).toBe(false);
   });
 });
+
+describe('parseAnalysis NAMES 行人名过滤（DEC-2026-1123-01）', () => {
+  it('① TERMS 术语命中 NAMES 名单 → 整条剔除 + errors 含「含人名」，非命中术语保留', () => {
+    const r = parseAnalysis(`TERMS: 阿美: 女主角
+TERMS: 玉佩: 随身信物
+NAMES: 阿美、林静如`);
+    expect(r.terms).toEqual([{ term: '玉佩', note: '随身信物' }]);
+    expect(r.errors.some((e) => e.includes('含人名') && e.includes('阿美'))).toBe(true);
+  });
+
+  it('② 三字名 ≥3 字连续子串命中 → 术语整条剔除', () => {
+    const r = parseAnalysis(`TERMS: 林静如水: 湖名
+NAMES: 林静如`);
+    expect(r.terms).toEqual([]);
+    expect(r.errors.some((e) => e.includes('含人名') && e.includes('林静如水'))).toBe(true);
+  });
+
+  it('③ note 含两字名 → 术语整条剔除', () => {
+    const r = parseAnalysis(`TERMS: 口头禅: 阿美的口头禅
+NAMES: 阿美`);
+    expect(r.terms).toEqual([]);
+    expect(r.errors.some((e) => e.includes('含人名') && e.includes('口头禅'))).toBe(true);
+  });
+
+  it('④ FREQTERMS 命中 NAMES 名单 → 同口径整条剔除', () => {
+    const r = parseAnalysis(`FREQTERMS: 阿美式开场: 常用开场白
+FREQTERMS: 抬眸: 对视前停顿
+NAMES: 阿美`);
+    expect(r.freqTerms).toEqual([{ term: '抬眸', note: '对视前停顿' }]);
+    expect(r.errors.some((e) => e.includes('含人名') && e.includes('阿美式开场'))).toBe(true);
+  });
+
+  it('⑤ NAMES 行本身不产生「无法识别的行」error', () => {
+    const r = parseAnalysis(`RULES: 平均句长 10-20 字。
+NAMES: 阿美、林静如`);
+    expect(r.rules).toEqual(['平均句长 10-20 字。']);
+    expect(r.errors.some((e) => e.includes('无法识别的行'))).toBe(false);
+  });
+
+  it('⑥ 无 NAMES 行 → 含人名术语原样保留（零过滤，回归既有行为）', () => {
+    const r = parseAnalysis(`TERMS: 阿美: 女主角
+FREQTERMS: 阿美式开场: 常用开场白`);
+    expect(r.terms).toEqual([{ term: '阿美', note: '女主角' }]);
+    expect(r.freqTerms).toEqual([{ term: '阿美式开场', note: '常用开场白' }]);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('⑦ NAMES 混用顿号/中英文逗号/分号/空白 → 名单全部生效（两名各命中一条术语）', () => {
+    const r = parseAnalysis(`TERMS: 阿美衣饰: 衣饰偏好
+TERMS: 林静如笔迹: 落款习惯
+NAMES: 阿美,林静如；阿美;林静如，阿美 林静如`);
+    expect(r.terms).toEqual([]);
+    expect(r.errors.filter((e) => e.includes('含人名')).length).toBe(2);
+  });
+});

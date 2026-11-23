@@ -19,7 +19,7 @@ export interface SpectrumDraft {
 
 /** 脱敏校验：ROLE 行命中任一原文角色名即违规，返回命中的名字。
  *  匹配口径：2 字名查整名；≥3 字名查整名及其 ≥3 字连续子串（防「林静如」子串「静如」误杀文学措辞）。 */
-function findNameLeak(roleLine: string, names: string[]): string | undefined {
+export function findNameLeak(roleLine: string, names: string[]): string | undefined {
   for (const name of names) {
     const n = name.trim();
     if (n.length < 2) continue;
