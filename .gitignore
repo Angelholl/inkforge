@@ -7,3 +7,7 @@ data-*/
 .vitest/
 target/
 apps/desktop/src-tauri/resources/
+*.db
+*.db-wal
+*.db-shm
+landing-words.txt

@@ -1,5 +1,5 @@
 # 落地分级词表（出厂默认模板）：本项目默认不带词表，词表属用户数据层（DEC-2026-1122-02）。
-# 用户词表位置：装机版=%APPDATA%\dev.inkforge.app\landing-words.txt（与数据同目录）；dev 版=~/.inkforge/landing-words.txt。
+# 用户词表位置：装机版=<安装目录>\data\landing-words.txt（与数据同目录，DEC-2026-1123-01）；dev 版=apps/server\data\landing-words.txt（旧位置文件只拷不删）。
 # 可视化编辑入口：设置页「落地分级词表」区块。
 # 本文件仅作兜底，升级可能覆盖，请勿在此积累自定义词。
 # 格式：[H]/[L] 分节，每行一词；# 注释与空行跳过；其它 [X] 分节=识别但不入库（可作自定义档）。
