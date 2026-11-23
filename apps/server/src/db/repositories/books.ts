@@ -17,6 +17,8 @@ export interface Book {
   spectrumProfileId: string | null;
   /** 书级落地策略（DEC-2026-1122-01）：原始 JSON 串（null=off）；客户端读走 parseLandingMandate 解析形态 */
   landingMandateJson: string | null;
+  /** 生成前融合确认门状态（规格 §3.5）：原始 JSON 串（null=未记录）；解析走 parseGenGate */
+  genGateJson: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入，抄用检测不受影响 */
   styleFewshotOn: boolean;
   createdAt: string;
@@ -39,13 +41,14 @@ interface BookRow {
   plot_profile_id: string | null;
   spectrum_profile_id: string | null;
   landing_mandate_json: string | null;
+  gen_gate_json: string | null;
   style_fewshot_on: number;
   created_at: string;
   updated_at: string;
 }
 
 function toBook(r: BookRow): Book {
-  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, plotProfileId: r.plot_profile_id, spectrumProfileId: r.spectrum_profile_id, landingMandateJson: r.landing_mandate_json ?? null, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { id: r.id, title: r.title, description: r.description, outline: r.outline, styleProfileId: r.style_profile_id, styleSnapshotJson: r.style_snapshot_json, imitationProfileId: r.imitation_profile_id, plotProfileId: r.plot_profile_id, spectrumProfileId: r.spectrum_profile_id, landingMandateJson: r.landing_mandate_json ?? null, genGateJson: r.gen_gate_json ?? null, styleFewshotOn: r.style_fewshot_on === 1, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function createBook(
@@ -64,6 +67,7 @@ export function createBook(
     plotProfileId: null,
     spectrumProfileId: null,
     landingMandateJson: null,
+    genGateJson: null,
     styleFewshotOn: false,
     createdAt: now,
     updatedAt: now,
@@ -225,6 +229,36 @@ export function setBookPlotProfile(db: Database, bookId: string, profileId: stri
 export function setBookSpectrumProfile(db: Database, bookId: string, profileId: string | null): void {
   db.prepare('UPDATE books SET spectrum_profile_id = ?, updated_at = ? WHERE id = ?').run(
     profileId,
+    new Date().toISOString(),
+    bookId,
+  );
+}
+
+/** 生成前融合确认门状态（规格 §3.5）。 */
+export interface GenGateState {
+  fingerprint: string;
+  suppressed: boolean;
+  updatedAt: string;
+}
+
+/** DB 容错读取：null/''/非法 JSON/缺 fingerprint 字符串键 → null */
+export function parseGenGate(raw: string | null | undefined): GenGateState | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  try {
+    const v = JSON.parse(raw) as unknown;
+    if (typeof v !== 'object' || v === null) return null;
+    const o = v as { fingerprint?: unknown };
+    if (typeof o.fingerprint !== 'string') return null;
+    const st = v as { fingerprint: string; suppressed?: unknown; updatedAt?: unknown };
+    return { fingerprint: st.fingerprint, suppressed: st.suppressed === true, updatedAt: typeof st.updatedAt === 'string' ? st.updatedAt : '' };
+  } catch {
+    return null;
+  }
+}
+
+export function updateGenGate(db: Database, bookId: string, state: GenGateState): void {
+  db.prepare('UPDATE books SET gen_gate_json = ?, updated_at = ? WHERE id = ?').run(
+    JSON.stringify(state),
     new Date().toISOString(),
     bookId,
   );

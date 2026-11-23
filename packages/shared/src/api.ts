@@ -548,6 +548,8 @@ export interface SettingsImportDraftDto {
   styleSection: string;
   /** 文风节导入风格档案并绑定（预览开关，默认 true） */
   importStyle: boolean;
+  /** 消费节清单（规格 §2 v2.2：解析器消费过的节 heading 原文；可选——旧 apply 体经 zod 剥键不受影响） */
+  consumedSections?: string[];
   warnings: string[];
 }
 

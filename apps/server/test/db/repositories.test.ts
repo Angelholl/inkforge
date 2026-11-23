@@ -290,3 +290,34 @@ describe('updateBookMeta landingMandate 三态往返（DEC-2026-1122-01）', () 
     booksRepo.deleteBook(db, bid);
   });
 });
+
+describe('融合门 gen_gate_json（规格 §3.5）', () => {
+  it('updateGenGate 往返：parseGenGate 回读 fingerprint/suppressed/updatedAt 钉值', () => {
+    const bid = booksRepo.createBook(db, { title: '融合门之书' }).id;
+    expect(booksRepo.getBook(db, bid)!.genGateJson).toBeNull();
+    expect(booksRepo.parseGenGate(booksRepo.getBook(db, bid)!.genGateJson)).toBeNull();
+    const state = { fingerprint: 'fp-abc123', suppressed: true, updatedAt: '2026-11-24T00:00:00.000Z' };
+    booksRepo.updateGenGate(db, bid, state);
+    const book = booksRepo.getBook(db, bid)!;
+    expect(book.genGateJson).toBe(JSON.stringify(state));
+    expect(booksRepo.parseGenGate(book.genGateJson)).toEqual(state);
+    // 覆写：不再提示关回
+    booksRepo.updateGenGate(db, bid, { fingerprint: 'fp-next', suppressed: false, updatedAt: '2026-11-24T01:00:00.000Z' });
+    expect(booksRepo.parseGenGate(booksRepo.getBook(db, bid)!.genGateJson)).toEqual({
+      fingerprint: 'fp-next',
+      suppressed: false,
+      updatedAt: '2026-11-24T01:00:00.000Z',
+    });
+    booksRepo.deleteBook(db, bid);
+  });
+
+  it('gen_gate_json 空串/非法 JSON/缺 fingerprint 键 → parseGenGate null（咬人输入①）', () => {
+    expect(booksRepo.parseGenGate('')).toBeNull();
+    expect(booksRepo.parseGenGate(null)).toBeNull();
+    expect(booksRepo.parseGenGate(undefined)).toBeNull();
+    expect(booksRepo.parseGenGate('not-json{{')).toBeNull();
+    expect(booksRepo.parseGenGate('{"suppressed":true}')).toBeNull(); // 缺 fingerprint
+    expect(booksRepo.parseGenGate('{"fingerprint":42}')).toBeNull(); // fingerprint 非字符串
+    expect(booksRepo.parseGenGate('42')).toBeNull(); // 非对象
+  });
+});
