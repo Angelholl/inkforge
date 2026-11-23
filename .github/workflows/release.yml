@@ -141,7 +141,7 @@ jobs:
       - name: Public verification
         if: github.event_name == 'push'
         run: |
-          EXE_NAME=$(awk '{print $2}' apps/desktop/src-tauri/target/release/bundle/nsis/sha256sums.txt)
+          EXE_NAME=$(awk '{print $2}' apps/desktop/src-tauri/target/release/bundle/nsis/sha256sums.txt | tr -d '*')
           A_CODE=$(curl -s -o /dev/null -w '%{http_code}' -I "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$EXE_NAME")
           [ "$A_CODE" = "302" ] || { echo "PUBLIC_HEAD_FAIL=$A_CODE"; exit 2; }
           curl -sL -r 0-3 -o "$RUNNER_TEMP/head4.bin" "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$EXE_NAME"

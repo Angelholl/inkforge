@@ -265,6 +265,7 @@ Refs: DEC-2026-1123-03
 - **F3 序位违例**：sidecar(:11) 晚于 tauri build → bundle 时 `resources/runtime/node.exe` 缺失（tauri resources 映射 tauri.conf.json:41）；inventory(:16) 早于 build → 生成 NSI 不存在。序位即上表，不得调整。
 - **F4 版本门红**：tag 与 conf 不等 → 步骤 6 exit 2；只有 owner 决策能改版本，执行者禁 bump。
 - **F5 Release 重复/重跑**：tag 重跑 → 步骤 21 幂等更新+资产替换（已核 README）；dispatch 永不触发布步骤（if 门）；concurrency 按 ref 串行防并行双跑。**半态 runbook（critic b 面补）**：21 已成功但 22/23 确定性红（digest 不符/latest 未指）→ 处置序=REST PATCH `releases/{id}` 先改 tag_name 挪开旧 release（L-20261103-12 先例：删 release 不先挪 tag 会连 tag 一起删）→ DELETE 该 release → 同 SHA 重推 tag（force，包不变不重打）触发 20-23 幂等重建；瞬态红（网络 5xx）直接 Actions rerun 即可。
+- **F6 跨机不字节等 + 星号文件名（tag 首跑 45174153519 实测钉，主审）**：① CI 产物**跨 run 非字节等**（NSIS/rust 嵌时间戳：dispatch 轮 65,520,563 vs tag 轮 65,526,291）——digest 回读的正确口径=**同 run 内 local↔server 比对**（步 24 已如此），禁跨 run 比 digest；② runner `sha256sum` 输出二进制模式 `hash *name`，凡从 sha256sums.txt 取文件名处必 `tr -d '*'`（步 23 首跑 404 根因，已修；取 hash 用 `cut -d' ' -f1` 天然免疫）。
 
 ## 五查自检表
 
