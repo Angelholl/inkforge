@@ -124,4 +124,33 @@ describe('ImitationProfilesSection（D4-T5）', () => {
     expect(body.chapterCount).toBe(12);
     expect(body.name).toBe('钳制测');
   });
+
+  it('文件选择：隐藏 input + 虚线 label，选 md 后 UTF-8 解码回填仿写样本', async () => {
+    vi.stubGlobal('fetch', stubFetch());
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('拆解档案甲')).toBeTruthy());
+
+    // ① input 存在且 accept 含 .md
+    const input = document.querySelector('#imitation-sample-file') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    expect(input.type).toBe('file');
+    expect(input.accept).toContain('.md');
+
+    // ② 注入 File（UTF-8，≥200 字中性内容）→ 回填 aria-label「仿写样本」textarea
+    const sample = '中性参考正文用于验证文件导入回显，内容不涉及任何真实人物地点与事件，仅作结构拆解测试之用。'.repeat(6);
+    expect(sample.length).toBeGreaterThanOrEqual(200);
+    fireEvent.change(input, {
+      target: { files: [new File([sample], '参考.md', { type: 'text/markdown' })] },
+    });
+    const sampleArea = () => screen.getByLabelText('仿写样本') as HTMLTextAreaElement;
+    await waitFor(() => expect(sampleArea().value).toContain('结构拆解测试之用'));
+    expect(sampleArea().value).toContain(sample.slice(0, 12));
+
+    // ③ label 文案与 htmlFor
+    const label = document.querySelector('label[for="imitation-sample-file"]') as HTMLLabelElement;
+    expect(label).toBeTruthy();
+    expect(label.textContent).toContain('点击选择本地 txt / md 文件');
+    expect(label.htmlFor).toBe('imitation-sample-file');
+  });
 });

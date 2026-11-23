@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { Button } from '../components/ui';
 import { inputBase, inputNarrow, selectBase, textareaBase } from '../components/Field';
 import { EmptyState } from '../components/EmptyState';
+import { decodeTextFile } from './NewBookPage';
 import type { ImitationDraftDto } from '@inkforge/shared';
 
 /** 拆解仿写档案分区（Pagekin 式）：analyze→预览→确认入库→列表→绑定书。draft 不入库，确认才落档案。 */
@@ -168,6 +169,34 @@ export default function ImitationProfilesSection() {
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
+          {/* 文件选择区（对齐 StyleProfilesSection：隐藏 input + htmlFor label 虚线框 + FileReader → decodeTextFile） */}
+          <div>
+            <input
+              type="file"
+              id="imitation-sample-file"
+              accept=".txt,.md"
+              aria-label="导入仿写样本文件"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const { text: decoded } = decodeTextFile(reader.result as ArrayBuffer);
+                  setText(decoded);
+                };
+                reader.readAsArrayBuffer(f);
+              }}
+            />
+            <label
+              htmlFor="imitation-sample-file"
+              className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed border-line px-3 py-6 text-sm text-muted transition-colors hover:border-line-strong hover:bg-primary-soft/40"
+            >
+              <span>
+                点击选择本地 <span className="font-medium">txt / md</span> 文件（自动识别 UTF-8 / GBK 编码）
+              </span>
+            </label>
+          </div>
           <label className="block text-sm">
             反推章数
             <input
