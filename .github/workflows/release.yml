@@ -45,6 +45,10 @@ jobs:
           fi
         shell: bash
 
+      - name: Build web
+        run: pnpm build:web
+        shell: bash
+
       - name: Test
         run: pnpm -r --if-present run test
         shell: bash

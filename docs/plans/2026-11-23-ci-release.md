@@ -211,6 +211,7 @@ jobs:
 | 4 | rust 缓存 | `Swatinem/rust-cache@v2`，with：`workspaces: 'apps/desktop/src-tauri'`（rustup 预装 G11） | — |
 | 5 | install | `pnpm install --frozen-lockfile` | rc0 |
 | 6 | 版本门 | `if: github.event_name == 'push'`；run：`TAG_VERS="${GITHUB_REF_NAME#v}"`；`CONF_VERS=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")`；`echo "tag=$TAG_VERS conf=$CONF_VERS"`；不等 `exit 2`（打印 `VERSION_GATE_FAIL`）；dispatch 跳过 | tag==conf |
+| 6.5 | **Build web（首跑后主审直修增补，run 45164747081）** | `pnpm build:web`——SPA history 回退用例（api.test.ts:121）依赖 `apps/web/dist/index.html`，本地常在而 CI 净 checkout 无（dist/ gitignored）→ Test 前必须建 web | rc0，产出 web/dist |
 | 7 | test | `pnpm -r --if-present run test` | 664 绿（只增不减 G6） |
 | 8 | typecheck | `pnpm -r --if-present run typecheck` | 0 错 |
 | 9 | lint | `pnpm lint` | 零输出 |
