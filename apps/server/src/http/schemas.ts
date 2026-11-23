@@ -355,3 +355,6 @@ export const settingsImportApplySchema = z.object({
     })
     .default({ enabled: false, heavyEveryN: 2 }),
 });
+
+/** 融合门张力对照（Task-03）：不收请求字段，全部服务端取数；optional 兼容空 body。 */
+export const fusionGateAnalyzeSchema = z.object({}).optional();

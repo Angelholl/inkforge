@@ -19,10 +19,11 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
 import { analyzeSpectrum } from '../spectrum';
+import { buildTensionPrompt, parseTensionRows } from '../fusion/tension';
 import { parseLandingCell, parseSettingsCompendium } from '../settings-import';
 import { ensureLandingWordsUserFile, parseLandingWordsText, readLandingWordsUserFile, resolveLandingWordsPath, validateLandingWordsText, writeLandingWordsUserFile } from '../quality/landing-words';
 import { analyzeStyle } from '../style/analysis';
@@ -1158,6 +1159,122 @@ ${repairPrompt(first.errors)}`))).text,
     }
     booksRepo.setBookSpectrumProfile(db, bookId, body.profileId);
     reply.send({ ok: true, spectrumProfileId: body.profileId });
+  });
+
+  // ── 融合门张力对照（Task-03；POST analyze 无写；降级可见钉：恒 200，绝不 500 阻断确认）──
+  app.post('/api/books/:bookId/fusion-gate/analyze', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    const book = booksRepo.getBook(db, bookId);
+    if (!book) return reply.code(404).send({ error: 'not found' });
+    // 空 body schema：不收字段，全部服务端取数
+    if (!parseBody(reply, fusionGateAnalyzeSchema, req.body)) return;
+
+    // 坏 JSON 容错：rulesText 取不到即空串，不抛（与 style/merge.ts:118 同形）
+    const styleRulesText = (row: { rules_json: string }): string => {
+      try {
+        const data = JSON.parse(row.rules_json) as { rulesText?: string };
+        return typeof data.rulesText === 'string' ? data.rulesText : '';
+      } catch {
+        return '';
+      }
+    };
+
+    // bound=绑定现状：主辅档案 rulesText + 三类已绑 structure
+    const boundStyles: Array<{ name: string; rulesText: string }> = [];
+    const binding = booksRepo.getBookStyleBinding(db, bookId);
+    if (binding) {
+      for (const profileId of [binding.primaryProfileId, ...binding.auxProfileIds]) {
+        const row = db
+          .prepare('SELECT name, rules_json FROM style_profiles WHERE id = ?')
+          .get(profileId) as { name: string; rules_json: string } | undefined;
+        if (row) boundStyles.push({ name: row.name, rulesText: styleRulesText(row) });
+      }
+    }
+
+    // 三类 planner 档案：已绑取详情，候选取全局列表（cap 与截断由 buildTensionPrompt 钉）
+    const plannerSources = [
+      {
+        kind: 'plot' as const,
+        boundId: book.plotProfileId,
+        get: (id: string) => plotRepo.getPlotProfile(db, id),
+        list: () => plotRepo.listPlotProfiles(db),
+      },
+      {
+        kind: 'spectrum' as const,
+        boundId: book.spectrumProfileId,
+        get: (id: string) => spectrumRepo.getSpectrumProfile(db, id),
+        list: () => spectrumRepo.listSpectrumProfiles(db),
+      },
+      {
+        kind: 'imitation' as const,
+        boundId: book.imitationProfileId,
+        get: (id: string) => imitationRepo.getImitationProfile(db, id),
+        list: () => imitationRepo.listImitationProfiles(db),
+      },
+    ];
+    const boundPlanner: Array<{ kind: 'plot' | 'spectrum' | 'imitation'; name: string; structure: string }> = [];
+    const candidatePlanner: Array<{ kind: 'plot' | 'spectrum' | 'imitation'; name: string; structure: string }> = [];
+    for (const source of plannerSources) {
+      if (source.boundId) {
+        const p = source.get(source.boundId);
+        if (p) boundPlanner.push({ kind: source.kind, name: p.name, structure: p.structure.join('\n') });
+      }
+      for (const p of source.list()) {
+        candidatePlanner.push({ kind: source.kind, name: p.name, structure: p.structure.join('\n') });
+      }
+    }
+
+    // candidates=全局 style_profiles rules_json
+    const candidateStyles: Array<{ name: string; rulesText: string }> = [];
+    const styleRows = db
+      .prepare('SELECT name, rules_json FROM style_profiles ORDER BY created_at DESC')
+      .all() as Array<{ name: string; rules_json: string }>;
+    for (const row of styleRows) candidateStyles.push({ name: row.name, rulesText: styleRulesText(row) });
+
+    // 无对照面即降级（诚实呈现，不凭空造张力行）
+    const hasSurface =
+      book.description.trim() !== '' ||
+      book.outline.trim() !== '' ||
+      boundStyles.length + boundPlanner.length + candidateStyles.length + candidatePlanner.length > 0;
+    if (!hasSurface) {
+      return reply.send({ rows: [], degraded: true, degradeReason: '无对照面（简介/大纲与档案均为空），本次未做张力对照' });
+    }
+
+    const prompt = buildTensionPrompt({
+      description: book.description,
+      outline: book.outline,
+      boundStyles,
+      boundPlanner,
+      candidateStyles,
+      candidatePlanner,
+    });
+    const analyzer = state.plannerProvider ?? createRoleProvider(config, 'planner');
+    try {
+      // summarize 步缝（同 routes.ts:458 planner 缝形态）；超时/抛错在下方 catch 统一降级
+      const completion = await analyzer.complete({
+        system: '【硬规则】你是长篇小说的融合编辑，只输出张力行协议（TENSION: 五段竖线分隔）；不要输出 JSON、markdown 代码块或任何解释。',
+        user: prompt,
+        temperature: 0.3,
+        topP: 0.9,
+        maxOutputTokens: config.providers.local.maxOutput,
+        timeoutMs: 120000,
+        meta: { step: 'summarize' },
+      });
+      const { rows, invalid } = parseTensionRows(completion.text);
+      if (rows.length === 0) {
+        return reply.send({
+          rows: [],
+          degraded: true,
+          degradeReason:
+            invalid > 0
+              ? `模型输出无有效张力协议行（丢弃非法行 ${invalid} 条），本次未做张力对照`
+              : '模型输出无张力协议行，本次未做张力对照',
+        });
+      }
+      return reply.send({ rows, degraded: false });
+    } catch (e) {
+      return reply.send({ rows: [], degraded: true, degradeReason: `张力对照调用失败：${(e as Error).message}` });
+    }
   });
 
   app.post('/api/books/:bookId/chapters/:chapterNo/summarize', async (req, reply) => {
