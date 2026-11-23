@@ -593,3 +593,5 @@
 **裁决②：** 排卡建 `.github/workflows/release.yml` 全链上 CI：tag `v*.*.*` 触发→依赖安装（pnpm 缓存+rust 缓存）→版本门（tag==tauri.conf.version）→全量测试+typecheck+lint+audit --prod→build-dist→tauri build→PE Subsystem 回归→生成 NSI 静态清点（宏形态计数/迁移对/依赖覆盖/个人面零命中）→**正式包验证装演练**（/P /D 净装→落盘清点→首启 health+词表 path+books+env 取证→杀树→卸载）→artifact 存档→Release 自动上载（GITHUB_TOKEN）→digest 回读比对→公开三验；`workflow_dispatch`=验证模式不建 Release。0.2.4 起发版=push tag，验收放行与 GUI 真实测试仍在 owner。
 
 **执行安排：** 计划真值=docs/plans/2026-11-23-ci-release.md（code-planner 产出→critic 评议→owner 审→派卡）；卡拆两张：t07=CI 支撑脚本两文件（release-inventory.mjs 通用化+ci-verify-install.sh 参数化，本地可自证）、t08=release.yml+PE 脚本 CI 适配；首跑调试主模型亲执（REST+git-credential PAT 直连，gh CLI 本机无、不装）。
+
+**终账补记（2026-11-23 晚，发版完成）：** 0.2.3 已经 CI 正式发布——tag `v0.2.3`→commit `1bc6d8c`，run `45177116267` 25 步全绿，Release id 455399069（latest），安装包 65,535,047 B sha256=`171d73e3…` 三方对拍闭环（CI 本 run 本地==服务端 digest==本机整下重哈希）。调试五轮三红三修（Build web 步 `568db43`/checkout depth0 `e1c5853`/剥星号 `1bc6d8c`，根因与形态全文入存证+计划 F1-F6）；critic H1 已闭环（ARP round=2 非空洞实证）。**发版形态就此定版：0.2.4 起发版=push tag，验收放行与 GUI 真实测试仍在 owner，本地链降为参考/兜底。** 全文存证=docs/release/0.2.3-release.md（含 owner 六点实测点位与挂账五项）。
