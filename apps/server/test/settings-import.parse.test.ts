@@ -406,6 +406,38 @@ describe('parseSettingsCompendium', () => {
     const d = parseSettingsCompendium(V3_FIXTURE);
     expect(d.warnings.some((w) => w.includes('全书大纲卡未解析出任何落地格'))).toBe(false);
   });
+
+  it('consumedSections：中性夹具 → 命中节标题固定序钉值', () => {
+    expect(parseSettingsCompendium(FIXTURE).consumedSections).toEqual([
+      '5. 人物圣经',
+      '6. 总大纲（卷—篇—章；章数无上限）',
+      '9. 文风与语言规范',
+      '1.5 悬置线清单（扩写的第一桶金）',
+    ]);
+  });
+
+  it('consumedSections：无任何命中骨架（纯 H1+一段文字）→ []', () => {
+    const d = parseSettingsCompendium('# 《示例之作》无命中骨架\n\n一段中性占位叙述，不含任何命中节标题。\n');
+    expect(d.consumedSections).toEqual([]);
+  });
+
+  it('consumedSections：含悬置 H3 → 清单含该 H3 heading', () => {
+    const raw = [
+      '# 《示例之作》悬置样',
+      '',
+      '> 定位一句话：占位。',
+      '',
+      '## 5. 人物圣经',
+      '',
+      '主角占位。',
+      '',
+      '### 5.9 悬置线清单',
+      '',
+      '1. 占位伏笔（待回收）。',
+      '',
+    ].join('\n');
+    expect(parseSettingsCompendium(raw).consumedSections).toContain('5.9 悬置线清单');
+  });
 });
 
 describe('parseLandingCell（DEC-2026-1120-10 落地格解析）', () => {

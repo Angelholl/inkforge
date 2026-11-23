@@ -73,6 +73,45 @@ function splitDoc(raw: string): Doc {
   return doc;
 }
 
+/** 消费节原始骨架（融合门 Task-02）：heading 为去掉 # 的题面，lines 不含该节自身的标题行。 */
+export interface CompendiumSectionRaw {
+  heading: string;
+  level: 2 | 3;
+  lines: string[];
+}
+
+/** 薄封装 splitDoc：H2 sections（level 2）+ h3Blocks（level 3），文档序。 */
+export function splitCompendiumSections(raw: string): CompendiumSectionRaw[] {
+  const doc = splitDoc(raw);
+  // splitDoc 已分别按文档序产出 H2/H3；此处按原文字句中标题行的出现次序交错合并，得严格文档序。
+  const h2ByHeading = new Map<string, Section[]>();
+  const h3ByHeading = new Map<string, Section[]>();
+  for (const s of doc.sections) {
+    const bucket = h2ByHeading.get(s.heading) ?? [];
+    bucket.push(s);
+    h2ByHeading.set(s.heading, bucket);
+  }
+  for (const b of doc.h3Blocks) {
+    const bucket = h3ByHeading.get(b.heading) ?? [];
+    bucket.push(b);
+    h3ByHeading.set(b.heading, bucket);
+  }
+  const out: CompendiumSectionRaw[] = [];
+  for (const rawLine of raw.split('\n')) {
+    const t = rawLine.trim();
+    if (/^##\s+/.test(t)) {
+      const heading = t.replace(/^##\s+/, '').trim();
+      const sec = h2ByHeading.get(heading)?.shift();
+      if (sec) out.push({ heading, level: 2, lines: sec.lines });
+    } else if (/^#{3,6}\s+/.test(t)) {
+      const heading = t.replace(/^#{3,6}\s+/, '').trim();
+      const sec = h3ByHeading.get(heading)?.shift();
+      if (sec) out.push({ heading, level: 3, lines: sec.lines });
+    }
+  }
+  return out;
+}
+
 /** 节体清洗：剥行首标题标记/标注 tag/粗体标记，保留行结构。 */
 function cleanBlock(sec: Section | undefined): string {
   if (!sec) return '';
@@ -91,8 +130,9 @@ const META_SECTION_RE = /^#{1,6}\s*(?:[\d.、]+\s*)?(?:版本(?:记录|沿革|�
  * 全文精炼（DEC-2026-1120-04 追加裁决「16000 上限内精炼前置」，拍板①完全加载的完整落地）：
  * H 骨架剥 # 保留标题行、表格压行成 a｜b｜c（分隔行删）、空行折叠、文档序=owner 前置序。
  * description=精炼全文（v3 全文≈1.3 万字恰在预算内）；矩阵节精炼版追加进剧情大纲。
+ * exported 供门引擎节级精炼同形，行为逐字节不变。
  */
-function refineForDescription(raw: string): string {
+export function refineForDescription(raw: string): string {
   const out: string[] = [];
   let skipUntilLevel: number | null = null;
   for (const rawLine of raw.split('\n')) {
@@ -491,12 +531,14 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
   }
 
   const characters: SettingsImportCharacterDraft[] = [];
-  parseCharacters(doc.sections.find((s) => s.heading.includes('人物')), warnings, characters);
+  const charactersSec = doc.sections.find((s) => s.heading.includes('人物'));
+  parseCharacters(charactersSec, warnings, characters);
 
   const tree: OutlineTreeDto = { volumes: [] };
   const allCards: ParsedCard[] = [];
   const outlineLines: string[] = [];
-  parseOutline(doc.sections.find((s) => s.heading.includes('大纲')), warnings, tree, allCards, outlineLines);
+  const outlineSec = doc.sections.find((s) => s.heading.includes('大纲'));
+  parseOutline(outlineSec, warnings, tree, allCards, outlineLines);
   // 关系发生矩阵（v3 新增「全书剧情总账」）精炼追加进剧情大纲；v2 无矩阵节不触发
   const matrixSec = doc.sections.find((s) => s.heading.includes('矩阵'));
   const outline = [outlineLines.join('\n'), matrixSec ? refineForDescription(matrixSec.lines.join('\n')) : '']
@@ -539,7 +581,17 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
   const foreshadowings: SettingsImportForeshadowingDraft[] = [];
   parseForeshadowings(doc.h3Blocks, warnings, foreshadowings);
 
-  const styleSection = cleanBlock(doc.sections.find((s) => s.heading.includes('文风')));
+  const styleSec = doc.sections.find((s) => s.heading.includes('文风'));
+  const styleSection = cleanBlock(styleSec);
+
+  // 消费节清单（规格 §2 v2.2）：与 :494/:499/:501/:542/:447 五处判定同一事实源；固定序，未命中不产条目。
+  const consumedSections = [
+    charactersSec?.heading,
+    outlineSec?.heading,
+    matrixSec?.heading,
+    styleSec?.heading,
+    ...doc.h3Blocks.filter((b) => /悬置|伏笔/.test(b.heading)).map((b) => b.heading),
+  ].filter((h): h is string => h !== undefined);
 
   if (
     title === '' &&
@@ -554,6 +606,7 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
   return {
     title,
     description,
+    consumedSections,
     outline,
     characters,
     outlineTree: tree,
