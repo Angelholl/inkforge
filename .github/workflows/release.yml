@@ -1,0 +1,148 @@
+name: release
+on: { push: { tags: ["v*.*.*"] }, workflow_dispatch: {} }
+permissions: { contents: write }
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: '1'
+          fetch-tags: 'true'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'apps/desktop/src-tauri'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        shell: bash
+
+      - name: Version gate
+        if: github.event_name == 'push'
+        run: |
+          TAG_VERS="${GITHUB_REF_NAME#v}"
+          CONF_VERS=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          echo "tag=$TAG_VERS conf=$CONF_VERS"
+          if [ "$TAG_VERS" != "$CONF_VERS" ]; then
+            echo VERSION_GATE_FAIL
+            exit 2
+          fi
+        shell: bash
+
+      - name: Test
+        run: pnpm -r --if-present run test
+        shell: bash
+
+      - name: Typecheck
+        run: pnpm -r --if-present run typecheck
+        shell: bash
+
+      - name: Lint
+        run: pnpm lint
+        shell: bash
+
+      - name: Audit
+        run: pnpm audit --prod || (sleep 15 && pnpm audit --prod)
+        shell: bash
+
+      - name: Sidecar node
+        run: pnpm sidecar:node
+        shell: bash
+
+      - name: Build dist
+        run: node apps/server/scripts/build-dist.mjs
+        shell: bash
+
+      - name: Stamp NSI
+        run: INKFORGE_STAMP_NSI=1 node apps/desktop/scripts/stamp-nsi.mjs
+        shell: bash
+
+      - name: Tauri build
+        run: pnpm --filter @inkforge/desktop build 2>&1 | tee "$RUNNER_TEMP/tauri-build.log"
+        shell: bash
+
+      - name: PE gate
+        env:
+          INKFORGE_PE_ASSERT: '1'
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/src-tauri/tests/pe_subsystem_regression.ps1
+        shell: bash
+
+      - name: Inventory
+        run: node scripts/release-inventory.mjs --log "$RUNNER_TEMP/tauri-build.log" | tee "$RUNNER_TEMP/inventory.log"
+        shell: bash
+
+      - name: Verify install
+        run: bash scripts/ci-verify-install.sh
+        shell: bash
+
+      - name: sha256
+        working-directory: apps/desktop/src-tauri/target/release/bundle/nsis
+        run: sha256sum inkforge_*_x64-setup.exe > sha256sums.txt && cat sha256sums.txt
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkforge-release-bundle-${{ github.ref_name }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/inkforge_*_x64-setup.exe
+            apps/desktop/src-tauri/target/release/bundle/nsis/sha256sums.txt
+            ${{ runner.temp }}/verify-listing.txt
+            ${{ runner.temp }}/inventory.log
+
+      - name: Release body
+        if: github.event_name == 'push'
+        run: |
+          git tag -l "$GITHUB_REF_NAME" --format='%(contents)' > "$RUNNER_TEMP/release-body.md"
+          printf '\nSHA256: %s\n' "$(cut -d' ' -f1 < apps/desktop/src-tauri/target/release/bundle/nsis/sha256sums.txt)" >> "$RUNNER_TEMP/release-body.md"
+          [ -s "$RUNNER_TEMP/release-body.md" ] || { echo EMPTY_TAG_MESSAGE; exit 2; }
+        shell: bash
+
+      - name: Create release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: inkforge ${{ github.ref_name }}
+          body_path: ${{ runner.temp }}/release-body.md
+          files: apps/desktop/src-tauri/target/release/bundle/nsis/inkforge_*_x64-setup.exe
+          draft: false
+          prerelease: false
+
+      - name: Digest readback
+        if: github.event_name == 'push'
+        run: |
+          LOCAL=$(cut -d' ' -f1 < apps/desktop/src-tauri/target/release/bundle/nsis/sha256sums.txt)
+          curl -s -H "Authorization: Bearer ${{ github.token }}" -H "User-Agent: inkforge-release" "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" > "$RUNNER_TEMP/release.json"
+          node -e "const d=require(process.argv[1]);const a=d.assets[0];if(a.digest!=='sha256:'+process.argv[2]){console.error('DIGEST_MISMATCH');process.exit(2)}console.log('DIGEST_MATCH=YES')" "$RUNNER_TEMP/release.json" "$LOCAL"
+        shell: bash
+
+      - name: Public verification
+        if: github.event_name == 'push'
+        run: |
+          EXE_NAME=$(awk '{print $2}' apps/desktop/src-tauri/target/release/bundle/nsis/sha256sums.txt)
+          A_CODE=$(curl -s -o /dev/null -w '%{http_code}' -I "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$EXE_NAME")
+          [ "$A_CODE" = "302" ] || { echo "PUBLIC_HEAD_FAIL=$A_CODE"; exit 2; }
+          curl -sL -r 0-3 -o "$RUNNER_TEMP/head4.bin" "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$EXE_NAME"
+          head -c 2 "$RUNNER_TEMP/head4.bin" | grep -q MZ || exit 2
+          echo PUBLIC_HEAD_MZ_OK
+          curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" > "$RUNNER_TEMP/latest.json"
+          node -e "const d=require(process.argv[1]);const ok=d.tag_name===process.argv[2]&&!d.draft&&!d.prerelease;if(!ok)process.exit(2);console.log('LATEST='+d.tag_name)" "$RUNNER_TEMP/latest.json" "${{ github.ref_name }}"
+        shell: bash
