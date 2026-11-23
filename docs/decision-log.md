@@ -595,3 +595,19 @@
 **执行安排：** 计划真值=docs/plans/2026-11-23-ci-release.md（code-planner 产出→critic 评议→owner 审→派卡）；卡拆两张：t07=CI 支撑脚本两文件（release-inventory.mjs 通用化+ci-verify-install.sh 参数化，本地可自证）、t08=release.yml+PE 脚本 CI 适配；首跑调试主模型亲执（REST+git-credential PAT 直连，gh CLI 本机无、不装）。
 
 **终账补记（2026-11-23 晚，发版完成）：** 0.2.3 已经 CI 正式发布——tag `v0.2.3`→commit `1bc6d8c`，run `45177116267` 25 步全绿，Release id 455399069（latest），安装包 65,535,047 B sha256=`171d73e3…` 三方对拍闭环（CI 本 run 本地==服务端 digest==本机整下重哈希）。调试五轮三红三修（Build web 步 `568db43`/checkout depth0 `e1c5853`/剥星号 `1bc6d8c`，根因与形态全文入存证+计划 F1-F6）；critic H1 已闭环（ARP round=2 非空洞实证）。**发版形态就此定版：0.2.4 起发版=push tag，验收放行与 GUI 真实测试仍在 owner，本地链降为参考/兜底。** 全文存证=docs/release/0.2.3-release.md（含 owner 六点实测点位与挂账五项）。
+
+## DEC-2026-1120-07 [OWNER·补录] 建档直选蒸馏档案（2026-11-20，补录于 2026-11-24）
+
+**背景：** owner 装机实测反馈（真实测试二反馈②）：建档时希望能直接选用已蒸档案，不必建完书再跑详情页。主模型亲执已推 `87ae074`。
+
+**裁决：** NewBookPage 向导步骤①建书页内嵌风格档案勾选区（上限 4、首位=主档），复用既有绑定语义与共享 `buildStyleBindBody`；档案列表加载失败降级为隐藏该区（console.warn）不阻断建档；绑定失败不回滚建书，仍走原跳转链路。
+
+**补录说明：** 本条为销账补录（代码注释 `NewBookPage.tsx:64/99/160` 长期引用本 ID 而日志无档），细节以代码与 [[realtest-two-feedbacks-state]] 批次账为准。
+
+## DEC-2026-1120-09 [OWNER·补录] 人物光谱蒸馏（2026-11-20，补录于 2026-11-24）
+
+**背景：** 蒸馏目标矩阵（[[distill-owner-target-matrix]]）人物维度缺口：planner 缺「人物原型谱」参考面。
+
+**裁决：** 新增 spectrum 蒸馏沿 plot 五端点同构：ROLE/NAMES 单行协议（匿名化人物原型 3–8 条；NAMES 不入库、仅程序脱敏兜底校验）；绑定列 `books.spectrum_profile_id`（migration 0013）；注入面=blueprint-suggest planner 槽 `spectrumReference`（drafter/related 红线不注入，与 PLOT 同）；三提交已推，基线 402+144。
+
+**补录说明：** 本条为销账补录（代码注释 `schemas.ts:252`、`books.ts:16/224`、`spectrum.ts:51`、`routes.ts:426/1124` 引用本 ID 而日志无档），全文以 [[spectrum-distill-batch-state]] 批次账为准。
