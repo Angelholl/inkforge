@@ -205,7 +205,7 @@ jobs:
 
 | # | 步 | uses/run（钉值） | 期望结果 |
 |---|----|------|------|
-| 1 | checkout | `actions/checkout@v4`，with：`fetch-depth: '1'`、`fetch-tags: 'true'`（annotated tag 注记本地可读，body 步用） | — |
+| 1 | checkout | `actions/checkout@v4`，with：`fetch-depth: '0'`、`fetch-tags: 'true'`（annotated tag 注记本地可读，body 步用。**首跑 tag 模式实测修正**：depth 1 时 action 拼 `+<sha>:refs/tags/vX` 与 fetch-tags 的 `+refs/tags/*` 双映射相撞 → `Cannot fetch both` Checkout 红（run 45173379784）；depth 0 全量取 tag 无撞，dispatch 模式两态皆兼容，仓小全 fetch 成本秒级） | — |
 | 2 | pnpm | `pnpm/action-setup@v4`（无 with；读 package.json `packageManager: pnpm@12.18.0`） | — |
 | 3 | node | `actions/setup-node@v4`，with：`node-version: '22'`、`cache: pnpm`（engines `>=22.11 <25` 满足） | — |
 | 4 | rust 缓存 | `Swatinem/rust-cache@v2`，with：`workspaces: 'apps/desktop/src-tauri'`（rustup 预装 G11） | — |
