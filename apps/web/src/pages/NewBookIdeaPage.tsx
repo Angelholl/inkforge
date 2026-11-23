@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/client';
+import { startRunWithGate, type GateMount, type GateView } from '../fusionGate';
+import FusionGateDialog from '../components/FusionGateDialog';
 import SettingsImportPanel, { type SettingsImportApplied } from '../components/SettingsImportPanel';
 import type { OutlineItemDto } from '@inkforge/shared';
 import { Button } from '../components/ui';
@@ -29,6 +31,16 @@ export default function NewBookIdeaPage() {
   const [chars, setChars] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // 生成前融合门（Task-05）：入口 B 的 launch 同法接入（startFn=createRun+navigate 闭包）
+  const [gate, setGate] = useState<GateView | null>(null);
+  const gateMount = useMemo<GateMount>(
+    () => ({
+      show: setGate,
+      patch: (part) => setGate((prev) => (prev ? { ...prev, ...part } : prev)),
+      hide: () => setGate(null),
+    }),
+    [],
+  );
 
   // 设定集导入接线（DEC-2026-1120-04 拍板③）：含章级大纲 → 跳过 LLM 直接进蓝图审阅；否则设定已入库，按章节数走现有建议
   const onImportApplied = async ({ result, draft }: SettingsImportApplied) => {
@@ -116,9 +128,16 @@ export default function NewBookIdeaPage() {
     setError('');
     setBusy(true);
     try {
-      const toChapter = items.length > 0 ? items[items.length - 1].chapterNo : chapterCount;
-      const r = await api.createRun({ bookId, mode: 'generate', fromChapter: 1, toChapter });
-      navigate(`/runs/${r.runId}`);
+      // startFn 必须是「发 run」闭包：confirm 200 后才在此真正 createRun+navigate（不得预发）
+      await startRunWithGate(
+        bookId,
+        async () => {
+          const toChapter = items.length > 0 ? items[items.length - 1].chapterNo : chapterCount;
+          const r = await api.createRun({ bookId, mode: 'generate', fromChapter: 1, toChapter });
+          navigate(`/runs/${r.runId}`);
+        },
+        gateMount,
+      );
     } catch (e) {
       setError(`发起生成失败：${(e as Error).message}`);
     } finally {
@@ -312,6 +331,7 @@ export default function NewBookIdeaPage() {
           </Button>
         </div>
       )}
+      {gate && <FusionGateDialog {...gate} />}
     </main>
   );
 }

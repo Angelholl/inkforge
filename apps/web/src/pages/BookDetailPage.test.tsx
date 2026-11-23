@@ -41,6 +41,24 @@ const book = {
 
 type Call = { url: string; init?: RequestInit };
 const calls: Call[] = [];
+// Task-05 随迁：默认直通（pass）；新增顺序断言例置 show 验证 confirm→run 顺序。
+let gateMode: 'pass' | 'show' = 'pass';
+const GATE_SHOW_REPORT = {
+  action: 'show',
+  fingerprint: 'fp-test',
+  aClass: [],
+  previewDescription: '剥后世界观文本',
+  headWindowWarn: false,
+  hasArchive: true,
+  binding: {
+    styleBinding: null,
+    styleFewshotOn: false,
+    snapshotPresent: false,
+    plotProfileId: null,
+    spectrumProfileId: null,
+    imitationProfileId: null,
+  },
+};
 
 function jsonResponse(data: unknown, status = 200) {
   return {
@@ -98,6 +116,10 @@ function installFetchStub() {
         bookState = { ...bookState, chapters: bookState.chapters.filter((c) => c.chapterNo !== no) };
         return jsonResponse({ ok: true });
       }
+      // Task-05 随迁：门端点 stub（直通形态保持既有 run 端点断言真实命中）
+      if (u.endsWith('/fusion-gate/confirm') && init?.method === 'POST') return jsonResponse({ results: {}, fingerprint: 'fp-test' });
+      if (u.endsWith('/fusion-gate/analyze') && init?.method === 'POST') return jsonResponse({ rows: [], degraded: false });
+      if (u.endsWith('/fusion-gate')) return jsonResponse(gateMode === 'pass' ? { action: 'pass', fingerprint: 'fp-test' } : GATE_SHOW_REPORT);
       if (u.endsWith('/api/runs') && init?.method === 'POST') return jsonResponse({ runId: 'r1234567890' }, 202);
       if (u.includes('/api/books/b1/meta')) return jsonResponse({ ...bookState, description: '旧世界观', outline: '旧大纲' });
       if (u.includes('/api/books/b1')) {
@@ -145,6 +167,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   calls.length = 0;
+  gateMode = 'pass';
 });
 
 function setInput(sel: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -299,6 +322,33 @@ describe('BookDetailPage', () => {
     );
     const oneCall = calls.find((c) => c.url.endsWith('/api/books/b1/chapters/1/generate'));
     expect(JSON.parse(String((oneCall!.init as RequestInit).body))).toEqual({ maxRounds: 3 });
+  });
+
+  it('融合门：show → confirm 200 后才发 run（fetch 调用顺序断言，非 200/取消不发 run）', async () => {
+    gateMode = 'show';
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // 点整书生成 → 门 show（直通不成立）→ 对话框出现，此时尚未发 run
+    fireEvent.click(await screen.findByRole('button', { name: '整书生成' }));
+    await screen.findByRole('button', { name: '确认并开始生成' });
+    expect(calls.some((c) => c.url.endsWith('/generate-all'))).toBe(false);
+
+    // 确认 → confirm 200 → 才发起 run
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/generate-all'))).toBe(true));
+    const confirmIdx = calls.findIndex((c) => c.url.endsWith('/fusion-gate/confirm'));
+    const runIdx = calls.findIndex((c) => c.url.endsWith('/generate-all'));
+    expect(confirmIdx).toBeGreaterThanOrEqual(0);
+    expect(runIdx).toBeGreaterThan(confirmIdx);
   });
 
   it('落地策略下拉渲染当前值：book.landingMandate=cadence/N=2 → 值为 cadence-2', async () => {

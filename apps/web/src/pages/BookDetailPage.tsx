@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { RefreshCw } from 'lucide-react';
 import { api, apiErrorText } from '../api/client';
+import { startRunWithGate, type GateMount, type GateView } from '../fusionGate';
+import FusionGateDialog from '../components/FusionGateDialog';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
@@ -371,6 +373,19 @@ export default function BookDetailPage() {
   // 删章（DEC-2026-1120-02）：章节行三态确认门（沿人物卡/版本删除先例）
   const [confirmingDeleteChapter, setConfirmingDeleteChapter] = useState<number | null>(null);
   const [deletingChapter, setDeletingChapter] = useState(false);
+  // 生成前融合门（Task-05）：5 接入点统一走 startRunWithGate；宿主只渲染门，不含引擎逻辑
+  const [gate, setGate] = useState<GateView | null>(null);
+  const gateMount = useMemo<GateMount>(
+    () => ({
+      show: setGate,
+      patch: (part) => setGate((prev) => (prev ? { ...prev, ...part } : prev)),
+      hide: () => setGate(null),
+    }),
+    [],
+  );
+  const runWithGate = (startFn: () => Promise<void>) => {
+    void startRunWithGate(bookId, startFn, gateMount).catch((e: unknown) => setMsg(`融合门失败：${(e as Error).message}`));
+  };
   // book 每 4s 轮询；世界观/大纲编辑态只在首次加载同步一次，避免轮询覆盖未保存的编辑
   const metaSyncedRef = useRef(false);
 
@@ -640,7 +655,7 @@ export default function BookDetailPage() {
         {book?.imitationProfileId && <Chip active>仿写已绑</Chip>}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button variant="primary" onClick={generateAll}>
+        <Button variant="primary" onClick={() => runWithGate(generateAll)}>
           整书生成
         </Button>
         <label className="flex items-center gap-1.5 text-xs text-muted">
@@ -942,7 +957,9 @@ export default function BookDetailPage() {
                 tone="primary"
                 size="sm"
                 className="ml-auto"
-                onClick={() => void api.generateChapter(bookId, c.chapterNo, maxRounds).then(() => setMsg(`第${c.chapterNo}章已入队`))}
+                onClick={() =>
+                  runWithGate(() => api.generateChapter(bookId, c.chapterNo, maxRounds).then(() => setMsg(`第${c.chapterNo}章已入队`)))
+                }
               >
                 生成
               </Button>
@@ -1006,10 +1023,10 @@ export default function BookDetailPage() {
             <Button variant="primary" onClick={saveBlueprint}>
               保存蓝图
             </Button>
-            <Button variant="secondary" onClick={generate}>
+            <Button variant="secondary" onClick={() => runWithGate(generate)}>
               生成本章
             </Button>
-            <Button variant="primary" onClick={() => void startContinue()}>
+            <Button variant="primary" onClick={() => runWithGate(startContinue)}>
               发起续写（第{chapterNo}章）
             </Button>
           </div>
@@ -1040,6 +1057,7 @@ export default function BookDetailPage() {
           <RunAsideCard runs={book?.runs ?? []} bookId={bookId} />
         </aside>
       </div>
+      {gate && <FusionGateDialog {...gate} />}
     </main>
   );
 }

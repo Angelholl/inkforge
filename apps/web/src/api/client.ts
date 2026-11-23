@@ -50,6 +50,10 @@ import type {
   SettingsImportDraftDto,
   SettingsImportApplyBody,
   SettingsImportApplyResult,
+  FusionGateReportDto,
+  FusionTensionDto,
+  FusionGateConfirmBody,
+  FusionGateConfirmResult,
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
@@ -190,6 +194,12 @@ export const api = {
       body: JSON.stringify({ profileId }),
     }),
   createRun: (body: CreateRunBody) => req<{ runId: string }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
+  // 生成前融合确认门（Task-05）：GET 直通判定 / analyze 张力对照 / confirm 200 后前端才发 run
+  getFusionGate: (bookId: string) => req<FusionGateReportDto>(`/api/books/${bookId}/fusion-gate`),
+  analyzeFusionGate: (bookId: string) =>
+    req<FusionTensionDto>(`/api/books/${bookId}/fusion-gate/analyze`, { method: 'POST', body: '{}' }),
+  confirmFusionGate: (bookId: string, body: FusionGateConfirmBody) =>
+    req<FusionGateConfirmResult>(`/api/books/${bookId}/fusion-gate/confirm`, { method: 'POST', body: JSON.stringify(body) }),
   getRun: (runId: string) => req<RunWithStepsDto>(`/api/runs/${runId}`),
   getRunVersions: (runId: string) => req<RunVersionsDto>(`/api/runs/${runId}/versions`),
   cancelRun: (runId: string) => req<{ ok: boolean }>(`/api/runs/${runId}/cancel`, { method: 'POST', body: '{}' }),

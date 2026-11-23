@@ -26,6 +26,8 @@ function stubFetch(calls: Call[]) {
     if (url.endsWith('/api/books') && init?.method === 'POST') return jsonResponse({ id: 'b1', title: 'x' }, 201);
     if (url.endsWith('/outline-suggest') && init?.method === 'POST') return jsonResponse({ outline: OUTLINE_TWO, source: 'llm' });
     if (/\/blueprint$/.test(url) && init?.method === 'PUT') return jsonResponse({ id: 'c1' });
+    // Task-05 随迁同型 stub：门直通形态，既有 createRun 断言保持真实命中
+    if (url.endsWith('/fusion-gate')) return jsonResponse({ action: 'pass', fingerprint: 'fp-test' });
     if (url.endsWith('/api/runs') && init?.method === 'POST') return jsonResponse({ runId: 'r1' }, 201);
     return jsonResponse({ error: 'unexpected' }, 404);
   });
