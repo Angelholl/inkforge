@@ -19,12 +19,15 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
 import { analyzeSpectrum } from '../spectrum';
 import { buildTensionPrompt, parseTensionRows } from '../fusion/tension';
-import { parseLandingCell, parseSettingsCompendium } from '../settings-import';
+import { applyFusionConfirm, type ConfirmDecisions } from '../fusion/apply';
+import { computeFusionRows, type FusionCarriers } from '../fusion/engine';
+import { injectionFaceFingerprint, type InjectionFace } from '../fusion/fingerprint';
+import { parseLandingCell, parseSettingsCompendium, refineForDescription, splitCompendiumSections } from '../settings-import';
 import { ensureLandingWordsUserFile, parseLandingWordsText, readLandingWordsUserFile, resolveLandingWordsPath, validateLandingWordsText, writeLandingWordsUserFile } from '../quality/landing-words';
 import { analyzeStyle } from '../style/analysis';
 import * as plotRepo from '../db/repositories/plot';
@@ -374,8 +377,10 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const book = booksRepo.getBook(db, bookId);
     if (!book) return reply.code(404).send({ error: 'not found' });
     // 落地策略（DEC-2026-1122-01）：覆盖为解析形态并删原始 JSON 串键（不向客户端泄漏 landingMandateJson）
-    const { landingMandateJson, ...bookRest } = book;
+    // 门状态同源（Task-04）：genGateJson 亦不向客户端泄漏，沿本先例解构 void
+    const { landingMandateJson, genGateJson, ...bookRest } = book;
     void landingMandateJson;
+    void genGateJson;
     reply.send({ ...bookRest, landingMandate: parseLandingMandate(book.landingMandateJson), styleBinding: booksRepo.getBookStyleBinding(db, bookId), chapters: chaptersRepo.listChapters(db, bookId), runs: runsRepo.listRunsByBook(db, bookId) });
   });
 
@@ -1274,6 +1279,109 @@ ${repairPrompt(first.errors)}`))).text,
       return reply.send({ rows, degraded: false });
     } catch (e) {
       return reply.send({ rows: [], degraded: true, degradeReason: `张力对照调用失败：${(e as Error).message}` });
+    }
+  });
+
+  // ── 融合门状态与确认（Task-04；GET 无写三态 / POST 单事务批量写）──
+  // 注入面组装（GET gate / POST confirm 共用）：恒取库内现状，不读活档案（指纹钉）
+  const buildInjectionFace = (bookId: string, book: booksRepo.Book): InjectionFace => ({
+    description: book.description,
+    styleBinding: booksRepo.getBookStyleBinding(db, bookId),
+    styleFewshotOn: book.styleFewshotOn,
+    styleSnapshotJson: book.styleSnapshotJson,
+    plotProfileId: book.plotProfileId,
+    spectrumProfileId: book.spectrumProfileId,
+    imitationProfileId: book.imitationProfileId,
+  });
+
+  // A 类行载体：五类文本拼接（listCharacters / book.outline / 章蓝图 goal / 伏笔 description /
+  // 已绑 style_sources.text 按 source_hash）——只供片段级判定，绝不回流解析输入（N1）
+  const buildCarriers = (bookId: string, book: booksRepo.Book, binding: booksRepo.StyleBinding | null): FusionCarriers => {
+    const styleSourcesText = binding
+      ? [binding.primaryProfileId, ...binding.auxProfileIds]
+          .map((id) => db.prepare('SELECT source_hash FROM style_profiles WHERE id = ?').get(id) as { source_hash: string } | undefined)
+          .filter((r): r is { source_hash: string } => r !== undefined)
+          .map((r) => (db.prepare('SELECT text FROM style_sources WHERE source_hash = ?').get(r.source_hash) as { text: string } | undefined)?.text ?? '')
+          .filter((t) => t !== '')
+          .join('\n')
+      : '';
+    return {
+      charactersText: booksRepo.listCharacters(db, bookId).map((c) => c.baseSetting).join('\n'),
+      outlineText: book.outline,
+      blueprintGoalsText: chaptersRepo.listChapters(db, bookId).map((c) => c.blueprint?.goal ?? '').filter((t) => t !== '').join('\n'),
+      foreshadowingsText: continuityRepo.listForeshadowings(db, bookId).map((f) => f.description).join('\n'),
+      styleSourcesText,
+    };
+  };
+
+  app.get('/api/books/:bookId/fusion-gate', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    const book = booksRepo.getBook(db, bookId);
+    if (!book) return reply.code(404).send({ error: 'not found' });
+
+    const face = buildInjectionFace(bookId, book);
+    const fingerprint = injectionFaceFingerprint(face);
+    const stored = booksRepo.parseGenGate(book.genGateJson);
+    // 指纹未变即直通（含 suppress 写过的指纹）；取消零写零指纹 → 下次必重弹
+    if (stored && stored.fingerprint === fingerprint) {
+      return reply.send({ action: 'pass', fingerprint });
+    }
+
+    // show：归档存在则按 imports 归档重解析出 A 类行；无归档书 aClass 空仍 show（规格泛型：非 MD 书也过门）
+    let aClass: ReturnType<typeof computeFusionRows>['rows'] = [];
+    let previewDescription = '';
+    let headWindowWarn = false;
+    let hasArchive = false;
+    const archivePath = path.join(config.dataDir, 'imports', `${bookId}-settings.md`);
+    if (fs.existsSync(archivePath)) {
+      const raw = await fs.promises.readFile(archivePath, 'utf8');
+      const sections = splitCompendiumSections(raw).map((s) => ({
+        heading: s.heading,
+        lines: refineForDescription(s.lines.join('\n')).split('\n'),
+      }));
+      const consumedHeadings = parseSettingsCompendium(raw).consumedSections ?? [];
+      const result = computeFusionRows({
+        description: book.description,
+        sections,
+        consumedHeadings,
+        carriers: buildCarriers(bookId, book, face.styleBinding),
+      });
+      aClass = result.rows;
+      previewDescription = result.previewDescription;
+      headWindowWarn = result.headWindowWarn;
+      hasArchive = true;
+    }
+    reply.send({
+      action: 'show',
+      fingerprint,
+      aClass,
+      previewDescription,
+      headWindowWarn,
+      hasArchive,
+      binding: {
+        styleBinding: face.styleBinding,
+        styleFewshotOn: book.styleFewshotOn,
+        snapshotPresent: book.styleSnapshotJson !== null,
+        plotProfileId: book.plotProfileId,
+        spectrumProfileId: book.spectrumProfileId,
+        imitationProfileId: book.imitationProfileId,
+      },
+    });
+  });
+
+  app.post('/api/books/:bookId/fusion-gate/confirm', async (req, reply) => {
+    const { bookId } = req.params as { bookId: string };
+    const book = booksRepo.getBook(db, bookId);
+    if (!book) return reply.code(404).send({ error: 'not found' });
+    const parsed = parseBody(reply, fusionGateConfirmSchema, req.body);
+    if (parsed === null) return;
+    const decisions: ConfirmDecisions = parsed ?? {};
+    try {
+      const outcome = applyFusionConfirm(db, bookId, decisions, buildInjectionFace(bookId, book));
+      reply.send({ results: outcome.results, fingerprint: outcome.fingerprint });
+    } catch (e) {
+      // 事务已全回滚=零半写；指纹未写 → 下次 GET 仍 show
+      reply.code(400).send({ error: (e as Error).message });
     }
   });
 
