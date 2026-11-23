@@ -525,7 +525,7 @@ FunctionEnd
 !insertmacro MUI_LANGUAGE "English"
 LangString choowHowToInstall 0 ""
 !insertmacro MUI_RESERVEFILE_LANGDLL
-  !include "I:\inkforge\apps\desktop\src-tauri\target\release\nsis\x64\English.nsh"
+  !include "English.nsh"
 
 ; ============================================================================
 ; Inkforge C: drive install guard (DEC-2026-1112-03)
