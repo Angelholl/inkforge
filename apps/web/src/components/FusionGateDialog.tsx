@@ -42,6 +42,8 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
   const binding = report.binding;
   // 档案名查名；缺键回落 id 前 8 位（?. 保留：旧 stub/运行时缺键防御）
   const nameOf = (id: string): string => binding.profileNames?.[id] ?? id.slice(0, 8);
+  // const 局部快照：JSX 三元里的类型收窄需要在闭包内保持（主审直修②配套）
+  const styleBinding = binding.styleBinding;
   // A 类逐行裁决草稿：preset='strip' 且可剥才预置勾选
   const [stripped, setStripped] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(report.aClass.filter((r) => r.preset === 'strip' && r.removable).map((r) => [r.heading, true])),
@@ -106,14 +108,14 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
         {/* 张力行（只读展示） */}
         {(tension?.rows.length ?? 0) > 0 && (
           <section className="mt-4">
-            <h3 className="text-sm font-medium">张力对照</h3>
+            <h3 className="text-sm font-medium">正文与档案的冲突对照</h3>
             <ul className="mt-2 space-y-2">
               {tension!.rows.map((row, i) => (
                 <li key={`${row.entry}-${i}`} className="rounded-ctl border border-line px-3 py-2 text-xs">
                   <span className="font-medium">{row.entry}</span>
                   <span className="text-muted"> · {row.nature}</span>
-                  <p>MD 侧：{row.mdSide}</p>
-                  <p>档案侧：{row.profileSide}</p>
+                  <p>正文里：{row.mdSide}</p>
+                  <p>档案里：{row.profileSide}</p>
                   <p>建议：{row.suggestion}</p>
                 </li>
               ))}
@@ -156,16 +158,20 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
         {/* 文风配方：当前绑定快照 + 三选调整 */}
         <section className="mt-4">
           <h3 className="text-sm font-medium">文风配方（当前绑定）</h3>
-          {binding.styleBinding === null ? (
+          {styleBinding === null ? (
             <p className="mt-2 text-xs text-muted">这本书还没绑定文风档案，生成时不会参考文风档案。</p>
           ) : (
             <>
               <p className="mt-1 text-xs text-muted">
-                {`主参考《${nameOf(binding.styleBinding.primaryProfileId)}》＋辅助${binding.styleBinding.auxProfileIds.map((id) => `《${nameOf(id)}》`).join('')}`}
+                {`主参考《${nameOf(styleBinding.primaryProfileId)}》${
+                  styleBinding.auxProfileIds.length > 0
+                    ? `＋辅助${styleBinding.auxProfileIds.map((id) => `《${nameOf(id)}》`).join('')}`
+                    : ''
+                }`}
               </p>
               <p className="mt-1 text-xs text-muted">
-                {Object.keys(binding.styleBinding.weights).length > 0
-                  ? `占比：${styleIds.map((id) => `《${nameOf(id)}》 ${weights[id]}`).join('、')}`
+                {Object.keys(styleBinding.weights).length > 0
+                  ? `占比：${styleIds.map((id) => `《${nameOf(id)}》 ${styleChoice === 'weights' ? (weights[id] ?? 1) : (styleBinding.weights[id] ?? 1)}`).join('、')}`
                   : '（旧绑定：按贡献维数计权）'}
               </p>
               <div className="mt-2 flex flex-wrap gap-3 text-sm">
@@ -215,7 +221,7 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
                 <>
                   <p className="mt-2 text-xs text-muted">为每个风格维度单独指定跟随哪本档案</p>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    {Object.keys(binding.styleBinding.dimsSource).map((dim) => (
+                    {Object.keys(styleBinding.dimsSource).map((dim) => (
                       <label key={dim} className="flex items-center gap-2 text-xs">
                         <span className="w-20 truncate">{dim}</span>
                         <select
@@ -320,5 +326,5 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
 }
 
 function headWindowWarnTip(warn: boolean) {
-  return warn ? <p className="mt-3 text-xs text-warn">文首窗口保护：开头若干行不参与剥节，请留意。</p> : null;
+  return warn ? <p className="mt-3 text-xs text-warn">正文开头若干行受保护，勾选移除也不会动它们，请留意。</p> : null;
 }

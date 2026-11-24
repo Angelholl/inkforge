@@ -204,4 +204,43 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     expect(screen.getByText('《示例仿写档案》')).toBeTruthy();
     expect(screen.getByText('未绑定光谱档案')).toBeTruthy();
   });
+
+  // ===== 主审直修（卡 FG-B 验收期四处小缺陷，先红后绿）=====
+
+  it('主审直修①：无辅档时不出现悬空的「＋辅助」', () => {
+    renderDialog({
+      report: {
+        ...report,
+        binding: { ...report.binding, styleBinding: { primaryProfileId: 'sp1', auxProfileIds: [], dimsSource: {}, weights: { sp1: 100 } } },
+      },
+    });
+    expect(screen.getByText(/^主参考《示例主档案》$/)).toBeTruthy();
+    expect(screen.queryByText(/＋辅助/)).toBeNull();
+  });
+
+  it('主审直修②：weights 缺 id 时占比行回落滑条默认值 1、不印 undefined', () => {
+    renderDialog({
+      report: {
+        ...report,
+        binding: { ...report.binding, styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1' }, weights: { sp1: 60 } } },
+      },
+    });
+    expect(screen.queryByText(/undefined/)).toBeNull();
+    expect(screen.getByText(/《示例辅档案》 1/)).toBeTruthy();
+  });
+
+  it('主审直修③：张力区块标题与行侧标签一并白话（原「张力对照/MD 侧/档案侧」）', () => {
+    renderDialog();
+    expect(screen.getByText('正文与档案的冲突对照')).toBeTruthy();
+    expect(screen.getByText(/正文里：去油腻/)).toBeTruthy();
+    expect(screen.getByText(/档案里：露骨密度/)).toBeTruthy();
+    expect(screen.queryByText(/MD 侧/)).toBeNull();
+    expect(screen.queryByText(/^张力对照$/)).toBeNull();
+  });
+
+  it('主审直修④：文首窗口提示白话（原「不参与剥节」）', () => {
+    renderDialog({ report: { ...report, headWindowWarn: true } });
+    expect(screen.getByText('正文开头若干行受保护，勾选移除也不会动它们，请留意。')).toBeTruthy();
+    expect(screen.queryByText(/剥节/)).toBeNull();
+  });
 });
