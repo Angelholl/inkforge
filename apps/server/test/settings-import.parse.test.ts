@@ -729,4 +729,31 @@ describe('真实剥平稿形态', () => {
     expect(cards[0].chapterTo).toBe(26);
     expect(cards[0].title).toBe('三连');
   });
+
+  // ── 主审直修（2026-11-24 真实剥节稿活体重放暴露三残留）──
+  it('主审直修① 引擎行「卷N：长文。」不建假卷、不成卡', () => {
+    const d = parseSettingsCompendium(
+      '【大纲】\n第二卷 转折（第4-6章）\n卷二：外勤陪客／年会（群交拆场试验场）；同学会年度局（知情引爆）。',
+    );
+    expect(d.outlineTree.volumes).toHaveLength(1);
+    expect(d.outlineTree.volumes[0].title).toBe('第2卷 转折');
+    expect(d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards))).toEqual([]);
+  });
+
+  it('主审直修② 字母标号弧段成阶段（A/B…），L1 线池行仍跳过', () => {
+    const d = parseSettingsCompendium(
+      '【大纲】\n第一卷 引子（第1-2章）\nA 1999.6–12 新兵外岛（12 章）｜新兵营、假单｜L 王磊×蔡｜钩：点名\nB 2000 春–夏 套房·收租（12 章）｜旧城｜H 阿美×老黄\nL1 宿舍-校园线｜卷一｜学年局',
+    );
+    const vols = d.outlineTree.volumes;
+    expect(vols).toHaveLength(1);
+    expect(vols[0].stages.map((s) => s.title)).toEqual(['1999.6–12 新兵外岛', '2000 春–夏 套房·收租']);
+    expect(vols[0].stages.flatMap((s) => s.cards)).toEqual([]);
+  });
+
+  it('主审直修③ plain 散行兜底拒长句（>60）与句读收尾行', () => {
+    const d = parseSettingsCompendium(
+      '【大纲】\n第一卷 引子（第1-2章）\n细目待卷一卷二出场人物定稿后按契机律重排，此处先钉峰值与拆场骨架。卷末收口＝离散。\n产能默认：先写卷一弧 1–4（约 20 章）。',
+    );
+    expect(d.outlineTree.volumes[0].stages.flatMap((s) => s.cards)).toEqual([]);
+  });
 });

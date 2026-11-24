@@ -570,7 +570,7 @@ function parseOutline(
       // 卷行两形态：第N卷/部/篇(分) 或 卷/部/篇第N（「第」起头或倒装，散文行不误命中）
       const volFwd = volT.match(/^第\s*([〇零一二三四五六七八九十百千两\d]{1,6})\s*(卷|部|篇)(分)?\s*[：:]?\s*(.*)$/);
       const volInv = volFwd === null
-        ? volT.match(/^([卷部篇])\s*(?:第\s*)?([〇零一二三四五六七八九十百千两\d]{1,6})\s*[：:]?\s*(.*)$/)
+        ? volT.match(/^([卷部篇])\s*(?:第\s*)?([〇零一二三四五六七八九十百千两\d]{1,6})(?![：:；;])\s*[：:]?\s*(.*)$/)
         : null;
       if (volFwd !== null || volInv !== null) {
         const rawN = volFwd !== null ? volFwd[1] : (volInv as RegExpMatchArray)[2];
@@ -629,8 +629,8 @@ function parseOutline(
         stage = null;
         continue;
       }
-      // S4b 弧/场合行：编号+空格+弧名｜... → 阶段（余格为场合池，不跑 extractCards；行后脱离阶段）
-      const arc = t.match(/^(\d{1,3})\s+([^｜\n]{2,40})｜/);
+      // S4b 弧/场合行：编号或字母标号+空格+弧名｜... → 阶段（余格为场合池，不跑 extractCards；行后脱离阶段）
+      const arc = t.match(/^([A-F〇零一二三四五六七八九十百千两\d]{1,3})\s+([^｜\n]{2,40})｜/);
       if (arc !== null) {
         if (vol === null) vol = makeVolume(pendingSubTitle, '');
         const cells = t.slice(arc[0].length).split(/[｜|]/).map((x) => x.trim()).filter((x) => x !== '');
@@ -760,6 +760,8 @@ function parseOutline(
     }
     // 兜底：无编号行成卡（bullet 取首个粗体为题，余为切片题）；无当前卷时散行不成卡（v3 子节叙述性散文）
     if (vol === null) continue;
+    // 主审直修③（2026-11-24 真实重放）：plain 散行兜底拒 >60 长句与句读收尾行——剥平稿的叙述散文/引擎注记不是章卡
+    if (plain && (t.length > 60 || /[。！？；;]$/.test(t))) continue;
     const bare = t.replace(/^[-·]\s+/, '');
     const bm = bare.match(/\*\*(.+?)\*\*/);
     let title = '';
