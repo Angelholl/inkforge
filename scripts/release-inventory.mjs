@@ -1,9 +1,11 @@
 // CI 发版静态清点门（t07-S1）。用法: node scripts/release-inventory.mjs [--nsi <path>] [--log <path>]
-// HAZARD: 以下 0.2.3 基线钉值来自当期生成 NSI，NSI 内容变更须重录（同 0.2.2 backlog），禁随手改数。
+// HAZARD: 以下钉值来自当期生成 NSI，NSI 内容变更须重录（同 0.2.2 backlog），禁随手改数。
+// v0.2.4 重录（2026-11-24，CI run 45318933123 红后）：+1 文件=迁移 0015_gen_gate.sql（融合门批次，模板侧 57a816b 已同步、脚本侧漏抬）；
+// 差异面经主审核实 git diff 1bc6d8c..e5c0f30 资源路径仅此一支；实测 FILE_TOTAL 3740/MACRO 3737 与新钉吻合。
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 
-const EXPECT_FILE_TOTAL = 3739;   // = MACRO 3736 + MAINBIN 1 + WEBVIEW2COND 2
-const EXPECT_MACRO      = 3736;   // File 行含 "${INKFORGE_RES}
+const EXPECT_FILE_TOTAL = 3740;   // = MACRO 3737 + MAINBIN 1 + WEBVIEW2COND 2
+const EXPECT_MACRO      = 3737;   // File 行含 "${INKFORGE_RES}
 const EXPECT_MAINBIN    = 1;      // File "${MAINBINARYSRCPATH}"
 const EXPECT_WEBVIEW2COND = 2;    // File /oname=$TEMP\...${WEBVIEW2BOOTSTRAPPERPATH|WEBVIEW2INSTALLERPATH}
 const EXPECT_QUOTED_ABS = 6;      // 全文 /"[A-Z]:\\/g 命中数（仅 6 机器 define 行）
@@ -66,8 +68,8 @@ const webview2 = fileLines.filter(isWebview2).length;
 const remainder = fileLines.filter(l => !isMacro(l) && !isMainbin(l) && !isWebview2(l)).length;
 const absFile = fileLines.filter(l => /[A-Za-z]:\\/.test(l)).length;
 const quotedAbs = (nsi.match(/"[A-Z]:\\/g) || []).length;
-check('FILE_TOTAL', fileLines.length === EXPECT_FILE_TOTAL, String(fileLines.length));
-check('MACRO', macro === EXPECT_MACRO, String(macro));
+check('FILE_TOTAL', fileLines.length === EXPECT_FILE_TOTAL, `${fileLines.length}/${EXPECT_FILE_TOTAL}`);
+check('MACRO', macro === EXPECT_MACRO, `${macro}/${EXPECT_MACRO}`);
 check('MAINBIN', mainbin === EXPECT_MAINBIN, String(mainbin));
 check('WEBVIEW2COND', webview2 === EXPECT_WEBVIEW2COND, String(webview2));
 check('REMAINDER', remainder === 0, String(remainder));
