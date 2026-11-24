@@ -23,6 +23,12 @@ export interface TensionRowDto {
   profileSide: string;
   nature: '拉扯' | '冗余' | '缺口';
   suggestion: string;
+  /** 落点三类：dim=该维改跟随档案 / weights=占比挪动 / none=门外无旋钮（DEC-2026-1124-04） */
+  lever: 'dim' | 'weights' | 'none';
+  /** lever='dim' 时必有：∈ STYLE_DIMENSIONS 八维名 */
+  dim?: string;
+  /** lever='weights' 且服务端映射成功时必有：该书已绑集合内按名唯一命中的档案 id */
+  profileId?: string;
 }
 
 /** GET /fusion-gate 响应 */

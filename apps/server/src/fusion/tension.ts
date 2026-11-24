@@ -3,6 +3,7 @@
  * 纯函数：构造 prompt（截断常量模块内定值，不动 config）+ 解析协议行（非法行丢弃并计数）。
  * canned 文本中性仿形，内容无关：模块不引用任何具体设定集文本。
  */
+import { STYLE_DIMENSIONS, type StyleDimension } from '@inkforge/shared';
 
 /** 截断常量：模块内定值（冲击 #7 存证——不进 config、不随环境漂移）。 */
 const HEAD_EXCERPT_CHARS = 2000; // description / outline
@@ -12,13 +13,18 @@ const CANDIDATE_CHARS = 400; // 候选 rulesText / structure
 const LIST_CAP = 8; // bound / candidates 各列表上限
 const ROWS_CAP = 20; // 解析产出行数上限
 
-/** 同 shared TensionRowDto 五键（entry / mdSide / profileSide / nature / suggestion）。 */
+/** 同 shared TensionRowDto 六键 + 协议层原始档案名（profileName 不透出响应，留给 routes 映射）。 */
 export interface TensionRow {
   entry: string;
   mdSide: string;
   profileSide: string;
   nature: '拉扯' | '冗余' | '缺口';
   suggestion: string;
+  lever: 'dim' | 'weights' | 'none';
+  /** lever='dim' 时必有：∈ STYLE_DIMENSIONS 八维名 */
+  dim?: string;
+  /** 占比类原始档案名，映射到 id 留给 routes 层 */
+  profileName?: string;
 }
 
 const TENSION_PREFIX = 'TENSION:';
@@ -38,8 +44,8 @@ function truncateNote(truncated: boolean): string {
 }
 
 /**
- * 行协议：TENSION: <条目> | <MD 侧> | <档案侧> | <性质: 拉扯|冗余|缺口> | <建议偏向>
- * 协议行 + 负约束前置（仿 renderBlueprintTask :160-179 结构），描述/大纲/已绑/候选四段随后。
+ * 行协议：TENSION: <条目> | <MD 侧> | <档案侧> | <性质: 拉扯|冗余|缺口> | <建议偏向> | <落点>
+ * 协议行 + 落点写法 + 负约束前置（仿 renderBlueprintTask :160-179 结构），描述/大纲/已绑/候选四段随后。
  */
 export function buildTensionPrompt(args: {
   description: string;
@@ -56,9 +62,10 @@ export function buildTensionPrompt(args: {
 
   return [
     '【任务】对照描述/大纲产物与已绑及候选档案，列出张力对清单。',
-    '【输出格式】每行一条协议行，冒号后五段以竖线分隔：',
-    'TENSION: <条目> | <MD 侧> | <档案侧> | <性质: 拉扯|冗余|缺口> | <建议偏向>',
-    `【负约束】不要输出 JSON、markdown 代码块或任何解释；不要复述原文整段；每行前缀必须为 ${TENSION_PREFIX}；性质必须为拉扯/冗余/缺口三者之一。`,
+    '【输出格式】每行一条协议行，冒号后六段以竖线分隔：',
+    'TENSION: <条目> | <MD 侧> | <档案侧> | <性质: 拉扯|冗余|缺口> | <建议偏向> | <落点>',
+    '【落点写法】维度=<八维名> / 占比=<档案名> / 门外（无法对应到具体维度或档案时写 门外）；模型给空或给不认的写法一律视为门外。',
+    `【负约束】不要输出 JSON、markdown 代码块或任何解释；不要复述原文整段；每行前缀必须为 ${TENSION_PREFIX}；性质必须为拉扯/冗余/缺口三者之一；落点只能是 维度=八维名/占比=档案名/门外 三种写法之一。`,
     `【描述】${headExcerpt(args.description, HEAD_EXCERPT_CHARS) || '（无）'}`,
     `【大纲】${headExcerpt(args.outline, HEAD_EXCERPT_CHARS) || '（无）'}`,
     `【已绑文风】${truncateNote(boundStyles.truncated)}`,
@@ -73,7 +80,27 @@ export function buildTensionPrompt(args: {
 }
 
 /**
- * 逐行匹配 TENSION: 协议行；字段数非 5 或性质词不在枚举 → 该行丢弃 invalid++；
+ * 落点归一化：只认 维度=/占比= 两类前缀；模型给空或给不认的写法一律视为门外。
+ */
+function normalizeLanding(landing: string): Pick<TensionRow, 'lever' | 'dim' | 'profileName'> {
+  const value = landing.trim();
+  if (!value) return { lever: 'none' };
+  if (value.startsWith('维度=')) {
+    const dim = value.slice('维度='.length).trim();
+    return STYLE_DIMENSIONS.includes(dim as StyleDimension)
+      ? { lever: 'dim', dim: dim as StyleDimension }
+      : { lever: 'none' };
+  }
+  if (value.startsWith('占比=')) {
+    const profileName = value.slice('占比='.length).trim();
+    return profileName ? { lever: 'weights', profileName } : { lever: 'none' };
+  }
+  return { lever: 'none' };
+}
+
+/**
+ * 逐行匹配 TENSION: 协议行；5 段兼容旧格式（落点缺省门外）、6 段取末段为落点；
+ * 其余段数（含建议文本内含竖线致 >6）或性质词不在枚举 → 该行丢弃 invalid++；
  * 其余非协议行忽略不计；rows cap 20（超额合法行静默丢弃，不计 invalid）。
  */
 export function parseTensionRows(text: string): { rows: TensionRow[]; invalid: number } {
@@ -83,17 +110,25 @@ export function parseTensionRows(text: string): { rows: TensionRow[]; invalid: n
     const line = rawLine.trim();
     if (!line.startsWith(TENSION_PREFIX)) continue;
     const parts = line.slice(TENSION_PREFIX.length).split('|').map((p) => p.trim());
-    if (parts.length !== 5) {
+    if (parts.length !== 5 && parts.length !== 6) {
       invalid++;
       continue;
     }
+    const landing = parts.length === 6 ? parts[5]! : '门外';
     const [entry, mdSide, profileSide, nature, suggestion] = parts as [string, string, string, string, string];
     if (!NATURES.includes(nature as (typeof NATURES)[number])) {
       invalid++;
       continue;
     }
     if (rows.length < ROWS_CAP) {
-      rows.push({ entry, mdSide, profileSide, nature: nature as TensionRow['nature'], suggestion });
+      rows.push({
+        entry,
+        mdSide,
+        profileSide,
+        nature: nature as TensionRow['nature'],
+        suggestion,
+        ...normalizeLanding(landing),
+      });
     }
   }
   return { rows, invalid };

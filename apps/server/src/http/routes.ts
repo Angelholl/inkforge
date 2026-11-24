@@ -1187,12 +1187,20 @@ ${repairPrompt(first.errors)}`))).text,
     // bound=绑定现状：主辅档案 rulesText + 三类已绑 structure
     const boundStyles: Array<{ name: string; rulesText: string }> = [];
     const binding = booksRepo.getBookStyleBinding(db, bookId);
+    // 键=trimmed name，值=id 数组；同名多义自然收多值，供占比落点精确匹配（不透出给 prompt）
+    const nameToIds = new Map<string, string[]>();
     if (binding) {
       for (const profileId of [binding.primaryProfileId, ...binding.auxProfileIds]) {
         const row = db
-          .prepare('SELECT name, rules_json FROM style_profiles WHERE id = ?')
-          .get(profileId) as { name: string; rules_json: string } | undefined;
-        if (row) boundStyles.push({ name: row.name, rulesText: styleRulesText(row) });
+          .prepare('SELECT id, name, rules_json FROM style_profiles WHERE id = ?')
+          .get(profileId) as { id: string; name: string; rules_json: string } | undefined;
+        if (row) {
+          boundStyles.push({ name: row.name, rulesText: styleRulesText(row) });
+          const key = row.name.trim();
+          const ids = nameToIds.get(key) ?? [];
+          ids.push(row.id);
+          nameToIds.set(key, ids);
+        }
       }
     }
 
@@ -1257,7 +1265,7 @@ ${repairPrompt(first.errors)}`))).text,
     try {
       // summarize 步缝（同 routes.ts:458 planner 缝形态）；超时/抛错在下方 catch 统一降级
       const completion = await analyzer.complete({
-        system: '【硬规则】你是长篇小说的融合编辑，只输出张力行协议（TENSION: 五段竖线分隔）；不要输出 JSON、markdown 代码块或任何解释。',
+        system: '【硬规则】你是长篇小说的融合编辑，只输出张力行协议（TENSION: 六段竖线分隔）；不要输出 JSON、markdown 代码块或任何解释。',
         user: prompt,
         temperature: 0.3,
         topP: 0.9,
@@ -1276,7 +1284,14 @@ ${repairPrompt(first.errors)}`))).text,
               : '模型输出无张力协议行，本次未做张力对照',
         });
       }
-      return reply.send({ rows, degraded: false });
+      // 响应不透出 profileName；仅已绑集合（主+辅）内按名精确匹配；未命中/同名多义/无绑定降 none 行保留
+      const dtoRows = rows.map((row) => {
+        const { profileName, ...rest } = row;
+        if (row.lever !== 'weights') return rest;
+        const ids = binding ? nameToIds.get((profileName ?? '').trim()) : undefined;
+        return ids?.length === 1 ? { ...rest, profileId: ids[0] } : { ...rest, lever: 'none' as const };
+      });
+      return reply.send({ rows: dtoRows, degraded: false });
     } catch (e) {
       return reply.send({ rows: [], degraded: true, degradeReason: `张力对照调用失败：${(e as Error).message}` });
     }

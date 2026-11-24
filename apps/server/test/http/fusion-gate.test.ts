@@ -13,9 +13,10 @@ import { createDefaultMockProvider, createMockProvider, type MockScript } from '
 import type { CompletionRequest, LlmProvider } from '../../src/llm/types';
 
 // 中性仿形 canned 文本（自造占位，禁引 v6 真实文本）
+const MAIN_PROFILE_NAME = '仙家';
 const TENSION_TEXT = [
-  'TENSION: 描写密度 | 设定集主张详尽铺陈 | 档案规则偏好留白 | 拉扯 | 偏向档案规则',
-  'TENSION: 场景推进 | 大纲卡要求强情节 | 档案规则要求慢节奏 | 冗余 | 保持现状',
+  'TENSION: 描写密度 | 设定集主张详尽铺陈 | 档案规则偏好留白 | 拉扯 | 偏向档案规则 | 维度=尺度',
+  `TENSION: 场景推进 | 大纲卡要求强情节 | 档案规则要求慢节奏 | 冗余 | 保持现状 | 占比=${MAIN_PROFILE_NAME}`,
 ].join('\n');
 
 const EXPECTED_ROWS = [
@@ -25,13 +26,17 @@ const EXPECTED_ROWS = [
     profileSide: '档案规则偏好留白',
     nature: '拉扯',
     suggestion: '偏向档案规则',
+    lever: 'dim',
+    dim: '尺度',
   },
   {
+    // 主书无 styleBinding：占比落点在已绑集合内无命中 → 降 none 行保留，不透出 profileName
     entry: '场景推进',
     mdSide: '大纲卡要求强情节',
     profileSide: '档案规则要求慢节奏',
     nature: '冗余',
     suggestion: '保持现状',
+    lever: 'none',
   },
 ];
 
@@ -130,6 +135,119 @@ describe('POST /api/books/:bookId/fusion-gate/analyze（Task-03；可见降级�
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ rows: [], degraded: true });
     expect(plannerCalls.length).toBe(before);
+  });
+
+  // 占比落点映射（TL-1）：档案在下方 beforeAll 才入库，故本 suite 排在上方直接用例之后，
+  // 避免污染「无绑无候选空书」的候选面。
+  describe('占比落点映射（已绑集合内按名唯一命中）', () => {
+    let primaryId: string;
+    let auxId: string;
+    let duplicateId: string;
+    let candidateId: string;
+    let mappedBookId: string;
+    const NEUTRAL_TEXT = '中性占位文本供档案入库校验用。'.repeat(20);
+    const NEUTRAL_ANALYSIS = {
+      dims: { 节奏: '中性' },
+      axes: { 叙述温度: 50 },
+      rules: ['中性占位规则文本。'],
+    };
+
+    async function newStyleProfile(name: string): Promise<string> {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/style-profiles',
+        payload: { name, text: NEUTRAL_TEXT, analysis: NEUTRAL_ANALYSIS, samples: ['中性占位样本文本。'] },
+      });
+      expect(r.statusCode).toBe(201);
+      return (r.json() as { profileId: string }).profileId;
+    }
+
+    const bind = async (primaryProfileId: string, auxProfileIds: string[]) => {
+      const put = await app.inject({
+        method: 'PUT',
+        url: `/api/books/${mappedBookId}/style`,
+        payload: { primaryProfileId, auxProfileIds, dimsSource: {}, weights: { [primaryProfileId]: 50, [auxProfileIds[0] ?? primaryProfileId]: 50 } },
+      });
+      expect(put.statusCode).toBe(200);
+    };
+
+    const analyzeWith = async (text: string, id: string) => {
+      summarizeScript = { text };
+      const res = await app.inject({ method: 'POST', url: `/api/books/${id}/fusion-gate/analyze`, payload: {} });
+      expect(res.statusCode).toBe(200);
+      return res.json() as { rows: Array<Record<string, unknown>>; degraded: boolean };
+    };
+
+    beforeAll(async () => {
+      primaryId = await newStyleProfile(MAIN_PROFILE_NAME);
+      auxId = await newStyleProfile('中性辅档');
+      duplicateId = await newStyleProfile(MAIN_PROFILE_NAME); // 与主档同名 → 集合内多义
+      candidateId = await newStyleProfile('未绑候选档');
+      const created = await app.inject({
+        method: 'POST',
+        url: '/api/books',
+        payload: { title: '占比映射测书', description: '描述：示例设定简介。' },
+      });
+      expect(created.statusCode).toBe(201);
+      mappedBookId = (created.json() as { id: string }).id;
+      await bind(primaryId, [auxId]);
+    });
+
+    it('占比=主档名（集合内唯一）→ row {lever:weights, profileId:主档id}', async () => {
+      const body = await analyzeWith(
+        `TENSION: 场景推进 | 甲侧 | 乙侧 | 冗余 | 保持现状 | 占比=${MAIN_PROFILE_NAME}`,
+        mappedBookId,
+      );
+      expect(body.degraded).toBe(false);
+      expect(body.rows).toHaveLength(1);
+      expect(body.rows[0]).toEqual({
+        entry: '场景推进', mdSide: '甲侧', profileSide: '乙侧', nature: '冗余',
+        suggestion: '保持现状', lever: 'weights', profileId: primaryId,
+      });
+    });
+
+    it('同名两档案（第二档与主档同名）→ lever:none（集合内多义）', async () => {
+      await bind(primaryId, [duplicateId]);
+      const body = await analyzeWith(
+        `TENSION: 场景推进 | 甲侧 | 乙侧 | 冗余 | 保持现状 | 占比=${MAIN_PROFILE_NAME}`,
+        mappedBookId,
+      );
+      expect(body.degraded).toBe(false);
+      expect(body.rows).toHaveLength(1);
+      expect(body.rows[0]).toMatchObject({ lever: 'none' });
+      expect((body.rows[0] as { profileId?: string }).profileId).toBeUndefined();
+    });
+
+    it('占比=候选未绑档案名 → lever:none（不在已绑集合）', async () => {
+      await bind(primaryId, [auxId]);
+      const body = await analyzeWith('TENSION: 场景推进 | 甲侧 | 乙侧 | 冗余 | 保持现状 | 占比=未绑候选档', mappedBookId);
+      expect(body.degraded).toBe(false);
+      expect(body.rows).toHaveLength(1);
+      expect(body.rows[0]).toMatchObject({ lever: 'none' });
+      expect((body.rows[0] as { profileId?: string }).profileId).toBeUndefined();
+      expect(candidateId).toBeTruthy();
+    });
+
+    it('无绑定书 + 占比行 → lever:none 行保留（非降级）', async () => {
+      const body = await analyzeWith(
+        `TENSION: 场景推进 | 甲侧 | 乙侧 | 冗余 | 保持现状 | 占比=${MAIN_PROFILE_NAME}`,
+        emptyBookId,
+      );
+      expect(body.degraded).toBe(false);
+      expect(body.rows).toHaveLength(1);
+      expect(body.rows[0]).toMatchObject({ lever: 'none' });
+    });
+
+    it('旧 5 段行 → lever:none，toEqual 钉六键整对象（无 profileId/profileName 泄漏）', async () => {
+      const body = await analyzeWith('TENSION: 描写密度 | 甲侧 | 乙侧 | 拉扯 | 偏向档案', mappedBookId);
+      expect(body.degraded).toBe(false);
+      expect(body.rows).toEqual([
+        {
+          entry: '描写密度', mdSide: '甲侧', profileSide: '乙侧', nature: '拉扯',
+          suggestion: '偏向档案', lever: 'none',
+        },
+      ]);
+    });
   });
 });
 

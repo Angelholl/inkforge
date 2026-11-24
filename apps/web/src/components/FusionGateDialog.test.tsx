@@ -43,7 +43,8 @@ const report: FusionGateReportDto = {
 
 const tension: FusionTensionDto = {
   degraded: false,
-  rows: [{ entry: '文风节', mdSide: '去油腻', profileSide: '露骨密度', nature: '拉扯', suggestion: '偏向 MD' }],
+  // 卡 TL-1 把 TensionRowDto.lever 设为必填；门组件尚未消费 lever（TL-4 才渲染三选），此处先钉 none 保 typecheck 绿
+  rows: [{ entry: '文风节', mdSide: '去油腻', profileSide: '露骨密度', nature: '拉扯', suggestion: '偏向 MD', lever: 'none' }],
 };
 
 function renderDialog(overrides: Partial<ComponentProps<typeof FusionGateDialog>> = {}) {
