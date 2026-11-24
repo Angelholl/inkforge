@@ -393,6 +393,11 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     expect(screen.getByText('本次 2 条冲突都只能在门外解决（改文风档案或改正文）。')).toBeTruthy();
   });
 
+  it('C2h2 legacy 书汇总按「控件可用」口径：被禁用的 weights 行不计 M（计划 §汇总钉；主审直修回归）', () => {
+    renderDialog({ report: legacyReport });
+    expect(screen.getByText('本次 3 条冲突里，1 条可以在门里直接裁决。')).toBeTruthy();
+  });
+
   it('C2i 常驻说明行在场（永久 + 风格档案面板指路）', () => {
     const { container } = renderDialog();
     expect(screen.getByText(/选「偏正文」=该维度以后不再采用档案风格/)).toBeTruthy();

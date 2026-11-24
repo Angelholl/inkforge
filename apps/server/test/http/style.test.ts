@@ -533,6 +533,8 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
       { payload: { auxProfileIds: [p2] }, msg: '必须显式指定主风格' },
       { payload: { primaryProfileId: p1, dimsSource: { ['语言与描写']: p2 } }, msg: '维度来源必须在已勾选档案中' },
       { payload: { primaryProfileId: p1, dimsSource: { ['语感']: p1 } }, msg: '未知风格维度' },
+      // 跨卡总验收 3 直测（主审直修）：真·旧八维名键在六维表下必须 400（写路径拒旧名）
+      { payload: { primaryProfileId: p1, dimsSource: { ['写作特点']: p1 } }, msg: '未知风格维度' },
       { payload: { primaryProfileId: p1, auxProfileIds: [p1] }, msg: '主风格不可重复勾选' },
     ];
     for (const c of cases) {

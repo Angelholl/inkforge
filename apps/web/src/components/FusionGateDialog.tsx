@@ -65,6 +65,8 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
   const dimBefore = useRef<Record<string, Record<string, string>>>({});
   const weightsBefore = useRef<Record<string, Record<string, number>>>({});
   const [rowChoices, setRowChoices] = useState<Record<string, 'none' | 'md' | 'profile'>>({});
+  // legacy 书（weights 快照空=按贡献维数计权）：weights 行三选禁用——汇总 M 按「控件可用」口径同样不计
+  const legacyWeights = Object.keys(snapshotWeights).length === 0;
   // planner 三行绑/不绑（按快照现状预置）
   const [plannerBound, setPlannerBound] = useState<Record<PlannerKey, boolean>>(() => ({
     plotProfileId: binding.plotProfileId !== null,
@@ -132,7 +134,6 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
               {tension!.rows.map((row, i) => {
                 // 无绑定无从组 styleBinding → dim/weights 行一律按 none 类渲染（P-1）
                 const lever = binding.styleBinding ? row.lever : 'none';
-                const legacyWeights = Object.keys(snapshotWeights).length === 0;
                 const choice = rowChoices[row.entry] ?? 'none';
                 const disabled = busy || (lever === 'weights' && legacyWeights);
                 const setChoice = (next: 'none' | 'md' | 'profile') => setRowChoices((c) => ({ ...c, [row.entry]: next }));
@@ -231,7 +232,7 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
             <p className="mt-2 text-xs text-muted">
               {(() => {
                 const N = tension!.rows.length;
-                const M = tension!.rows.filter((r) => r.lever !== 'none' && binding.styleBinding).length;
+                const M = tension!.rows.filter((r) => r.lever !== 'none' && binding.styleBinding && !(r.lever === 'weights' && legacyWeights)).length;
                 return M > 0
                   ? `本次 ${N} 条冲突里，${M} 条可以在门里直接裁决。`
                   : `本次 ${N} 条冲突都只能在门外解决（改文风档案或改正文）。`;

@@ -104,15 +104,19 @@ export function nudgeWeights(weights: Record<string, number>, id: string, delta:
   const rest = 100 - target;
   const others = keys.filter((k) => k !== id);
   const sumOthers = others.reduce((s, k) => s + weights[k], 0);
+  // 其余档下限 1（计划 §nudgeWeights 钉 3）：先给每档保底 1，余额 E=rest−档数 按比例分摊；
+  // target 已钳到 100−(n−1) ⇒ E ≥ 0。直接对 rest 做 floor+余数补差会在病态分布
+  // （如 90/8/1/1 步 +20）产出 0 档，confirm schema int().min(1) 必 400。
+  const E = rest - others.length;
   const rawByKey = new Map<string, number>();
-  for (const k of others) rawByKey.set(k, (rest * weights[k]) / sumOthers);
+  for (const k of others) rawByKey.set(k, (E * weights[k]) / sumOthers);
 
-  // 键序沿 keys：先按原键序落 floor
+  // 键序沿 keys：先按原键序落 1+floor
   const result: Record<string, number> = {};
-  for (const k of keys) result[k] = k === id ? target : Math.floor(rawByKey.get(k)!);
+  for (const k of keys) result[k] = k === id ? target : 1 + Math.floor(rawByKey.get(k)!);
 
   // deficit 按小数余数降序（平手按 keys 插入序先手，Array.sort 稳定）逐档 +1
-  let deficit = rest - others.reduce((s, k) => s + result[k], 0);
+  let deficit = E - others.reduce((s, k) => s + (result[k] - 1), 0);
   const byFraction = [...others].sort(
     (a, b) => rawByKey.get(b)! - Math.floor(rawByKey.get(b)!) - (rawByKey.get(a)! - Math.floor(rawByKey.get(a)!)),
   );

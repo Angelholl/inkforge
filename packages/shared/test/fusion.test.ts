@@ -32,4 +32,10 @@ describe('shared/nudgeWeights', () => {
   it('A1f 越界夹边：目标钳到 100−(n−1)，其余档仍 ≥1', () => {
     expect(nudgeWeights({ A: 99, B: 1 }, 'A', 20)).toEqual({ A: 99, B: 1 });
   });
+
+  it('A1g 四键病态 90/8/1/1 对 A +20：其余档下限 1 不产 0（计划 §nudgeWeights 钉 3；主审直修回归）', () => {
+    // 旧算法 floor 后 C/D 落 0、deficit 只补 B → {A:97,B:3,C:0,D:0}，confirm schema int().min(1) 必 400
+    expect(nudgeWeights({ A: 90, B: 8, C: 1, D: 1 }, 'A', 20)).toEqual({ A: 97, B: 1, C: 1, D: 1 });
+    expect(nudgeWeights({ A: 90, B: 8, C: 1, D: 1 }, 'B', 20)).toEqual({ A: 68, B: 28, C: 2, D: 2 });
+  });
 });

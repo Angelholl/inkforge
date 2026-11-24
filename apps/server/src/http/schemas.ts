@@ -100,7 +100,7 @@ export const styleBindSchema = z
     if (new Set(aux).size !== aux.length) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '辅档案不可重复勾选' });
     }
-    // 规则 5：dimsSource 键 ∈ 七维；值 ∈ 主∪辅 ∪ {共存哨兵}（DEC-2026-1118-03）；另允许 DIM_SOURCE_NONE（该维不采用任何档案风格，DEC-2026-1124-04）
+    // 规则 5：dimsSource 键 ∈ 六维（八并六 DEC-2026-1124-05）；值 ∈ 主∪辅 ∪ {共存哨兵}（DEC-2026-1118-03）；另允许 DIM_SOURCE_NONE（该维不采用任何档案风格，DEC-2026-1124-04）
     const allowed = new Set([v.primaryProfileId, ...aux]);
     for (const [dim, src] of Object.entries(v.dimsSource ?? {})) {
       if (!(STYLE_DIMENSIONS as readonly string[]).includes(dim)) {
@@ -386,7 +386,7 @@ export const fusionGateConfirmSchema = z
         if (new Set(v.auxProfileIds).size !== v.auxProfileIds.length) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '辅档案不可重复勾选' });
         }
-        // 沿抄规则 5：dimsSource 键 ∈ 七维，值 ∈ 主∪辅 ∪ {共存哨兵}；另允许 DIM_SOURCE_NONE（该维不采用任何档案风格，DEC-2026-1124-04）
+        // 沿抄规则 5：dimsSource 键 ∈ 六维（八并六 DEC-2026-1124-05），值 ∈ 主∪辅 ∪ {共存哨兵}；另允许 DIM_SOURCE_NONE（该维不采用任何档案风格，DEC-2026-1124-04）
         const allowed = new Set([v.primaryProfileId, ...v.auxProfileIds]);
         for (const [dim, src] of Object.entries(v.dimsSource)) {
           if (!(STYLE_DIMENSIONS as readonly string[]).includes(dim)) {
