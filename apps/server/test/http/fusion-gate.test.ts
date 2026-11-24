@@ -371,4 +371,57 @@ describe('GET/POST /api/books/:bookId/fusion-gate（Task-04；指纹三态 + 单
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ action: 'show' });
   });
+
+  it('GET show → binding.profileNames 钉值（style 主辅 + 三类 planner 名）', async () => {
+    const now = new Date().toISOString();
+    db.prepare("INSERT INTO plot_profiles(id,name,source_path,source_hash,structure_json,created_at) VALUES('plot-fixture-1','剧情中性档案','fixture://plot','hash-plot','[]',?)").run(now);
+    db.prepare("INSERT INTO spectrum_profiles(id,name,source_path,source_hash,structure_json,created_at) VALUES('spec-fixture-1','光谱中性档案','fixture://spec','hash-spec','[]',?)").run(now);
+    db.prepare("INSERT INTO imitation_profiles(id,name,source_path,source_hash,version,structure_json,style_json,blueprint_json,metrics_json,created_at) VALUES('imit-fixture-1','仿写中性档案','fixture://imit','hash-imit',1,'[]','{}','[]','{}',?)").run(now);
+    booksRepo.setBookPlotProfile(db, bookId, 'plot-fixture-1');
+    booksRepo.setBookSpectrumProfile(db, bookId, 'spec-fixture-1');
+    booksRepo.setBookImitation(db, bookId, 'imit-fixture-1');
+    const res = await gate(bookId);
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { action: string; binding: { profileNames: Record<string, string> } };
+    expect(body.action).toBe('show');
+    expect(body.binding.profileNames).toEqual({
+      [PROFILE_A]: '中性档案-profile-neutral-a',
+      [PROFILE_B]: '中性档案-profile-neutral-b',
+      'plot-fixture-1': '剧情中性档案',
+      'spec-fixture-1': '光谱中性档案',
+      'imit-fixture-1': '仿写中性档案',
+    });
+  });
+
+  it('素书无任何绑定 → profileNames toEqual({})', async () => {
+    const res = await gate(plainBookId);
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { binding: { profileNames: Record<string, string> } };
+    expect(body.binding.profileNames).toEqual({});
+  });
+
+  it('改档案名 → 指纹不变不重弹', async () => {
+    expect((await confirm(bookId, {})).statusCode).toBe(200);
+    db.prepare('UPDATE style_profiles SET name = ? WHERE id = ?').run('改名后中性档案A', PROFILE_A);
+    expect((await gate(bookId)).json()).toMatchObject({ action: 'pass' });
+  });
+
+  it('confirm 带陈旧 fingerprint → 409 且零写', async () => {
+    const before = booksRepo.getBook(db, bookId)!;
+    const res = await confirm(bookId, { fingerprint: 'stale-fp', description: '陈旧指纹不应写入' });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ reason: 'stale-fingerprint' });
+    expect((res.json() as { error: string }).error.length).toBeGreaterThan(0);
+    const after = booksRepo.getBook(db, bookId)!;
+    expect(after.description).toBe(before.description);
+    expect(booksRepo.parseGenGate(after.genGateJson)?.fingerprint).toBe(booksRepo.parseGenGate(before.genGateJson)?.fingerprint);
+  });
+
+  it('confirm 带正确 fingerprint → 200 正常写', async () => {
+    const fp = ((await gate(bookId)).json() as { fingerprint: string }).fingerprint;
+    const res = await confirm(bookId, { fingerprint: fp, suppress: true });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { results: Record<string, unknown> }).results.suppressed).toBe(true);
+    expect(booksRepo.parseGenGate(booksRepo.getBook(db, bookId)!.genGateJson)?.suppressed).toBe(true);
+  });
 });

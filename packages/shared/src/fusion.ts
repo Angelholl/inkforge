@@ -40,6 +40,8 @@ export interface FusionGateReportDto {
     plotProfileId: string | null;
     spectrumProfileId: string | null;
     imitationProfileId: string | null;
+    /** 档案 id→展示名（style 主辅 + plot/spectrum/imitation 已绑 id；查不到的 id 不进 map）。不入指纹。 */
+    profileNames: Record<string, string>;
   };
 }
 
@@ -63,6 +65,8 @@ export interface FusionGateConfirmBody {
   plotProfileId?: string | null;
   spectrumProfileId?: string | null;
   suppress?: boolean;
+  /** GET 响应原样回传；服务端与当下注入面指纹比对，不一致 → 409 零写。可选=旧客户端兼容。 */
+  fingerprint?: string;
 }
 
 export interface FusionGateConfirmResult {

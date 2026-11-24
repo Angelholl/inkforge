@@ -366,6 +366,7 @@ export const fusionGateAnalyzeSchema = z.object({}).optional();
 export const fusionGateConfirmSchema = z
   .object({
     description: z.string().optional(),
+    fingerprint: z.string().min(1).optional(),
     styleBinding: z
       .object({
         primaryProfileId: z.string().min(1),

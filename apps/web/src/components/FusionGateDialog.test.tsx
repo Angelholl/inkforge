@@ -36,6 +36,8 @@ const report: FusionGateReportDto = {
     plotProfileId: 'pp1',
     spectrumProfileId: null,
     imitationProfileId: 'ip1',
+    // 卡 FG-A 新增必填 DTO 键；名映射值由卡 FG-B 的 fixture 随迁补（此处先钉空 map 保 typecheck 绿）
+    profileNames: {},
   },
 };
 

@@ -1352,6 +1352,26 @@ ${repairPrompt(first.errors)}`))).text,
       headWindowWarn = result.headWindowWarn;
       hasArchive = true;
     }
+    const profileNames: Record<string, string> = {};
+    const styleBinding = face.styleBinding;
+    if (styleBinding) {
+      for (const id of [styleBinding.primaryProfileId, ...styleBinding.auxProfileIds]) {
+        const row = db.prepare('SELECT name FROM style_profiles WHERE id = ?').get(id) as { name: string } | undefined;
+        if (row) profileNames[id] = row.name;
+      }
+    }
+    if (book.plotProfileId) {
+      const name = plotRepo.getPlotProfile(db, book.plotProfileId)?.name;
+      if (name !== undefined) profileNames[book.plotProfileId] = name;
+    }
+    if (book.spectrumProfileId) {
+      const name = spectrumRepo.getSpectrumProfile(db, book.spectrumProfileId)?.name;
+      if (name !== undefined) profileNames[book.spectrumProfileId] = name;
+    }
+    if (book.imitationProfileId) {
+      const name = imitationRepo.getImitationProfile(db, book.imitationProfileId)?.name;
+      if (name !== undefined) profileNames[book.imitationProfileId] = name;
+    }
     reply.send({
       action: 'show',
       fingerprint,
@@ -1366,6 +1386,8 @@ ${repairPrompt(first.errors)}`))).text,
         plotProfileId: book.plotProfileId,
         spectrumProfileId: book.spectrumProfileId,
         imitationProfileId: book.imitationProfileId,
+        // profileNames 不入指纹（展示用查名，fingerprint.ts 注入面七键不含）
+        profileNames,
       },
     });
   });
@@ -1376,9 +1398,13 @@ ${repairPrompt(first.errors)}`))).text,
     if (!book) return reply.code(404).send({ error: 'not found' });
     const parsed = parseBody(reply, fusionGateConfirmSchema, req.body);
     if (parsed === null) return;
-    const decisions: ConfirmDecisions = parsed ?? {};
+    const face = buildInjectionFace(bookId, book);
+    const { fingerprint: clientFingerprint, ...decisions }: ConfirmDecisions & { fingerprint?: string } = parsed ?? {};
+    if (clientFingerprint !== undefined && clientFingerprint !== injectionFaceFingerprint(face)) {
+      return reply.code(409).send({ error: '参考资料已变动，本次确认内容过期，请重新打开确认门', reason: 'stale-fingerprint' });
+    }
     try {
-      const outcome = applyFusionConfirm(db, bookId, decisions, buildInjectionFace(bookId, book));
+      const outcome = applyFusionConfirm(db, bookId, decisions, face);
       reply.send({ results: outcome.results, fingerprint: outcome.fingerprint });
     } catch (e) {
       // 事务已全回滚=零半写；指纹未写 → 下次 GET 仍 show
