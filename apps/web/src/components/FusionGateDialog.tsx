@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { FusionAClassRowDto, FusionGateConfirmBody, FusionGateReportDto, FusionTensionDto } from '@inkforge/shared';
 import { Button } from './ui';
 import { checkboxBase, selectBase } from './Field';
@@ -44,6 +44,11 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
   const nameOf = (id: string): string => binding.profileNames?.[id] ?? id.slice(0, 8);
   // const 局部快照：JSX 三元里的类型收窄需要在闭包内保持（主审直修②配套）
   const styleBinding = binding.styleBinding;
+  // 主审直修⑤：查名与回落态收在一处——title 恒带完整 id，查不到名即灰字（兼治 Standards 气味「双查 profileNames」）
+  const muted = (id: string): string => (binding.profileNames?.[id] ? '' : 'text-muted');
+  const nameEl = (id: string, extra = '') => (
+    <span title={id} className={`${muted(id)}${extra ? ` ${extra}` : ''}`}>{`《${nameOf(id)}》`}</span>
+  );
   // A 类逐行裁决草稿：preset='strip' 且可剥才预置勾选
   const [stripped, setStripped] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(report.aClass.filter((r) => r.preset === 'strip' && r.removable).map((r) => [r.heading, true])),
@@ -163,16 +168,22 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
           ) : (
             <>
               <p className="mt-1 text-xs text-muted">
-                {`主参考《${nameOf(styleBinding.primaryProfileId)}》${
-                  styleBinding.auxProfileIds.length > 0
-                    ? `＋辅助${styleBinding.auxProfileIds.map((id) => `《${nameOf(id)}》`).join('')}`
-                    : ''
-                }`}
+                主参考{nameEl(styleBinding.primaryProfileId)}
+                {styleBinding.auxProfileIds.length > 0 && <>＋辅助{styleBinding.auxProfileIds.map((id) => <Fragment key={id}>{nameEl(id)}</Fragment>)}</>}
               </p>
               <p className="mt-1 text-xs text-muted">
-                {Object.keys(styleBinding.weights).length > 0
-                  ? `占比：${styleIds.map((id) => `《${nameOf(id)}》 ${styleChoice === 'weights' ? (weights[id] ?? 1) : (styleBinding.weights[id] ?? 1)}`).join('、')}`
-                  : '（旧绑定：按贡献维数计权）'}
+                {Object.keys(styleBinding.weights).length > 0 ? (
+                  <>
+                    占比：{styleIds.map((id, i) => (
+                      <Fragment key={id}>
+                        {i > 0 ? '、' : ''}
+                        {nameEl(id)} {styleChoice === 'weights' ? (weights[id] ?? 1) : (styleBinding.weights[id] ?? 1)}
+                      </Fragment>
+                    ))}
+                  </>
+                ) : (
+                  '（旧绑定：按贡献维数计权）'
+                )}
               </p>
               <div className="mt-2 flex flex-wrap gap-3 text-sm">
                 {(
@@ -202,7 +213,7 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
                   <div className="mt-2 space-y-1">
                     {styleIds.map((id) => (
                       <label key={id} className="flex items-center gap-2 text-xs">
-                        <span className={`w-24 truncate ${binding.profileNames?.[id] ? '' : 'text-muted'}`} title={id}>{nameOf(id)}</span>
+                        <span className={`w-24 truncate ${muted(id)}`} title={id}>{nameOf(id)}</span>
                         <input
                           type="range"
                           min={1}

@@ -145,12 +145,14 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
   });
 
   it('档案名替代 UUID：主辅名行/占比滑条/维度 select 均显示档案名且 title=完整 id', () => {
-    renderDialog();
-    expect(screen.getByText(/主参考《示例主档案》＋辅助《示例辅档案》/)).toBeTruthy();
+    const { container } = renderDialog();
+    expect(container.textContent).toContain('主参考《示例主档案》＋辅助《示例辅档案》');
+    // 主审直修⑤（Spec 半做）：首行与占比行的《名》同样要 title=完整 id（卡 B Produces 钉死）
+    expect(screen.getAllByTitle('sp1').length).toBeGreaterThanOrEqual(2);
 
     fireEvent.click(screen.getByLabelText('文风调整：调整各档案占比'));
     expect(screen.getByLabelText('占比：示例主档案')).toBeTruthy();
-    expect(screen.getByTitle('sp1').textContent).toBe('示例主档案');
+    expect(screen.getAllByTitle('sp1').map((el) => el.textContent)).toContain('示例主档案');
 
     fireEvent.click(screen.getByLabelText('文风调整：逐维度选跟随哪本档案'));
     expect(screen.getByLabelText('跟随：节奏')).toBeTruthy();
@@ -159,12 +161,11 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
   });
 
   it('profileNames 缺失 → 回落 id 前 8 位灰字', () => {
-    renderDialog({ report: { ...report, binding: { ...report.binding, profileNames: {} } } });
-    expect(screen.getByText(/主参考《sp1》＋辅助《sp2》/)).toBeTruthy();
+    const { container } = renderDialog({ report: { ...report, binding: { ...report.binding, profileNames: {} } } });
+    expect(container.textContent).toContain('主参考《sp1》＋辅助《sp2》');
     fireEvent.click(screen.getByLabelText('文风调整：调整各档案占比'));
-    const el = screen.getByTitle('sp1');
-    expect(el.textContent).toBe('sp1');
-    expect(el.className).toContain('text-muted');
+    const els = screen.getAllByTitle('sp1');
+    expect(els.some((el) => el.textContent === 'sp1' && el.className.includes('text-muted'))).toBe(true);
   });
 
   it('未绑定行 radio 禁用', () => {
@@ -208,25 +209,25 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
   // ===== 主审直修（卡 FG-B 验收期四处小缺陷，先红后绿）=====
 
   it('主审直修①：无辅档时不出现悬空的「＋辅助」', () => {
-    renderDialog({
+    const { container } = renderDialog({
       report: {
         ...report,
         binding: { ...report.binding, styleBinding: { primaryProfileId: 'sp1', auxProfileIds: [], dimsSource: {}, weights: { sp1: 100 } } },
       },
     });
-    expect(screen.getByText(/^主参考《示例主档案》$/)).toBeTruthy();
-    expect(screen.queryByText(/＋辅助/)).toBeNull();
+    expect(container.textContent).toContain('主参考《示例主档案》');
+    expect(container.textContent).not.toContain('＋辅助');
   });
 
   it('主审直修②：weights 缺 id 时占比行回落滑条默认值 1、不印 undefined', () => {
-    renderDialog({
+    const { container } = renderDialog({
       report: {
         ...report,
         binding: { ...report.binding, styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1' }, weights: { sp1: 60 } } },
       },
     });
-    expect(screen.queryByText(/undefined/)).toBeNull();
-    expect(screen.getByText(/《示例辅档案》 1/)).toBeTruthy();
+    expect(container.textContent).not.toContain('undefined');
+    expect(container.textContent).toContain('《示例辅档案》 1');
   });
 
   it('主审直修③：张力区块标题与行侧标签一并白话（原「张力对照/MD 侧/档案侧」）', () => {
