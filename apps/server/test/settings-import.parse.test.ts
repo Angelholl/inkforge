@@ -470,3 +470,49 @@ describe('parseLandingCell（DEC-2026-1120-10 落地格解析）', () => {
     });
   });
 });
+
+describe('纯文本降级分节', () => {
+  const FS_PLAIN = `《伏笔示例》设定集
+
+【伏笔】
+1. 厨房对面的眼睛；2. 表叔拜访未完成
+3. 远行的两人未归
+`;
+
+  it('Task-01 伏笔-only：行式标题合成节 → 三条伏笔+书名+consumedSections', () => {
+    const d = parseSettingsCompendium(FS_PLAIN);
+    expect(d.foreshadowings.map((f) => f.description)).toEqual([
+      '厨房对面的眼睛',
+      '表叔拜访未完成',
+      '远行的两人未归',
+    ]);
+    expect(d.title).toBe('伏笔示例');
+    expect(d.consumedSections).toEqual(['伏笔']);
+    expect(d.warnings.some((w) => w.includes('未识别'))).toBe(false);
+  });
+
+  it('Task-01 同桶合并：两个【伏笔】节并一节 → 四条伏笔、consumedSections 不重复', () => {
+    const d = parseSettingsCompendium(`${FS_PLAIN}\n【伏笔】\n4. 旧钥匙\n`);
+    expect(d.foreshadowings.map((f) => f.description)).toEqual([
+      '厨房对面的眼睛',
+      '表叔拜访未完成',
+      '远行的两人未归',
+      '旧钥匙',
+    ]);
+    expect(d.consumedSections).toEqual(['伏笔']);
+  });
+
+  it('Task-01 节标题护栏：散文行/章行不成节，inline 长尾成节', () => {
+    const prose = parseSettingsCompendium('人物是恒定太阳，每卷转进来一颗新行星。');
+    expect(prose.consumedSections).toEqual([]);
+    expect(prose.warnings.some((w) => w.includes('未识别'))).toBe(true);
+
+    const chapter = parseSettingsCompendium('第一章 暗流');
+    expect(chapter.consumedSections).toEqual([]);
+    expect(chapter.warnings.some((w) => w.includes('未识别'))).toBe(true);
+
+    const inline = parseSettingsCompendium('人物：主要角色包括老王与阿美，二者为邻里关系。');
+    expect(inline.consumedSections).toEqual(['人物']);
+    expect(inline.warnings.some((w) => w.includes('未识别'))).toBe(false);
+  });
+});

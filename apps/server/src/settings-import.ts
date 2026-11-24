@@ -73,6 +73,82 @@ function splitDoc(raw: string): Doc {
   return doc;
 }
 
+// ── 纯文本降级分节（TXT-01）：仅当 splitDoc 后 sections/h3Blocks 皆空时启用；含 H2/H3 骨架的 MD 不进此通道 ──
+/** 行式节标题关键词表（长词在前，命中即停）：[关键词, 桶名]。 */
+const PLAIN_KEYWORD_MAP: ReadonlyArray<readonly [string, string]> = [
+  ['人物圣经', '人物'],
+  ['主要人物', '人物'],
+  ['人物设定', '人物'],
+  ['人物与关系', '人物'],
+  ['人物', '人物'],
+  ['角色设定', '人物'],
+  ['角色', '人物'],
+  ['总大纲', '大纲'],
+  ['故事大纲', '大纲'],
+  ['剧情大纲', '大纲'],
+  ['情节大纲', '大纲'],
+  ['大纲', '大纲'],
+  ['关系发生矩阵', '矩阵'],
+  ['矩阵', '矩阵'],
+  ['文风与语言规范', '文风'],
+  ['文风规范', '文风'],
+  ['文风', '文风'],
+  ['语言规范', '文风'],
+  ['风格', '文风'],
+  ['悬置线清单', '伏笔'],
+  ['悬置线', '伏笔'],
+  ['悬置', '伏笔'],
+  ['伏笔清单', '伏笔'],
+  ['伏笔', '伏笔'],
+  ['世界观', '世界观'],
+  ['故事背景', '世界观'],
+  ['背景设定', '世界观'],
+  ['规则体系', '规则'],
+  ['规则', '规则'],
+];
+
+/** S2：行式节标题判定。命中返回 { bucket, body }，未命中返回 null。 */
+function plainSectionHeading(t: string): { bucket: string; body: string } | null {
+  const braced = t.match(/^【(.+)】$/) ?? t.match(/^\[(.+)\]$/);
+  const inner = braced !== null ? braced[1].trim() : t;
+  const rest = inner
+    .replace(/^(?:[〇零一二三四五六七八九十百千两\d]{1,4}\s*[、.．)）]\s*)?/, '')
+    .trim();
+  for (const [keyword, bucket] of PLAIN_KEYWORD_MAP) {
+    if (!rest.startsWith(keyword)) continue;
+    const tail = rest.slice(keyword.length);
+    const trimmed = tail.trim();
+    if (trimmed === '' || trimmed === '：' || trimmed === ':') return { bucket, body: '' };
+    if (/^[：:]/.test(trimmed) && trimmed.slice(1).trim().length >= 2) {
+      return { bucket, body: trimmed.slice(1).trim() };
+    }
+    if (tail.length <= 8 && !/[。！？]/.test(tail)) return { bucket, body: '' };
+  }
+  return null;
+}
+
+/** S1/S2：文档序行式标题合成节，按桶合并同名节（首现序），节名前的散行忽略。 */
+function synthesizePlainSections(raw: string): Section[] {
+  const byBucket = new Map<string, Section>();
+  let cur: Section | null = null;
+  for (const rawLine of raw.split('\n')) {
+    const t = rawLine.trim();
+    const h = plainSectionHeading(t);
+    if (h !== null) {
+      let sec = byBucket.get(h.bucket);
+      if (sec === undefined) {
+        sec = { heading: h.bucket, lines: [] };
+        byBucket.set(h.bucket, sec);
+      }
+      cur = sec;
+      if (h.body !== '') sec.lines.push(h.body);
+      continue;
+    }
+    if (cur !== null) cur.lines.push(t);
+  }
+  return [...byBucket.values()];
+}
+
 /** 消费节原始骨架（融合门 Task-02）：heading 为去掉 # 的题面，lines 不含该节自身的标题行。 */
 export interface CompendiumSectionRaw {
   heading: string;
@@ -470,6 +546,7 @@ function parseForeshadowings(
   h3Blocks: Section[],
   warnings: string[],
   out: SettingsImportForeshadowingDraft[],
+  plain = false,
 ): void {
   let capWarned = false;
   const pushFs = (desc: string): boolean => {
@@ -488,7 +565,7 @@ function parseForeshadowings(
     const text = b.lines
       .map((l) => l.trim())
       .filter((l) => l !== '' && !/^-{3,}$/.test(l))
-      .join('\n');
+      .join(plain ? '；' : '\n');
     let pushedFromSegs = 0;
     for (const seg of anchorSegments(text)) {
       const item = seg.replace(/^\s*[；：;:｜]/, '').trim();
@@ -514,6 +591,16 @@ function parseForeshadowings(
 export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
   const warnings: string[] = [];
   const doc = splitDoc(raw);
+  // S1：全文 0 H2 且 0 H3 时启用行式标题合成；产出非空才置 plain。伏笔桶改投 h3Blocks 供悬置扫描。
+  let plain = false;
+  if (doc.sections.length === 0 && doc.h3Blocks.length === 0) {
+    const synthesized = synthesizePlainSections(raw);
+    if (synthesized.length > 0) {
+      plain = true;
+      doc.sections = synthesized.filter((s) => s.heading !== '伏笔');
+      doc.h3Blocks = synthesized.filter((s) => s.heading === '伏笔');
+    }
+  }
 
   // 标题：H1《》内文；无则剥设定集后缀取前 40 字
   let title = '';
@@ -522,6 +609,16 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
     title = bookMatch[1].trim();
   } else if (doc.h1 !== '') {
     title = doc.h1.replace(/[·\-\s]*(?:扩写)?设定集\s*$/, '').trim().slice(0, 40);
+  }
+  // S6：纯文本且无 H1 → 首个非空行兜底书名
+  if (plain && doc.h1 === '') {
+    const firstLine = raw.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '';
+    const plainBook = firstLine.match(/《(.+?)》/);
+    if (plainBook) {
+      title = plainBook[1].trim();
+    } else if (firstLine.length <= 40 && /设定集\s*$/.test(firstLine)) {
+      title = firstLine.replace(/[·\-\s]*(?:扩写)?设定集\s*$/, '').trim();
+    }
   }
 
   // description = 全文精炼前置（追加裁决：定位句起头、文档序、表格压行；v3 全文≈1.3 万字，v4 至 20000 预算内）
@@ -579,7 +676,7 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
   outlineItems.sort((a, b) => a.chapterNo - b.chapterNo);
 
   const foreshadowings: SettingsImportForeshadowingDraft[] = [];
-  parseForeshadowings(doc.h3Blocks, warnings, foreshadowings);
+  parseForeshadowings(doc.h3Blocks, warnings, foreshadowings, plain);
 
   const styleSec = doc.sections.find((s) => s.heading.includes('文风'));
   const styleSection = cleanBlock(styleSec);
@@ -594,6 +691,7 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
   ].filter((h): h is string => h !== undefined);
 
   if (
+    !plain &&
     title === '' &&
     characters.length === 0 &&
     tree.volumes.length === 0 &&
