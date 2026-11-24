@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import FusionGateDialog from './FusionGateDialog';
 import { STALE_GATE_MESSAGE } from '../fusionGate';
 import type { FusionGateConfirmBody, FusionGateReportDto, FusionTensionDto } from '@inkforge/shared';
+import { nudgeWeights } from '@inkforge/shared';
 
 /** Task-05 钉值夹具：A 类两行（可剥 strip / 不可剥）+ 绑定快照 + 三 planner 行 + fewshot + 档案名映射。 */
 const report: FusionGateReportDto = {
@@ -31,7 +32,7 @@ const report: FusionGateReportDto = {
   headWindowWarn: false,
   hasArchive: true,
   binding: {
-    styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1' }, weights: { sp1: 60, sp2: 40 } },
+    styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1', 尺度: 'sp1' }, weights: { sp1: 60, sp2: 40 } },
     styleFewshotOn: true,
     snapshotPresent: true,
     plotProfileId: 'pp1',
@@ -43,8 +44,11 @@ const report: FusionGateReportDto = {
 
 const tension: FusionTensionDto = {
   degraded: false,
-  // 卡 TL-1 把 TensionRowDto.lever 设为必填；门组件尚未消费 lever（TL-4 才渲染三选），此处先钉 none 保 typecheck 绿
-  rows: [{ entry: '文风节', mdSide: '去油腻', profileSide: '露骨密度', nature: '拉扯', suggestion: '偏向 MD', lever: 'none' }],
+  rows: [
+    { entry: '尺度冲突', mdSide: '尺度直白', profileSide: '尺度含蓄', nature: '拉扯', suggestion: '偏向档案', lever: 'dim', dim: '尺度', profileId: 'sp2' },
+    { entry: '配比冲突', mdSide: '主线偏多', profileSide: '辅线偏多', nature: '拉扯', suggestion: '偏向档案', lever: 'weights', profileId: 'sp2' },
+    { entry: '孤例', mdSide: '去油腻', profileSide: '露骨密度', nature: '缺口', suggestion: '偏向 MD', lever: 'none' },
+  ],
 };
 
 function renderDialog(overrides: Partial<ComponentProps<typeof FusionGateDialog>> = {}) {
@@ -82,8 +86,8 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     // fewshot 只读展示：文案在场且无对应输入控件
     expect(screen.getByText(/文风示例注入：开（这里只能看/)).toBeTruthy();
     expect(screen.queryByLabelText(/文风示例注入/)).toBeNull();
-    // 逐段自由取舍指引在场
-    expect(screen.getByText(/世界观与剧情大纲/)).toBeTruthy();
+    // 逐段自由取舍指引在场（张力 none 行也带同款面板指路 → 改多处匹配）
+    expect(screen.getAllByText(/世界观与剧情大纲/).length).toBeGreaterThan(0);
     // 底部 checkbox aria-label 钉值
     expect(screen.getByLabelText('以后生成前不再弹这个确认（参考资料一有变动还会再提醒）')).toBeTruthy();
     // 张力行只读展示
@@ -158,7 +162,7 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     fireEvent.click(screen.getByLabelText('文风调整：逐维度选跟随哪本档案'));
     expect(screen.getByLabelText('跟随：节奏')).toBeTruthy();
     const select = screen.getByLabelText('跟随：节奏') as HTMLSelectElement;
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['示例主档案', '示例辅档案']);
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['示例主档案', '示例辅档案', '不采用档案风格（按正文走）']);
   });
 
   it('profileNames 缺失 → 回落 id 前 8 位灰字', () => {
@@ -244,5 +248,131 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     renderDialog({ report: { ...report, headWindowWarn: true } });
     expect(screen.getByText('正文开头若干行受保护，勾选移除也不会动它们，请留意。')).toBeTruthy();
     expect(screen.queryByText(/剥节/)).toBeNull();
+  });
+
+  // ===== TL-4：张力行三选把手（先红后绿）=====
+
+  const legacyReport: FusionGateReportDto = {
+    ...report,
+    binding: {
+      ...report.binding,
+      styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1', 尺度: 'sp1' }, weights: {} },
+    },
+  };
+
+  const allNoneTension: FusionTensionDto = {
+    degraded: false,
+    rows: [
+      { entry: '孤例甲', mdSide: '甲正文', profileSide: '甲档案', nature: '缺口', suggestion: '无', lever: 'none' },
+      { entry: '孤例乙', mdSide: '乙正文', profileSide: '乙档案', nature: '缺口', suggestion: '无', lever: 'none' },
+    ],
+  };
+
+  it('C2a dim 行「偏正文」→ dimsSource[dim]=__none__，配方区 styleChoice 仍保持现状', () => {
+    const { onConfirm } = renderDialog();
+    const radio = screen.getByLabelText('冲突裁决：尺度冲突：偏正文') as HTMLInputElement;
+    fireEvent.click(radio);
+    expect(radio.checked).toBe(true);
+    expect((screen.getByLabelText('文风调整：保持现状') as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    expect(onConfirm.mock.calls[0][0].styleBinding?.dimsSource['尺度']).toBe('__none__');
+  });
+
+  it('C2b dim 行「偏档案」→ 下拉默认 row.profileId，改名后写 dimsSource', () => {
+    const { onConfirm } = renderDialog();
+    fireEvent.click(screen.getByLabelText('冲突裁决：尺度冲突：偏档案'));
+    const select = screen.getByLabelText('冲突档案：尺度冲突') as HTMLSelectElement;
+    expect(select.value).toBe('sp2');
+    fireEvent.change(select, { target: { value: 'sp1' } });
+    // 选回快照值 sp1 → 差异归零，需借配方区 dims 选择触发提交以核对该行写入值
+    fireEvent.click(screen.getByLabelText('文风调整：逐维度选跟随哪本档案'));
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    expect(onConfirm.mock.calls[0][0].styleBinding?.dimsSource['尺度']).toBe('sp1');
+  });
+
+  it('C2c dim 行「偏正文」后再点「不动」→ 还原施加前值（sp1）', () => {
+    const { onConfirm } = renderDialog();
+    fireEvent.click(screen.getByLabelText('冲突裁决：尺度冲突：偏正文'));
+    fireEvent.click(screen.getByLabelText('冲突裁决：尺度冲突：不动'));
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    // 差异归零 → 不带 styleBinding（服务端沿用快照）
+    expect('styleBinding' in onConfirm.mock.calls[0][0]).toBe(false);
+
+    cleanup();
+    const r2 = renderDialog();
+    fireEvent.click(screen.getByLabelText('冲突裁决：尺度冲突：偏正文'));
+    fireEvent.click(screen.getByLabelText('冲突裁决：尺度冲突：不动'));
+    fireEvent.click(screen.getByLabelText('文风调整：逐维度选跟随哪本档案'));
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    expect(r2.onConfirm.mock.calls[0][0].styleBinding?.dimsSource['尺度']).toBe('sp1');
+  });
+
+  it('C2d weights 行 ±20 → nudgeWeights 快照，Σ=100 且键集不变', () => {
+    const snapshot = { sp1: 60, sp2: 40 };
+    const { onConfirm } = renderDialog();
+    fireEvent.click(screen.getByLabelText('冲突裁决：配比冲突：偏档案'));
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    const plus = onConfirm.mock.calls[0][0].styleBinding!.weights;
+    expect(plus).toEqual(nudgeWeights(snapshot, 'sp2', 20));
+    expect(Object.values(plus).reduce((a, b) => a + b, 0)).toBe(100);
+    expect(Object.keys(plus).sort()).toEqual(['sp1', 'sp2']);
+
+    cleanup();
+    const r2 = renderDialog();
+    fireEvent.click(screen.getByLabelText('冲突裁决：配比冲突：偏正文'));
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    const minus = r2.onConfirm.mock.calls[0][0].styleBinding!.weights;
+    expect(minus).toEqual(nudgeWeights(snapshot, 'sp2', -20));
+    expect(Object.values(minus).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it('C2e weights 行「不动」→ 还原施加前整份 weights', () => {
+    const { onConfirm } = renderDialog();
+    fireEvent.click(screen.getByLabelText('冲突裁决：配比冲突：偏档案'));
+    fireEvent.click(screen.getByLabelText('冲突裁决：配比冲突：不动'));
+    fireEvent.click(screen.getByLabelText('文风调整：调整各档案占比'));
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    expect(onConfirm.mock.calls[0][0].styleBinding?.weights).toEqual({ sp1: 60, sp2: 40 });
+  });
+
+  it('C2f legacy（weights={}）→ weights 行三选禁用 + 灰字', () => {
+    renderDialog({ report: legacyReport });
+    for (const label of ['不动', '偏正文', '偏档案']) {
+      expect((screen.getByLabelText(`冲突裁决：配比冲突：${label}`) as HTMLInputElement).disabled).toBe(true);
+    }
+    expect(screen.getByText('这本书按贡献维数计权，占比调整不可用')).toBeTruthy();
+  });
+
+  it('C2g none 行无控件 + 门外指引灰字', () => {
+    renderDialog();
+    expect(screen.queryByLabelText('冲突裁决：孤例：不动')).toBeNull();
+    expect(screen.getByText(/这条门里没有对应旋钮：要去顶部导航「蒸馏」页的「风格档案」区改档案/)).toBeTruthy();
+  });
+
+  it('C2h 汇总行两态', () => {
+    renderDialog();
+    expect(screen.getByText('本次 3 条冲突里，2 条可以在门里直接裁决。')).toBeTruthy();
+    cleanup();
+    renderDialog({ tension: allNoneTension });
+    expect(screen.getByText('本次 2 条冲突都只能在门外解决（改文风档案或改正文）。')).toBeTruthy();
+  });
+
+  it('C2i 常驻说明行在场（永久 + 风格档案面板指路）', () => {
+    const { container } = renderDialog();
+    expect(screen.getByText(/选「偏正文」=该维度以后不再采用档案风格/)).toBeTruthy();
+    expect(container.textContent).toContain('永久');
+    expect(container.textContent).toContain('书详情页「风格」节的「风格档案」面板');
+  });
+
+  it('C2j 仅张力行改动 → styleBinding 四键全带；weights 快照为空且未动 → {}', () => {
+    const { onConfirm } = renderDialog({ report: legacyReport });
+    fireEvent.click(screen.getByLabelText('冲突裁决：尺度冲突：偏正文'));
+    fireEvent.click(screen.getByRole('button', { name: '确认并开始生成' }));
+    const body = onConfirm.mock.calls[0][0];
+    const sb = body.styleBinding!;
+    expect(Object.keys(sb).sort()).toEqual(['auxProfileIds', 'dimsSource', 'primaryProfileId', 'weights']);
+    expect(sb.weights).toEqual({});
+    expect(sb.dimsSource['尺度']).toBe('__none__');
+    expect(body.fingerprint).toBe('fp-test');
   });
 });

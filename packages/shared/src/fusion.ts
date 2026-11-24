@@ -87,3 +87,38 @@ export interface FusionGateConfirmResult {
   };
   fingerprint: string;
 }
+
+/**
+ * 张力行「偏档案/偏正文」占比步进（DEC-2026-1124-04）：目标 ±delta、其余按现有比例吸收、
+ * 单档最小 1、总和恒 100、越界夹边；空 map 或 id 不在键集 → 浅拷贝原样返回（legacy 不动）。
+ * 输入契约：各值为 ≥1 整数（调用方=门内 state 与绑定快照，滑条/校验保证）；函数内不救非法输入。
+ */
+export function nudgeWeights(weights: Record<string, number>, id: string, delta: number): Record<string, number> {
+  const keys = Object.keys(weights);
+  if (keys.length === 0 || !(id in weights)) return { ...weights };
+
+  const n = keys.length;
+  // 唯一档：其余档无处吸收余额，Σ 恒 100 ⇒ 保持原值（A1c）
+  if (n === 1) return { ...weights };
+  const target = Math.min(Math.max(weights[id] + delta, 1), 100 - (n - 1));
+  const rest = 100 - target;
+  const others = keys.filter((k) => k !== id);
+  const sumOthers = others.reduce((s, k) => s + weights[k], 0);
+  const rawByKey = new Map<string, number>();
+  for (const k of others) rawByKey.set(k, (rest * weights[k]) / sumOthers);
+
+  // 键序沿 keys：先按原键序落 floor
+  const result: Record<string, number> = {};
+  for (const k of keys) result[k] = k === id ? target : Math.floor(rawByKey.get(k)!);
+
+  // deficit 按小数余数降序（平手按 keys 插入序先手，Array.sort 稳定）逐档 +1
+  let deficit = rest - others.reduce((s, k) => s + result[k], 0);
+  const byFraction = [...others].sort(
+    (a, b) => rawByKey.get(b)! - Math.floor(rawByKey.get(b)!) - (rawByKey.get(a)! - Math.floor(rawByKey.get(a)!)),
+  );
+  for (let i = 0; deficit > 0; i += 1, deficit -= 1) {
+    const k = byFraction[i];
+    result[k] = result[k] + 1;
+  }
+  return result;
+}

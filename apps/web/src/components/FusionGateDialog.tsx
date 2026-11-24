@@ -1,5 +1,6 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import type { FusionAClassRowDto, FusionGateConfirmBody, FusionGateReportDto, FusionTensionDto } from '@inkforge/shared';
+import { DIM_SOURCE_NONE, nudgeWeights } from '@inkforge/shared';
 import { Button } from './ui';
 import { checkboxBase, selectBase } from './Field';
 import { STALE_GATE_MESSAGE } from '../fusionGate';
@@ -57,6 +58,13 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
   const [styleChoice, setStyleChoice] = useState<StyleChoice>('keep');
   const [weights, setWeights] = useState<Record<string, number>>(() => ({ ...(binding.styleBinding?.weights ?? {}) }));
   const [dimsSource, setDimsSource] = useState<Record<string, string>>(() => ({ ...(binding.styleBinding?.dimsSource ?? {}) }));
+  // 张力行「施加前快照」：挂载一次；buildBody 差异检测 + 行级「不动」还原共用
+  const [snapshotWeights] = useState<Record<string, number>>(() => ({ ...(binding.styleBinding?.weights ?? {}) }));
+  const [snapshotDimsSource] = useState<Record<string, string>>(() => ({ ...(binding.styleBinding?.dimsSource ?? {}) }));
+  // 行 entry → 该行施加前值（dim 按维存、weights 存整份副本），各行互不干扰
+  const dimBefore = useRef<Record<string, Record<string, string>>>({});
+  const weightsBefore = useRef<Record<string, Record<string, number>>>({});
+  const [rowChoices, setRowChoices] = useState<Record<string, 'none' | 'md' | 'profile'>>({});
   // planner 三行绑/不绑（按快照现状预置）
   const [plannerBound, setPlannerBound] = useState<Record<PlannerKey, boolean>>(() => ({
     plotProfileId: binding.plotProfileId !== null,
@@ -75,13 +83,16 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
     if (Object.values(stripped).some(Boolean)) {
       body.description = report.previewDescription;
     }
-    // 保持=不动 styleBinding；权重滑条/维归属=按快照现状主/辅 id 组 styleBinding 对象
-    if ((styleChoice === 'weights' || styleChoice === 'dims') && binding.styleBinding) {
+    // 提交条件：配方区选了非 keep，或张力行改动使 dimsSource/weights 相对挂载快照有差异
+    const dimsDirty = JSON.stringify(dimsSource) !== JSON.stringify(snapshotDimsSource);
+    const weightsDirty = JSON.stringify(weights) !== JSON.stringify(snapshotWeights);
+    if ((styleChoice !== 'keep' || dimsDirty || weightsDirty) && binding.styleBinding) {
+      // 四键恒取当前 state（初值即快照，未改时与旧逻辑等价；weights 原本空且未动 → {}）
       body.styleBinding = {
         primaryProfileId: binding.styleBinding.primaryProfileId,
         auxProfileIds: binding.styleBinding.auxProfileIds,
-        dimsSource: styleChoice === 'dims' ? dimsSource : binding.styleBinding.dimsSource,
-        weights: styleChoice === 'weights' ? weights : binding.styleBinding.weights,
+        dimsSource,
+        weights,
       };
     }
     // planner 三行：绑→当前 id（string|null）；不绑→null
@@ -110,21 +121,122 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
         {analyzing && <p className="mt-3 text-sm text-muted">正在对照正文与档案…</p>}
         {headWindowWarnTip(report.headWindowWarn)}
 
-        {/* 张力行（只读展示） */}
+        {/* 张力行：按 lever 三选，改动直写与配方区共用的 dimsSource/weights state */}
         {(tension?.rows.length ?? 0) > 0 && (
           <section className="mt-4">
             <h3 className="text-sm font-medium">正文与档案的冲突对照</h3>
+            <p className="mt-1 text-xs text-muted">
+              选「偏正文」=该维度以后不再采用档案风格，按你的正文与设定写；选「偏档案」=该维度以后跟随你指定的那本档案。两者都会<strong>永久</strong>改变这本书的文风绑定，要改回去请到书详情页「风格」节的「风格档案」面板。
+            </p>
             <ul className="mt-2 space-y-2">
-              {tension!.rows.map((row, i) => (
-                <li key={`${row.entry}-${i}`} className="rounded-ctl border border-line px-3 py-2 text-xs">
-                  <span className="font-medium">{row.entry}</span>
-                  <span className="text-muted"> · {row.nature}</span>
-                  <p>正文里：{row.mdSide}</p>
-                  <p>档案里：{row.profileSide}</p>
-                  <p>建议：{row.suggestion}</p>
-                </li>
-              ))}
+              {tension!.rows.map((row, i) => {
+                // 无绑定无从组 styleBinding → dim/weights 行一律按 none 类渲染（P-1）
+                const lever = binding.styleBinding ? row.lever : 'none';
+                const legacyWeights = Object.keys(snapshotWeights).length === 0;
+                const choice = rowChoices[row.entry] ?? 'none';
+                const disabled = busy || (lever === 'weights' && legacyWeights);
+                const setChoice = (next: 'none' | 'md' | 'profile') => setRowChoices((c) => ({ ...c, [row.entry]: next }));
+                // 首次从「不动」切偏X：存施加前值（dim 按维、weights 整份副本）
+                const applyDim = (value: string) => {
+                  dimBefore.current[row.entry] ??= { [row.dim!]: dimsSource[row.dim!] };
+                  setDimsSource((d) => ({ ...d, [row.dim!]: value }));
+                };
+                const applyWeights = (delta: number) => {
+                  weightsBefore.current[row.entry] ??= { ...weights };
+                  setWeights((w) => nudgeWeights(w, row.profileId!, delta));
+                };
+                const revert = () => {
+                  if (lever === 'dim' && dimBefore.current[row.entry]) {
+                    setDimsSource((d) => ({ ...d, ...dimBefore.current[row.entry] }));
+                  }
+                  if (lever === 'weights' && weightsBefore.current[row.entry]) {
+                    setWeights(weightsBefore.current[row.entry]);
+                  }
+                  setChoice('none');
+                };
+                return (
+                  <li key={`${row.entry}-${i}`} className="rounded-ctl border border-line px-3 py-2 text-xs">
+                    <span className="font-medium">{row.entry}</span>
+                    <span className="text-muted"> · {row.nature}</span>
+                    <p>正文里：{row.mdSide}</p>
+                    <p>档案里：{row.profileSide}</p>
+                    <p>建议：{row.suggestion}</p>
+                    {lever === 'none' ? (
+                      <p className="mt-1 text-muted">这条门里没有对应旋钮：要去顶部导航「蒸馏」页的「风格档案」区改档案，或到书详情页「设定」节的「世界观与剧情大纲」面板改正文。</p>
+                    ) : (
+                      <>
+                        <div className="mt-2 flex flex-wrap gap-3">
+                          {(
+                            [
+                              ['none', '不动'],
+                              ['md', '偏正文'],
+                              ['profile', '偏档案'],
+                            ] as Array<['none' | 'md' | 'profile', string]>
+                          ).map(([value, label]) => (
+                            <label key={value} className="flex items-center gap-1.5">
+                              <input
+                                type="radio"
+                                name={`tension-${i}`}
+                                value={value}
+                                aria-label={`冲突裁决：${row.entry}：${label}`}
+                                checked={choice === value}
+                                disabled={disabled}
+                                onChange={() => {
+                                  if (value === 'none') revert();
+                                  else {
+                                    if (lever === 'dim') {
+                                      applyDim(value === 'md' ? DIM_SOURCE_NONE : row.profileId ?? styleBinding!.primaryProfileId);
+                                    } else {
+                                      applyWeights(value === 'md' ? -20 : 20);
+                                    }
+                                    setChoice(value);
+                                  }
+                                }}
+                              />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                        {lever === 'dim' && choice === 'profile' && (
+                          <label className="mt-2 flex items-center gap-2">
+                            <span>冲突档案</span>
+                            <select
+                              className={`${selectBase} w-full`}
+                              value={dimsSource[row.dim!] ?? row.profileId ?? styleBinding!.primaryProfileId}
+                              aria-label={`冲突档案：${row.entry}`}
+                              disabled={busy}
+                              onChange={(e) => setDimsSource((d) => ({ ...d, [row.dim!]: e.target.value }))}
+                            >
+                              {styleIds.map((id) => (
+                                <option key={id} value={id} title={id}>
+                                  {nameOf(id)}
+                                </option>
+                              ))}
+                              <option value={DIM_SOURCE_NONE}>不采用档案风格（按正文走）</option>
+                            </select>
+                          </label>
+                        )}
+                        {lever === 'weights' && (
+                          <>
+                            <p className="mt-1 text-muted">这条只改六轴画像与样本配比，不改各档案的文风规则文本；要精调请回上面「调整各档案占比」滑条。</p>
+                            {legacyWeights && <p className="mt-1 text-muted">这本书按贡献维数计权，占比调整不可用</p>}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
+            <p className="mt-2 text-xs text-muted">
+              {(() => {
+                const N = tension!.rows.length;
+                const M = tension!.rows.filter((r) => r.lever !== 'none' && binding.styleBinding).length;
+                return M > 0
+                  ? `本次 ${N} 条冲突里，${M} 条可以在门里直接裁决。`
+                  : `本次 ${N} 条冲突都只能在门外解决（改文风档案或改正文）。`;
+              })()}
+            </p>
           </section>
         )}
 
@@ -246,6 +358,7 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
                               {nameOf(id)}
                             </option>
                           ))}
+                          <option value={DIM_SOURCE_NONE}>不采用档案风格（按正文走）</option>
                         </select>
                       </label>
                     ))}
