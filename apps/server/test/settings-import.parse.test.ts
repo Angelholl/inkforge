@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLandingCell, parseSettingsCompendium } from '../src/settings-import';
+import { parseLandingCell, parseSettingsCompendium, splitCompendiumSections } from '../src/settings-import';
 
 // 中性仿形设定集夹具（DEC-2026-1120-04 全局约束：原始 MD 不进仓库，夹具内容全部中性占位）
 const FIXTURE = `# 《示例之作》都市群像长篇 · 扩写设定集
@@ -618,5 +618,51 @@ describe('纯文本降级分节', () => {
     const continuous = parseSettingsCompendium('【大纲】\n第二卷 转折（第4-6章）\n4. 甲\n5. 乙\n6. 丙');
     const cards = continuous.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
     expect(cards.map((c) => c.chapterFrom)).toEqual([4, 5, 6]);
+  });
+
+  const PLAIN_FIXTURE = `《长夜集》设定集
+
+世界观：北方港城临海，年代约二〇〇三，通讯以市话与简讯为主；群像叙事不审判，只记账。
+
+【人物】
+阿美：连锁公司业务员。
+性格黏人爽利、记账精。弧光：藏→半摊→共谋。
+老王：中介。
+阿珍：业主。
+阿芳
+隔壁宝妈，热心。
+
+【剧情大纲】
+第一卷 崛起（第1-2章）
+1. 初入校园：开场钩子
+2. 暗流
+第二卷 转折（第4-5章）
+1. 摊牌（近破裂一次）
+
+【伏笔】
+1. 厨房对面的眼睛；2. 表叔拜访未完成
+3. 远行的两人未归
+
+【文风】
+两种叙述声：主角腔与旁观腔；暖世界原则：无人因欲望家破人亡。
+`;
+
+  it('Task-04 集成夹具：S1–S6 全要素一次解析', () => {
+    const d = parseSettingsCompendium(PLAIN_FIXTURE);
+    expect(d.title).toBe('长夜集');
+    expect(d.characters.map((c) => c.name)).toEqual(['阿美', '老王', '阿珍', '阿芳']);
+    const vols = d.outlineTree.volumes;
+    expect(vols.map((v) => v.title)).toEqual(['第1卷 崛起', '第2卷 转折']);
+    expect(vols.flatMap((v) => v.stages.flatMap((s) => s.cards)).map((c) => c.chapterFrom)).toEqual([1, 2, 4]);
+    expect(d.foreshadowings).toHaveLength(3);
+    expect(d.styleSection).toContain('两种叙述声');
+    expect(d.consumedSections).toEqual(['人物', '大纲', '文风', '伏笔']);
+    expect(d.warnings).toEqual([]);
+  });
+
+  it('Task-04 CRLF 免疫 + 融合门不受合成影响', () => {
+    const crlf = parseSettingsCompendium(PLAIN_FIXTURE.replace(/\n/g, '\r\n'));
+    expect(crlf).toEqual(parseSettingsCompendium(PLAIN_FIXTURE));
+    expect(splitCompendiumSections(PLAIN_FIXTURE)).toEqual([]);
   });
 });
