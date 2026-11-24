@@ -51,7 +51,7 @@ echo "== 2 首启前落盘清点 =="
 find "$ROOT_POSIX" -type f | sed "s|$ROOT_POSIX/||" | sort > "$VERIFY_OUT/verify-listing.txt"
 LISTING=$(wc -l < "$VERIFY_OUT/verify-listing.txt" | tr -d ' ')
 echo "LISTING=$LISTING"
-[ "$LISTING" = "4131" ] || fail LISTING "$LISTING"
+[ "$LISTING" = "4132" ] || fail LISTING "$LISTING/4132"   # v0.2.4 重录：+1=0015 迁移装机落盘（与 NSIS 模板、release-inventory 钉同批抬，见 L-20261124-02）
 PERSONAL=$(grep -icE 'AppData|\.inkforge|/data/|inkforge\.db|landing-words\.txt$|(^|/)config\.json$|(^|/)\.env|(^|/)inkforge\.env' "$VERIFY_OUT/verify-listing.txt" || true)
 PERSONAL=${PERSONAL:-0}
 echo "PERSONAL=$PERSONAL"
