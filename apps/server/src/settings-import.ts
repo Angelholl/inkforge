@@ -454,13 +454,61 @@ function parseCharacters(
   flush();
 }
 
-/** 总大纲 → 卷/阶段/卡 + 卷级梗概行；区间篇行成阶段，编号行成卡，无编号行兜底成卡（blockquote/分隔线除外）。 */
+/** S4：中文数字→阿拉伯数字（阿拉伯数字直通；位值累计；不可解析→null）。 */
+function cnToNum(s: string): number | null {
+  if (/^\d+$/.test(s)) return Number(s);
+  const digits: Record<string, number> = {
+    '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+  };
+  const units: Record<string, number> = { '十': 10, '百': 100, '千': 1000 };
+  let num = 0;
+  let cur = 0;
+  let seen = false;
+  for (const ch of s) {
+    if (ch === '零') continue;
+    if (ch in digits) {
+      cur = cur * 10 + (digits[ch] ?? 0);
+      seen = true;
+    } else if (ch in units) {
+      num += (cur || 1) * (units[ch] ?? 0);
+      cur = 0;
+      seen = true;
+    } else {
+      return null;
+    }
+  }
+  return seen ? num + cur : null;
+}
+
+/** S4：题/梗概切分（首个冒号；否则行尾闭合括号；否则 body=rest、title=前 20 字）。 */
+function splitTitleBody(rest: string): { title: string; body: string } {
+  const s = rest.trim();
+  const ci = s.search(/[：:]/);
+  if (ci >= 0) {
+    const title = s.slice(0, ci).trim();
+    const body = s.slice(ci + 1).trim();
+    return { title: title !== '' ? title : body.slice(0, 20), body };
+  }
+  const open = s.search(/[（(]/);
+  if (open >= 0) {
+    const close = matchParen(s, open);
+    if (close >= 0 && /^[\s。]*$/.test(s.slice(close + 1))) {
+      const body = stripMd(s.slice(open + 1, close)).trim();
+      const title = s.slice(0, open).trim();
+      return { title: title !== '' ? title : body.slice(0, 20), body };
+    }
+  }
+  return { title: s.slice(0, 20), body: s };
+}
+
+/** 总大纲 → 卷/阶段/卡 + 卷级梗概行；区间篇行成阶段，编号行成卡，无编号行兜底成卡（blockquote/分隔线除外）。plain 时走行式形态。 */
 function parseOutline(
   sec: Section | undefined,
   warnings: string[],
   tree: OutlineTreeDto,
   allCards: ParsedCard[],
   outlineLines: string[],
+  plain = false,
 ): void {
   if (!sec) return;
   let vol: OutlineVolumeDto | null = null;
@@ -468,6 +516,9 @@ function parseOutline(
   let cardTotal = 0;
   let capWarned = false;
   let pendingSubTitle = '';
+  // S4：当前卷章区间与偏移 warning 门（全卷仅一条）
+  let volRange: { from: number; to: number } | null = null;
+  let volRangeWarned = false;
   const seenCardCh = new Set<number>();
 
   const makeVolume = (title: string, body: string): OutlineVolumeDto => {
@@ -509,6 +560,83 @@ function parseOutline(
   for (const rawLine of sec.lines) {
     const t = rawLine.trim();
     if (t === '') continue;
+    if (plain) {
+      // 卷行两形态：第N卷/部/篇(分) 或 卷/部/篇第N（「第」起头或倒装，散文行不误命中）
+      const volFwd = t.match(/^第\s*([〇零一二三四五六七八九十百千两\d]{1,6})\s*(卷|部|篇)(分)?\s*[：:]?\s*(.*)$/);
+      const volInv = volFwd === null
+        ? t.match(/^([卷部篇])\s*(?:第\s*)?([〇零一二三四五六七八九十百千两\d]{1,6})\s*[：:]?\s*(.*)$/)
+        : null;
+      if (volFwd !== null || volInv !== null) {
+        const rawN = volFwd !== null ? volFwd[1] : (volInv as RegExpMatchArray)[2];
+        const unit = volFwd !== null ? volFwd[2] : (volInv as RegExpMatchArray)[1];
+        const hasFen = volFwd !== null && volFwd[3] !== undefined;
+        const bodyRaw = volFwd !== null ? volFwd[4] : (volInv as RegExpMatchArray)[3];
+        const n = cnToNum(rawN);
+        const nText = n !== null ? String(n) : rawN;
+        const open = bodyRaw.search(/[（(]/);
+        let head = bodyRaw;
+        let vbody = '';
+        if (open >= 0) {
+          const close = matchParen(bodyRaw, open);
+          if (close >= 0 && /^[\s。]*$/.test(bodyRaw.slice(close + 1))) {
+            head = bodyRaw.slice(0, open).trim();
+            vbody = stripMd(bodyRaw.slice(open + 1, close)).trim();
+          }
+        }
+        const title = `第${nText}${unit}${hasFen ? '分' : ''} ${head}`.trim();
+        vol = makeVolume(title, vbody);
+        stage = null;
+        const rangeM = `${head} ${vbody}`.match(/(\d{1,3})\s*[–—-]\s*(\d{1,3})/);
+        volRange = rangeM !== null ? { from: Number(rangeM[1]), to: Number(rangeM[2]) } : null;
+        volRangeWarned = false;
+        outlineLines.push(vbody !== '' ? `${title}（${vbody}）` : title);
+        pendingSubTitle = '';
+        continue;
+      }
+      // 章行：第N章 → 卡，章号经 cnToNum
+      const chap = t.match(/^第\s*([〇零一二三四五六七八九十百千两\d]{1,6})\s*章\s*[：:.、\s]*(.*)$/);
+      if (chap !== null) {
+        const ch = cnToNum(chap[1]);
+        if (ch !== null) {
+          const { title, body } = splitTitleBody(chap[2]);
+          addCard({ title, body, chapterFrom: ch, chapterTo: ch });
+          continue;
+        }
+        // 数词不可解析 → 落散行兜底
+      }
+      // 阶段行：区间+节名+冒号 → 无卷先建卷，段内编号成卡
+      const st = t.match(/^(\d{1,3})\s*[–—-]\s*(\d{1,3})\s*([^（(：:]{1,20})[：:]\s*(.*)$/);
+      if (st !== null) {
+        if (vol === null) vol = makeVolume('', '');
+        const stDto: OutlineStageDto = { title: st[3].trim(), body: '', seq: vol.stages.length, cards: [] };
+        vol.stages.push(stDto);
+        for (const c of extractCards(st[4])) {
+          if (canAdd(c)) addCardTo(stDto, c);
+        }
+        stage = null;
+        continue;
+      }
+      // 编号行：章号按卷区间偏移；越界回退字面 n 并推全卷一条 warning
+      const numLine = t.match(/^(\d{1,3})\s*[、.．]\s*(.*)$/);
+      if (numLine !== null) {
+        const n = Number(numLine[1]);
+        const { title, body } = splitTitleBody(numLine[2]);
+        let ch = n;
+        if (volRange !== null) {
+          const shifted = volRange.from + n - 1;
+          if (shifted > volRange.to) {
+            if (!volRangeWarned) {
+              warnings.push('卷内编号与卷章区间不一致，按字面编号取章号');
+              volRangeWarned = true;
+            }
+          } else {
+            ch = shifted;
+          }
+        }
+        addCard({ title, body, chapterFrom: ch, chapterTo: ch });
+        continue;
+      }
+    }
     if (t.startsWith('|')) {
       // 表格行：首格数字=章行（v4「| 章 | 标题 | 线 | 落地 |」逐章表）→ 卡；其余（线池/引擎表）跳过归档兜底
       const cells = t.replace(/^\|/, '').replace(/\|$/, '').split('|').map((x) => x.trim());
@@ -682,7 +810,7 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
   const allCards: ParsedCard[] = [];
   const outlineLines: string[] = [];
   const outlineSec = doc.sections.find((s) => s.heading.includes('大纲'));
-  parseOutline(outlineSec, warnings, tree, allCards, outlineLines);
+  parseOutline(outlineSec, warnings, tree, allCards, outlineLines, plain);
   // 关系发生矩阵（v3 新增「全书剧情总账」）精炼追加进剧情大纲；v2 无矩阵节不触发
   const matrixSec = doc.sections.find((s) => s.heading.includes('矩阵'));
   const outline = [outlineLines.join('\n'), matrixSec ? refineForDescription(matrixSec.lines.join('\n')) : '']

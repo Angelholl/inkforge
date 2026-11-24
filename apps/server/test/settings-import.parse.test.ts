@@ -557,4 +557,66 @@ describe('纯文本降级分节', () => {
     expect(d.characters.map((c) => c.name)).toEqual(['阿美', '老王']);
     expect(d.warnings.filter((w) => w.includes('重名'))).toHaveLength(1);
   });
+
+  const OL_PLAIN = `【大纲】
+第一卷 崛起（第1-3章）
+1. 初入校园：开场钩子
+2. 暗流
+第二卷 转折（第4-6章）
+1. 摊牌（近破裂一次）
+`;
+
+  it('Task-03 大纲-only：卷行+编号行 → 两卷三卡，章号按卷区间偏移', () => {
+    const d = parseSettingsCompendium(OL_PLAIN);
+    const vols = d.outlineTree.volumes;
+    expect(vols).toHaveLength(2);
+    expect(vols.map((v) => v.title)).toEqual(['第1卷 崛起', '第2卷 转折']);
+    expect(vols[0].body).toBe('第1-3章');
+    expect(vols.map((v) => v.stages.flatMap((s) => s.cards).map((c) => c.chapterFrom))).toEqual([[1, 2], [4]]);
+    expect(d.outlineItems.map((i) => i.chapterNo)).toEqual([1, 2, 4]);
+    expect(d.outline).toContain('第1卷 崛起');
+    expect(vols.every((v) => v.stages.length >= 1)).toBe(true);
+  });
+
+  it('Task-03 卷行护栏：散文行不建卷，「第三部分」倒装归一（异议①）', () => {
+    const prose = parseSettingsCompendium('【大纲】\n一部讲述成长的小说。\n部分角色设定');
+    expect(prose.outlineTree.volumes).toHaveLength(0);
+    expect(prose.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards))).toEqual([]);
+
+    const part = parseSettingsCompendium('【大纲】\n第三部分 高潮');
+    expect(part.outlineTree.volumes.map((v) => v.title)).toEqual(['第3部分 高潮']);
+  });
+
+  it('Task-03 中文数字章行：二十三/一百零五/两 经公开面钉值', () => {
+    const d = parseSettingsCompendium(
+      '【大纲】\n第一卷 引子\n第二十三章 桥段（伏笔回收）\n第一百零五章 终局\n第两章 补叙\n第abc章 不算数',
+    );
+    const cards = d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(cards.map((c) => c.chapterFrom)).toEqual([23, 105, 2, null]);
+  });
+
+  it('Task-03 阶段行：区间节名成阶段，段内编号成卡', () => {
+    const d = parseSettingsCompendium('【大纲】\n13-15 年会篇：13 备装（采购线启动）；14 圆桌（两线交汇）');
+    const vols = d.outlineTree.volumes;
+    expect(vols).toHaveLength(1);
+    expect(vols[0].stages.map((s) => s.title)).toEqual(['年会篇']);
+    expect(vols[0].stages[0].cards.map((c) => c.chapterFrom)).toEqual([13, 14]);
+  });
+
+  it('Task-03 无区间卷：编号行取字面章号', () => {
+    const d = parseSettingsCompendium('【大纲】\n第二卷 转折\n5. 摊牌');
+    const cards = d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(cards.map((c) => c.chapterFrom)).toEqual([5]);
+  });
+
+  it('Task-03 偏移哨：越界回退字面+全卷一条 warning；连续编号仍正确', () => {
+    const off = parseSettingsCompendium('【大纲】\n第二卷 转折（第4-6章）\n1. 甲\n4. 乙');
+    const offCards = off.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(offCards.map((c) => c.chapterFrom)).toEqual([4]);
+    expect(off.warnings.filter((w) => w.includes('卷内编号与卷章区间不一致'))).toHaveLength(1);
+
+    const continuous = parseSettingsCompendium('【大纲】\n第二卷 转折（第4-6章）\n4. 甲\n5. 乙\n6. 丙');
+    const cards = continuous.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(cards.map((c) => c.chapterFrom)).toEqual([4, 5, 6]);
+  });
 });
