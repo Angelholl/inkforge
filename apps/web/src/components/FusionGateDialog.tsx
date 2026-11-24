@@ -1,18 +1,16 @@
 import { useState } from 'react';
-import type { FusionGateConfirmBody, FusionGateReportDto, FusionTensionDto } from '@inkforge/shared';
+import type { FusionAClassRowDto, FusionGateConfirmBody, FusionGateReportDto, FusionTensionDto } from '@inkforge/shared';
 import { Button } from './ui';
 import { checkboxBase, selectBase } from './Field';
+import { STALE_GATE_MESSAGE } from '../fusionGate';
 
 /**
  * 生成前融合确认门对话框（Task-05，规格 v3.1 §3.5）。
  *
- * MVP 简化钉死（前端零引擎）：剥后文本**唯一来源 = 服务端 report.previewDescription**（= preset 集合的剥除稿）。
- * 用户在 preset='strip' 的 A 类行勾「剥 MD 文本」→ confirm body 传 description: report.previewDescription；
- * 用户把该行改回「保持」→ 不传 description 键（不启剥）。多节逐行混合勾选超出 MVP，
- * 界面在该行下注明「逐节剥除组合请用书籍设置世界观框手改」。
- *
- * planner 三行只给「绑/不绑」+ 附注「大纲卡落地格恒优先，档案只作参考」（不造「剥 MD 靠档案」假选项）；
- * fewshot 只读展示无控件；degraded → 顶部横幅「本次未做张力对照」；不可剥行控件禁用。
+ * MVP 简化钉死（前端零引擎）：剥后文本唯一来源 = report.previewDescription，仅由片段勾选触发；
+ * 风格行三选（保持现状 / 调整各档案占比 / 逐维度选跟随哪本档案）；
+ * 档案名 = profileNames 查名，缺失回落 id 前 8 位（title 保留完整 id）；
+ * 409 stale 文案由 fusionGate 映射（STALE_GATE_MESSAGE 单一来源）。
  */
 export interface FusionGateDialogProps {
   report: FusionGateReportDto;
@@ -25,8 +23,14 @@ export interface FusionGateDialogProps {
   error?: string;
 }
 
-type StyleChoice = 'keep' | 'weights' | 'dims' | 'strip';
+type StyleChoice = 'keep' | 'weights' | 'dims';
 type PlannerKey = 'plotProfileId' | 'spectrumProfileId' | 'imitationProfileId';
+
+const VERDICT_LABELS: Record<FusionAClassRowDto['verdict'], string> = {
+  'fully-carried': '档案里已有，移除不丢内容',
+  'partially-carried': '档案只覆盖一部分，移除可能丢内容',
+  'not-carried': '档案里没有，建议保留',
+};
 
 const PLANNER_ROWS: Array<{ key: PlannerKey; label: string }> = [
   { key: 'plotProfileId', label: '剧情档案' },
@@ -36,11 +40,13 @@ const PLANNER_ROWS: Array<{ key: PlannerKey; label: string }> = [
 
 export default function FusionGateDialog({ report, tension, analyzing, busy, error, onConfirm, onCancel }: FusionGateDialogProps) {
   const binding = report.binding;
+  // 档案名查名；缺键回落 id 前 8 位（?. 保留：旧 stub/运行时缺键防御）
+  const nameOf = (id: string): string => binding.profileNames?.[id] ?? id.slice(0, 8);
   // A 类逐行裁决草稿：preset='strip' 且可剥才预置勾选
   const [stripped, setStripped] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(report.aClass.filter((r) => r.preset === 'strip' && r.removable).map((r) => [r.heading, true])),
   );
-  // style 快照行四选：保持（默认）/ 权重滑条 / 维归属 / 剥 MD 文本
+  // style 快照行三选：保持现状（默认）/ 调整各档案占比 / 逐维度选跟随哪本档案
   const [styleChoice, setStyleChoice] = useState<StyleChoice>('keep');
   const [weights, setWeights] = useState<Record<string, number>>(() => ({ ...(binding.styleBinding?.weights ?? {}) }));
   const [dimsSource, setDimsSource] = useState<Record<string, string>>(() => ({ ...(binding.styleBinding?.dimsSource ?? {}) }));
@@ -58,8 +64,8 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
 
   const buildBody = (): FusionGateConfirmBody => {
     const body: FusionGateConfirmBody = {};
-    // 剥 MD 文本：唯一来源 = report.previewDescription，任何 strip 勾选都落到同一份剥除稿
-    if (Object.values(stripped).some(Boolean) || styleChoice === 'strip') {
+    // 剥后文本唯一来源 = report.previewDescription，仅由片段勾选触发
+    if (Object.values(stripped).some(Boolean)) {
       body.description = report.previewDescription;
     }
     // 保持=不动 styleBinding；权重滑条/维归属=按快照现状主/辅 id 组 styleBinding 对象
@@ -76,22 +82,25 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
       body[row.key] = plannerBound[row.key] ? binding[row.key] : null;
     }
     if (suppress) body.suppress = true;
+    body.fingerprint = report.fingerprint;
     return body;
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="生成前融合确认">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-card border border-line bg-surface p-5 shadow-xl">
-        <h2 className="font-display text-lg font-semibold">生成前融合确认</h2>
-        <p className="mt-1 text-xs text-muted">逐项确认注入面偏向；确认后才开始生成，取消零写。</p>
+        <div className="sticky top-0 z-10 -mx-5 -mt-5 bg-surface px-5 pb-2 pt-5">
+          <h2 className="font-display text-lg font-semibold">生成前融合确认</h2>
+          <p className="mt-1 text-xs text-muted">下面列出这次生成会喂给 AI 的参考资料，以及可以调整的地方。点「确认并开始生成」会保存你的调整并开始生成；点「取消」不保存任何改动。</p>
+        </div>
 
         {/* 可见降级钉：LLM 张力对照失败不得静默 */}
         {tension?.degraded === true && (
           <p className="mt-3 rounded-ctl border border-warn/40 bg-warn-soft px-3 py-2 text-sm text-warn" role="status">
-            本次未做张力对照
+            这次没有做正文与档案的冲突对照（不影响生成）
           </p>
         )}
-        {analyzing && <p className="mt-3 text-sm text-muted">张力对照分析中…</p>}
+        {analyzing && <p className="mt-3 text-sm text-muted">正在对照正文与档案…</p>}
         {headWindowWarnTip(report.headWindowWarn)}
 
         {/* 张力行（只读展示） */}
@@ -112,11 +121,11 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
           </section>
         )}
 
-        {/* A 类剥节候选行 */}
+        {/* 正文残留设定片段：逐行勾选决定是否随剥除稿移除 */}
         <section className="mt-4">
-          <h3 className="text-sm font-medium">A 类剥节候选</h3>
+          <h3 className="text-sm font-medium">正文里残留的设定片段</h3>
           {report.aClass.length === 0 ? (
-            <p className="mt-2 text-xs text-muted">无 A 类剥节候选（非 MD 书或无需剥节）。</p>
+            <p className="mt-2 text-xs text-muted">这次没有需要从正文移除的片段。</p>
           ) : (
             <ul className="mt-2 space-y-2">
               {report.aClass.map((row) => {
@@ -127,16 +136,16 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
                       <input
                         type="checkbox"
                         className={checkboxBase}
-                        aria-label={`剥 MD 文本：${row.heading}`}
+                        aria-label={`移除片段：${row.heading}`}
                         checked={checked}
                         disabled={!row.removable || busy}
                         onChange={(e) => setStripped((s) => ({ ...s, [row.heading]: e.target.checked }))}
                       />
                       <span>{row.heading}</span>
-                      <span className="text-xs text-muted">{row.verdict}</span>
-                      {!row.removable && <span className="text-xs text-muted">（不可剥，控件已禁用）</span>}
+                      <span className="text-xs text-muted">{VERDICT_LABELS[row.verdict]}</span>
+                      {!row.removable && <span className="text-xs text-muted">（这段动不了）</span>}
                     </label>
-                    {checked && <p className="mt-1 text-xs text-muted">逐节剥除组合请用书籍设置世界观框手改</p>}
+                    {checked && <p className="mt-1 text-xs text-muted">想逐段自由取舍，请到书详情页「设定」节的「世界观与剧情大纲」面板直接改正文。</p>}
                   </li>
                 );
               })}
@@ -144,24 +153,27 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
           )}
         </section>
 
-        {/* style 快照行：权重滑条 / 维归属 / 剥 MD 文本 / 保持 四选 */}
+        {/* 文风配方：当前绑定快照 + 三选调整 */}
         <section className="mt-4">
-          <h3 className="text-sm font-medium">风格绑定快照</h3>
+          <h3 className="text-sm font-medium">文风配方（当前绑定）</h3>
           {binding.styleBinding === null ? (
-            <p className="mt-2 text-xs text-muted">本书无风格绑定快照。</p>
+            <p className="mt-2 text-xs text-muted">这本书还没绑定文风档案，生成时不会参考文风档案。</p>
           ) : (
             <>
               <p className="mt-1 text-xs text-muted">
-                主档 {binding.styleBinding.primaryProfileId}
-                {binding.styleBinding.auxProfileIds.length > 0 ? ` + 辅档 ${binding.styleBinding.auxProfileIds.join('、')}` : ''}
+                {`主参考《${nameOf(binding.styleBinding.primaryProfileId)}》＋辅助${binding.styleBinding.auxProfileIds.map((id) => `《${nameOf(id)}》`).join('')}`}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {Object.keys(binding.styleBinding.weights).length > 0
+                  ? `占比：${styleIds.map((id) => `《${nameOf(id)}》 ${weights[id]}`).join('、')}`
+                  : '（旧绑定：按贡献维数计权）'}
               </p>
               <div className="mt-2 flex flex-wrap gap-3 text-sm">
                 {(
                   [
-                    ['keep', '保持'],
-                    ['weights', '权重滑条'],
-                    ['dims', '维归属'],
-                    ['strip', '剥 MD 文本'],
+                    ['keep', '保持现状'],
+                    ['weights', '调整各档案占比'],
+                    ['dims', '逐维度选跟随哪本档案'],
                   ] as Array<[StyleChoice, string]>
                 ).map(([value, label]) => (
                   <label key={value} className="flex items-center gap-1.5">
@@ -172,96 +184,112 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
                       checked={styleChoice === value}
                       disabled={busy}
                       onChange={() => setStyleChoice(value)}
-                      aria-label={`风格偏向：${label}`}
+                      aria-label={`文风调整：${label}`}
                     />
                     {label}
                   </label>
                 ))}
               </div>
               {styleChoice === 'weights' && (
-                <div className="mt-2 space-y-1">
-                  {styleIds.map((id) => (
-                    <label key={id} className="flex items-center gap-2 text-xs">
-                      <span className="w-24 truncate">{id}</span>
-                      <input
-                        type="range"
-                        min={1}
-                        max={100}
-                        value={weights[id] ?? 1}
-                        aria-label={`权重：${id}`}
-                        onChange={(e) => setWeights((w) => ({ ...w, [id]: Number(e.target.value) }))}
-                      />
-                      <span>{weights[id] ?? 1}</span>
-                    </label>
-                  ))}
-                </div>
+                <>
+                  <p className="mt-2 text-xs text-muted">数字越大越像那本档案</p>
+                  <div className="mt-2 space-y-1">
+                    {styleIds.map((id) => (
+                      <label key={id} className="flex items-center gap-2 text-xs">
+                        <span className={`w-24 truncate ${binding.profileNames?.[id] ? '' : 'text-muted'}`} title={id}>{nameOf(id)}</span>
+                        <input
+                          type="range"
+                          min={1}
+                          max={100}
+                          value={weights[id] ?? 1}
+                          aria-label={`占比：${nameOf(id)}`}
+                          onChange={(e) => setWeights((w) => ({ ...w, [id]: Number(e.target.value) }))}
+                        />
+                        <span>{weights[id] ?? 1}</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
               )}
               {styleChoice === 'dims' && (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {Object.keys(binding.styleBinding.dimsSource).map((dim) => (
-                    <label key={dim} className="flex items-center gap-2 text-xs">
-                      <span className="w-20 truncate">{dim}</span>
-                      <select
-                        className={`${selectBase} w-full`}
-                        value={dimsSource[dim] ?? ''}
-                        aria-label={`维归属：${dim}`}
-                        onChange={(e) => setDimsSource((d) => ({ ...d, [dim]: e.target.value }))}
-                      >
-                        {styleIds.map((id) => (
-                          <option key={id} value={id}>
-                            {id}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
-                </div>
+                <>
+                  <p className="mt-2 text-xs text-muted">为每个风格维度单独指定跟随哪本档案</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {Object.keys(binding.styleBinding.dimsSource).map((dim) => (
+                      <label key={dim} className="flex items-center gap-2 text-xs">
+                        <span className="w-20 truncate">{dim}</span>
+                        <select
+                          className={`${selectBase} w-full`}
+                          value={dimsSource[dim] ?? ''}
+                          aria-label={`跟随：${dim}`}
+                          onChange={(e) => setDimsSource((d) => ({ ...d, [dim]: e.target.value }))}
+                        >
+                          {styleIds.map((id) => (
+                            <option key={id} value={id} title={id}>
+                              {nameOf(id)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </>
               )}
             </>
           )}
         </section>
 
-        {/* planner 参考类三行：只给绑/不绑 + 优先权附注 */}
+        {/* planner 参考类三行：作为参考/不作为参考 + 解绑永久生效说明 */}
         <section className="mt-4">
-          <h3 className="text-sm font-medium">档案参考（planner）</h3>
-          <p className="mt-1 text-xs text-muted">大纲卡落地格恒优先，档案只作参考</p>
+          <h3 className="text-sm font-medium">大纲阶段参考的档案</h3>
+          <p className="mt-1 text-xs text-muted">这里只决定"写大纲"时参考什么；成文风格由上面的文风配方决定，正文写法仍以大纲卡为准。</p>
           <ul className="mt-2 space-y-2">
-            {PLANNER_ROWS.map((row) => (
-              <li key={row.key} className="flex items-center gap-4 text-sm">
-                <span className="w-20">{row.label}</span>
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name={`planner-${row.key}`}
-                    checked={plannerBound[row.key]}
-                    disabled={busy}
-                    aria-label={`${row.label}：绑`}
-                    onChange={() => setPlannerBound((p) => ({ ...p, [row.key]: true }))}
-                  />
-                  绑
-                </label>
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name={`planner-${row.key}`}
-                    checked={!plannerBound[row.key]}
-                    disabled={busy}
-                    aria-label={`${row.label}：不绑`}
-                    onChange={() => setPlannerBound((p) => ({ ...p, [row.key]: false }))}
-                  />
-                  不绑
-                </label>
-              </li>
-            ))}
+            {PLANNER_ROWS.map((row) => {
+              const id = binding[row.key];
+              const hasBinding = id !== null;
+              return (
+                <li key={row.key} className="flex items-center gap-4 text-sm">
+                  <span className="w-20">{row.label}</span>
+                  {hasBinding ? (
+                    <span title={id}>{`《${nameOf(id)}》`}</span>
+                  ) : (
+                    <span className="text-xs text-muted">{`未绑定${row.label}`}</span>
+                  )}
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={`planner-${row.key}`}
+                      checked={plannerBound[row.key]}
+                      disabled={busy || !hasBinding}
+                      aria-label={`${row.label}：作为参考`}
+                      onChange={() => setPlannerBound((p) => ({ ...p, [row.key]: true }))}
+                    />
+                    作为参考
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={`planner-${row.key}`}
+                      checked={!plannerBound[row.key]}
+                      disabled={busy || !hasBinding}
+                      aria-label={`${row.label}：不作为参考`}
+                      onChange={() => setPlannerBound((p) => ({ ...p, [row.key]: false }))}
+                    />
+                    不作为参考
+                  </label>
+                </li>
+              );
+            })}
           </ul>
+          <p className="mt-2 text-xs text-muted">选「不作为参考」= 永久解除这本书与该档案的绑定，之后每次生成都不再参考它；要重新绑定，请到「蒸馏」页里对应档案的绑定框。</p>
         </section>
 
         {/* fewshot 只读展示，无控件 */}
-        <p className="mt-4 text-xs text-muted">文风示例注入：{binding.styleFewshotOn ? '开' : '关'}（门内只读，如需修改请回书籍设置面板）</p>
+        <p className="mt-4 text-xs text-muted">文风示例注入：{binding.styleFewshotOn ? '开' : '关'}（这里只能看，要开关请到书详情页「风格」节的「风格档案」面板）</p>
 
         {error ? (
           <p role="alert" className="mt-4 text-danger text-xs">
-            确认失败（已整体回滚，未入队）：{error}——可调整后重试，或取消（取消零写）。
+            {error === STALE_GATE_MESSAGE ? STALE_GATE_MESSAGE : `保存失败：${error}。这次什么都没改、也没开始生成，可以再试一次，或点取消离开。`}
           </p>
         ) : null}
 
@@ -270,12 +298,12 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
             <input
               type="checkbox"
               className={checkboxBase}
-              aria-label="不再提示（当前注入面不变时）"
+              aria-label="以后生成前不再弹这个确认（参考资料一有变动还会再提醒）"
               checked={suppress}
               disabled={busy}
               onChange={(e) => setSuppress(e.target.checked)}
             />
-            不再提示（当前注入面不变时）
+            以后生成前不再弹这个确认（参考资料一有变动还会再提醒）
           </label>
           <div className="ml-auto flex gap-2">
             <Button variant="secondary" disabled={busy} onClick={onCancel}>

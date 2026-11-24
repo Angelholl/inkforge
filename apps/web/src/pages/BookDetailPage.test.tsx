@@ -58,6 +58,7 @@ const GATE_SHOW_REPORT = {
     plotProfileId: null,
     spectrumProfileId: null,
     imitationProfileId: null,
+    profileNames: {},
   },
 };
 

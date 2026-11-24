@@ -1,5 +1,8 @@
-import { api } from './api/client';
+import { api, apiErrorText } from './api/client';
 import type { FusionGateReportDto, FusionTensionDto, FusionGateConfirmBody } from '@inkforge/shared';
+
+/** 409 stale 指引文案单一来源：组件按判等渲染整句、无「保存失败：」前缀。 */
+export const STALE_GATE_MESSAGE = '这本书的参考资料刚在别处被改动，本次确认的内容已经过期。请点取消，再重新点生成，门会刷新。';
 
 /** 门视图状态：宿主只渲染以下字段，不含任何引擎/裁决逻辑（前端零引擎钉）。 */
 export interface GateView {
@@ -56,14 +59,17 @@ export function startRunWithGate(bookId: string, startFn: () => Promise<void>, m
         mount.patch({ busy: true });
         void (async () => {
           try {
-            // 顺序钉：confirm 请求完成（200）后才调 startFn
+            // 顺序钉：confirm 请求完成（200）后才调 startFn；指纹原样回传供服务端 409 守卫
+            body.fingerprint = report.fingerprint;
             await api.confirmFusionGate(bookId, body);
             await startFn();
             finish('resolve');
           } catch (e) {
             // 主审直修③：失败=整体回滚未入队——门保持打开，错误进门内，可重试可取消
+            // 409=参考资料在他处变动（stale）→ 整句指引；其余走 client 的 error 还原
             busy = false;
-            mount.patch({ busy: false, error: e instanceof Error ? e.message : String(e) });
+            const msg = e instanceof Error ? e.message : String(e);
+            mount.patch({ busy: false, error: /→ 409:/.test(msg) ? STALE_GATE_MESSAGE : apiErrorText(e) });
           }
         })();
       };
