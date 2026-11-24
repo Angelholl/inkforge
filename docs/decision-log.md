@@ -629,3 +629,14 @@
 **活体冒烟与追卡：** 用 owner 真实文件《少年阿磊》世界观剥节稿（v6 母稿剥平残稿）重放：书名/世界观/分级制提示落对，但大纲仍 0 卷 0 卡——暴露计划外输入形态（关键词非行首节标题、编号前缀卷行、全角｜拍平表、年份串假 range）；人物/伏笔 0 系该稿本无对应节，非识别失败。追卡 TXT-02 按补录规格 S2a/S4a–e 修大纲面（计划真值=docs/plans/2026-11-24-settings-import-plaintext.md 补录节；卡=docs/design/card-2026-11-24-txt02-flattened-forms.md）。挂账：剥平稿「N. 非关键词短标题」以编号卡形态出现（撞章号被去重）视真实读数再决；短散文裸名残余面见计划挂账。
 
 **TXT-02 收口补记（同日）：** TXT-02 卡 e3c04f9 验收推清（主审亲跑定向 54/全量 730/链零全绿；执行者 S2a 字符类补「全书」系计划示例自洽修正，采纳）。真实剥节稿重放再暴露三残留→主审直修 6ee6612（红3→绿57，全量 733）：倒装卷行拒冒号尾防引擎行假卷、字母弧段成阶段、plain 散行兜底拒长句/句读收尾。剥节稿终读数 3 卷 17 阶段 23 卡全带落地格零 warning（卷二/三 0 卡系母稿无逐章行，非失败）。另按 owner 需求交付《少年阿磊-完整剥平稿-1124.txt》测试稿（同目录）：42 人物卡/8 伏笔/文风/矩阵全识别、consumed 五节、warnings 空。基线 710→**733**。开放：owner 装机或 dev 环境真实导入两点位（剥节稿+完整稿）。
+
+## DEC-2026-1124-03 [主模型亲持·owner 选项确认] 融合门可读性改造（档案名 + 全门白话化 + 陈旧指纹守卫，2026-11-24）
+
+**背景：** owner 装机实测发截图反馈「让人无法理解」，三点位：①「风格绑定快照」裸显 32 位 UUID，分不清到底是哪本档案；②四选项「保持/权重滑条/维归属/剥 MD 文本」看不懂；③「档案参考（planner）」的「绑/不绑」不知道选完风格往哪边靠。code-reader 核实事实面：门数据唯一来源 `GET /fusion-gate`（`routes.ts:1317-1370` 组 binding），两调用页（`BookDetailPage.tsx:1060`、`NewBookIdeaPage.tsx:334`）只有风格档案列表、无 plot/光谱/仿写列表；服务端有现成按 id 查名 repository（`plot.ts:44`/`spectrum.ts:44`/`imitation.ts:61`/`style_profiles` 先例 `routes.ts:1302`）；confirm 是**持久写**（`fusion/apply.ts:38-136` 单事务写 books 与 book_style_profiles），「不绑」=永久解除绑定、设置面板 Chip 同步消失；指纹输入七键（`fusion/fingerprint.ts:8-15`）不含名称。
+
+**裁决（owner 2026-11-24 选项确认，两项均取推荐项）：**
+1. **风格区四选砍三选**：删「剥 MD 文本」假选项，改「保持现状 / 调整各档案占比 / 逐维度选跟随哪本档案」，正文残留只由上方片段勾选唯一决定。decision-critic 已证等价（组件 `:62` 两条路同写 `body.description = report.previewDescription`，strip 从不写 styleBinding），并顺带消除非 MD 书 `previewDescription` 为空串时选 strip 会把简介写空的隐患（`routes.ts:1339-1355`）。
+2. **名称走服务端 DTO**：`FusionGateReportDto.binding` 增 `profileNames: Record<string,string>`（查不到的 id 不进 map，**不入指纹**），`FusionGateConfirmBody` 增可选 `fingerprint`；服务端 confirm 时与当下注入面指纹比对，不一致 → 409 零写（守卫在路由层、事务启动之前，`apply.ts`/`fingerprint.ts` 零改动）。critic 指出既有缺陷（非本次引入）：GET 弹门→POST confirm 之间无指纹校验，门悬停期间别处改绑定会在旧快照上静默覆盖新设置（TOCTOU，概率低/影响高）——本次正动 DTO，顺带修成本最低，故采纳。
+3. **planner 行**：显示《绑定档案名》，「绑/不绑」改「作为参考/不作为参考」，写明真实后果（永久解除、之后每次生成都不再参考它）；无绑定的行禁用并标「未绑定X档案」。重绑指引取**精简版**「要重新绑定，请到「蒸馏」页里对应档案的绑定框」——critic 判原拟「恢复请到书籍设置」失实（BookDetailPage 无三类重绑 UI，真实入口=`App.tsx:55` 导航「蒸馏」→ `DistillPage.tsx:49` 三节 + `DistillProfilesShell.tsx:283-287` 绑定框），三节全名与绑定框占位名的读码存证保留在计划证据表、屏上不堆七八十字。全门九区块文案白话化（副标题/张力横幅/A 类节与 verdict 三态/风格区/fewshot/错误回显/「不再提示」）+ 标题区滚动 sticky。
+
+**执行安排：** 计划真值=`docs/plans/2026-11-24-fusion-gate-readability.md`（code-planner 产出 → critic 评议 → owner 选项确认 → 主审就地精简 #5f 落档）。两卡串行：FG-A 服务端（`packages/shared/src/fusion.ts` + `apps/server/src/http/schemas.ts` + `routes.ts` + `test/http/fusion-gate.test.ts` 五用例先红后绿）、FG-B 前端（`FusionGateDialog.tsx` + `fusionGate.ts` + 旧钉 9 处随迁 + 新 6 例）。通道=opencode/hy4-flash-free（限时窗 DEC-2026-11-18-01 内、非禁入型，`dispatch_guard --check` exit0）。测试基线起点=本轮实跑（最近存证 ≥733，只增不减）。GUI 真实测试一律延批次收口由 owner 一次做（11-24 令），卡级验证链照旧。
