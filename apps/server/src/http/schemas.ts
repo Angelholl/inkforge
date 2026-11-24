@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DIM_SOURCE_COEXIST, STYLE_DIMENSIONS } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_DIMENSIONS } from '@inkforge/shared';
 
 export const createBookSchema = z.object({
   title: z.string().min(1),
@@ -100,20 +100,24 @@ export const styleBindSchema = z
     if (new Set(aux).size !== aux.length) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '辅档案不可重复勾选' });
     }
-    // 规则 5：dimsSource 键 ∈ 七维；值 ∈ 主∪辅 ∪ {共存哨兵}（DEC-2026-1118-03）
+    // 规则 5：dimsSource 键 ∈ 七维；值 ∈ 主∪辅 ∪ {共存哨兵}（DEC-2026-1118-03）；另允许 DIM_SOURCE_NONE（该维不采用任何档案风格，DEC-2026-1124-04）
     const allowed = new Set([v.primaryProfileId, ...aux]);
     for (const [dim, src] of Object.entries(v.dimsSource ?? {})) {
       if (!(STYLE_DIMENSIONS as readonly string[]).includes(dim)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `未知风格维度：${dim}` });
-      } else if (src !== DIM_SOURCE_COEXIST && !allowed.has(src)) {
+      } else if (src !== DIM_SOURCE_COEXIST && src !== DIM_SOURCE_NONE && !allowed.has(src)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `维度来源必须在已勾选档案中：${dim}` });
       }
     }
     // 规则 8（DEC-2026-1117-05）：weights 键集恰等绑定全集且 Σ=100（客户端归一后提交，服务端只校验不重归一）
     if (v.weights !== undefined) {
+      // 空 weights=legacy 按贡献维数计权（DEC-2026-1124-04）：放行、不动权重；
+      // 落盘链 apply.ts:77 / routes.ts:857 空→undefined、buildStyleBundle(merge.ts:92) 不写键
       const expected = new Set([v.primaryProfileId, ...aux]);
       const got = Object.keys(v.weights);
-      if (got.length !== expected.size || !got.every((id) => expected.has(id))) {
+      if (Object.keys(v.weights).length === 0) {
+        // 跳过键集/Σ 校验（legacy 语义）
+      } else if (got.length !== expected.size || !got.every((id) => expected.has(id))) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weights'], message: '比例键集必须恰为基准档案与辅档案全集' });
       } else if (Object.values(v.weights).reduce((s, n) => s + n, 0) !== 100) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weights'], message: '比例之和必须为 100' });
@@ -382,19 +386,22 @@ export const fusionGateConfirmSchema = z
         if (new Set(v.auxProfileIds).size !== v.auxProfileIds.length) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['auxProfileIds'], message: '辅档案不可重复勾选' });
         }
-        // 沿抄规则 5：dimsSource 键 ∈ 七维，值 ∈ 主∪辅 ∪ {共存哨兵}
+        // 沿抄规则 5：dimsSource 键 ∈ 七维，值 ∈ 主∪辅 ∪ {共存哨兵}；另允许 DIM_SOURCE_NONE（该维不采用任何档案风格，DEC-2026-1124-04）
         const allowed = new Set([v.primaryProfileId, ...v.auxProfileIds]);
         for (const [dim, src] of Object.entries(v.dimsSource)) {
           if (!(STYLE_DIMENSIONS as readonly string[]).includes(dim)) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `未知风格维度：${dim}` });
-          } else if (src !== DIM_SOURCE_COEXIST && !allowed.has(src)) {
+          } else if (src !== DIM_SOURCE_COEXIST && src !== DIM_SOURCE_NONE && !allowed.has(src)) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dimsSource', dim], message: `维度来源必须在已勾选档案中：${dim}` });
           }
         }
         // 沿抄规则 8：weights 键集恰等绑定全集且 Σ=100（服务端只校验不重归一）
+        // 空 weights=legacy 按贡献维数计权（DEC-2026-1124-04）：放行、不动权重；非空规则不变
         const expected = new Set([v.primaryProfileId, ...v.auxProfileIds]);
         const got = Object.keys(v.weights);
-        if (got.length !== expected.size || !got.every((id) => expected.has(id))) {
+        if (Object.keys(v.weights).length === 0) {
+          // 跳过键集/Σ 校验（legacy 语义）
+        } else if (got.length !== expected.size || !got.every((id) => expected.has(id))) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weights'], message: '比例键集必须恰为基准档案与辅档案全集' });
         } else if (Object.values(v.weights).reduce((s, n) => s + n, 0) !== 100) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weights'], message: '比例之和必须为 100' });

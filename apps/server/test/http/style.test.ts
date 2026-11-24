@@ -7,7 +7,7 @@ import { buildApp } from '../../src/app';
 import { createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
 import type { DistillJobDto, DistillStyleDraftDto } from '@inkforge/shared';
-import { DIM_SOURCE_COEXIST } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE } from '@inkforge/shared';
 
 let dir: string;
 let db: Database;
@@ -379,6 +379,73 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     for (const pid of [p1, p2]) {
       expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
     }
+  });
+
+  it('不采用哨兵（DEC-2026-1124-04）：dimsSource 值=__none__ 放行落库回显、快照含哨兵；非八维键/越权 id 仍 400', async () => {
+    const p1 = await newProfile('不采用主档');
+    const p2 = await newProfile('不采用辅档');
+    const book = await newBook('不采用书');
+
+    const bind = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, auxProfileIds: [p2], dimsSource: { ['对话']: DIM_SOURCE_NONE } },
+    });
+    expect(bind.statusCode).toBe(200);
+    const g = (await app.inject({ method: 'GET', url: `/api/books/${book.id}` })).json() as {
+      styleBinding: { dimsSource: Record<string, string> };
+      styleSnapshotJson: string;
+    };
+    expect(g.styleBinding.dimsSource['对话']).toBe('__none__');
+    expect(g.styleSnapshotJson).toContain('__none__');
+
+    // 哨兵放行不放宽其余校验：非八维键、越权 id 照旧 400
+    const badDim = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, dimsSource: { ['语感']: DIM_SOURCE_NONE } },
+    });
+    expect(badDim.statusCode).toBe(400);
+    expect((badDim.json() as { error: string }).error).toContain('未知风格维度');
+    const badId = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, dimsSource: { ['对话']: 'no-such-profile' } },
+    });
+    expect(badId.statusCode).toBe(400);
+    expect((badId.json() as { error: string }).error).toContain('维度来源必须在已勾选档案中');
+
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
+    for (const pid of [p1, p2]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
+
+  it('空 weights={}（DEC-2026-1124-04）：legacy 语义放行 200；非空 weights 规则不变（Σ≠100 → 400）', async () => {
+    const p1 = await newProfile('空权重主档');
+    const book = await newBook('空权重书');
+
+    const ok = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, dimsSource: {}, weights: {} },
+    });
+    expect(ok.statusCode).toBe(200);
+    const g = (await app.inject({ method: 'GET', url: `/api/books/${book.id}` })).json() as {
+      styleBinding: { weights: Record<string, number> };
+    };
+    expect(g.styleBinding.weights).toEqual({});
+
+    const bad = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, weights: { [p1]: 50 } },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect((bad.json() as { error: string }).error).toContain('比例之和必须为 100');
+
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
+    expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${p1}` })).statusCode).toBe(200);
   });
 
   it('多绑校验矩阵：超 4 档案/主不在勾选/维度来源越权/未知维度/主辅重复 → 400 人话', async () => {

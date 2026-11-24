@@ -57,7 +57,7 @@ function useActiveSection(enabled: boolean): string {
   }, [enabled]);
   return active;
 }
-import { DIM_SOURCE_COEXIST, STYLE_DIMENSIONS } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_DIMENSIONS } from '@inkforge/shared';
 import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
 
 /**
@@ -297,10 +297,11 @@ function StyleBindPanel({
                   );
                 })}
                 {ordered.length >= 2 && <option value={DIM_SOURCE_COEXIST}>共存（各档案拼接）</option>}
+                <option value={DIM_SOURCE_NONE}>不采用档案风格（按正文走）</option>
               </select>
             </label>
           ))}
-          <p className="mt-1 w-full text-xs text-faint">共存＝该维文本按绑定序（主→辅）拼接各勾选档案的非空文本，重复段去重。</p>
+          <p className="mt-1 w-full text-xs text-faint">共存＝该维文本按绑定序（主→辅）拼接各勾选档案的非空文本，重复段去重。不采用＝该维不注入任何档案画像，按正文与设定写。</p>
         </div>
       </details>
       {/* 无主或零勾选禁用保存：防发 primaryProfileId:'' 吃 400（critic 2.4） */}

@@ -786,6 +786,41 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(body.dimsSource['对话']).toBe('p1'); // 其余维不受影响
   });
 
+  it('高级设置「不采用档案风格」选项（DEC-2026-1124-04）：单档案也在（八维各一），选存 → 该维=__none__；其余维不受影响', async () => {
+    installBindStub({});
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
+    (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
+    // 无条件渲染：单档案也在，八维各一个「不采用」选项
+    expect(screen.getAllByRole('option', { name: /不采用档案风格/ })).toHaveLength(8);
+    fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
+    fireEvent.change(screen.getByLabelText('维度来源-特色词汇'), { target: { value: '__none__' } });
+    expect((screen.getByLabelText('维度来源-特色词汇') as HTMLSelectElement).value).toBe('__none__');
+    fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    const body = JSON.parse(String(put.init?.body)) as { dimsSource: Record<string, string> };
+    expect(body.dimsSource['特色词汇']).toBe('__none__');
+    expect(body.dimsSource['对话']).toBe('p1'); // 其余维不受影响
+  });
+
+  it('哨兵回填（DEC-2026-1124-04）：styleBinding.dimsSource 带 __none__ → 高级设置下拉显示该项（非主档/空白）', async () => {
+    installBindStub({
+      bookOverride: {
+        styleProfileId: 'p1',
+        styleFewshotOn: false,
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: { 特色词汇: '__none__' } },
+      },
+    });
+    renderPanel();
+    await screen.findByLabelText('风格档案勾选-风格A');
+    (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
+    expect((screen.getByLabelText('维度来源-特色词汇') as HTMLSelectElement).value).toBe('__none__');
+  });
+
   it('上限 4：第 5 个档案勾选框 disabled；解绑发 {profileId:null}', async () => {
     installBindStub({});
     renderPanel();

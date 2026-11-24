@@ -542,4 +542,35 @@ describe('GET/POST /api/books/:bookId/fusion-gate（Task-04；指纹三态 + 单
     expect((res.json() as { results: Record<string, unknown> }).results.suppressed).toBe(true);
     expect(booksRepo.parseGenGate(booksRepo.getBook(db, bookId)!.genGateJson)?.suppressed).toBe(true);
   });
+
+  it('confirm 放行哨兵 + 空 weights（DEC-2026-1124-04）：200 applied、回显 weights={} 且快照无 weights 键', async () => {
+    // 两档案已在夹具内绑主+辅；PUT 重置为已知绑定后取指纹
+    const put = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${bookId}/style`,
+      payload: { primaryProfileId: PROFILE_A, auxProfileIds: [PROFILE_B], dimsSource: {}, weights: { [PROFILE_A]: 60, [PROFILE_B]: 40 } },
+    });
+    expect(put.statusCode).toBe(200);
+    const fp = ((await gate(bookId)).json() as { fingerprint: string }).fingerprint;
+    const res = await confirm(bookId, {
+      fingerprint: fp,
+      styleBinding: {
+        primaryProfileId: PROFILE_A,
+        auxProfileIds: [PROFILE_B],
+        dimsSource: { ['对话']: '__none__' },
+        weights: {},
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { results: Record<string, unknown> }).results.styleBinding).toBe('applied');
+
+    const g = (await app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as {
+      styleBinding: { dimsSource: Record<string, string>; weights: Record<string, number> };
+      styleSnapshotJson: string;
+    };
+    expect(g.styleBinding.weights).toEqual({});
+    expect(g.styleBinding.dimsSource['对话']).toBe('__none__');
+    const snap = JSON.parse(g.styleSnapshotJson) as Record<string, unknown>;
+    expect('weights' in snap).toBe(false);
+  });
 });
