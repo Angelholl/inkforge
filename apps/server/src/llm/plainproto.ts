@@ -363,7 +363,7 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
     let m = /^DIM\s*[:：]\s*([^:：]+)\s*[:：]\s*(.*)$/.exec(text);
     if (m) {
       const name = m[1].trim();
-      if (!(STYLE_DIMENSIONS as readonly string[]).includes(name)) errors.push(`未知维度: ${name}`);
+      if (!(STYLE_DIMENSIONS as readonly string[]).includes(name)) errors.push(`未知维度: ${name}（现行六维：语言与描写、特色词汇、结构与节奏、情感基调、尺度、叙述方式）`);
       else dims[name] = m[2].trim();
       continue;
     }

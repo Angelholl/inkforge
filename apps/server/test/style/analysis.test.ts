@@ -74,6 +74,14 @@ RULES: 禁用「不是…而是…」句式`);
     expect(garbage.axes['叙述温度']).toBe(0);
     expect(garbage.rules).toEqual([]);
   });
+
+  it('旧名 DIM 行不并入、缺维补空串；报错文案含「现行六维」（DM-2）', () => {
+    const messy = parseAnalysis(`DIM：情感基调：压抑中带暖意
+DIM: 描写: 厚`);
+    expect(messy.dims['情感基调']).toBe('压抑中带暖意');
+    expect(messy.dims['语言与描写']).toBe('');
+    expect(messy.errors.some((e) => e.includes('现行六维'))).toBe(true);
+  });
 });
 
 describe('pickFewShotAndHeldOut', () => {

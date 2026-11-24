@@ -291,3 +291,34 @@ NAMES: 阿美,林静如；阿美;林静如，阿美 林静如`);
     expect(r.errors.filter((e) => e.includes('含人名')).length).toBe(2);
   });
 });
+
+describe('parseAnalysis DIM 行只认现行六维名（DM-2）', () => {
+  it('① 旧名行记 error 不并入、缺行补空串；报错文案含「现行六维」', () => {
+    const r = parseAnalysis(`DIM: 对话: 甲
+DIM: 写作特点: 乙
+DIM: 语言与描写: 丙
+AXIS: 叙述温度: 50`);
+    expect(r.errors.some((e) => e.includes('未知维度: 对话'))).toBe(true);
+    expect(r.errors.some((e) => e.includes('现行六维'))).toBe(true);
+    expect(r.dims['语言与描写']).toBe('丙');
+    expect(r.dims['叙述方式']).toBe('');
+  });
+
+  it('② 六名齐行 → 六键全取值', () => {
+    const r = parseAnalysis(`DIM: 语言与描写: 甲
+DIM: 特色词汇: 乙
+DIM: 结构与节奏: 丙
+DIM: 情感基调: 丁
+DIM: 尺度: 戊
+DIM: 叙述方式: 己`);
+    expect(r.dims).toEqual({
+      语言与描写: '甲',
+      特色词汇: '乙',
+      结构与节奏: '丙',
+      情感基调: '丁',
+      尺度: '戊',
+      叙述方式: '己',
+    });
+    expect(r.errors).toEqual([]);
+  });
+});

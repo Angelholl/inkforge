@@ -102,7 +102,9 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
     const r = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '默认测', text: SAMPLE_TEXT } });
     expect(r.statusCode).toBe(202);
     await waitJob((r.json() as { jobId: string }).jobId);
-    expect(captured[0]).toContain('八维：节奏、对话、描写、情感基调、尺度、写作特点、特色词汇、章节结构');
+    expect(captured[0]).toContain('六维：语言与描写、特色词汇、结构与节奏、情感基调、尺度、叙述方式');
+    expect(captured[0]).toContain('心理距离'); // DM-2 叙述方式定向要求
+    expect(captured[0]).toContain('对话腔'); // DM-2 语言与描写定向要求
     expect(captured[0]).toContain('尺度维=直白度与性描写尺度的画像'); // DEC-2026-1122-03④ 露骨用词证据要求
     expect(captured[0]).toContain('六轴：叙述温度、语言密度、叙述者姿态、节奏、幽默、情绪表达');
   });

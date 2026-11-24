@@ -82,6 +82,54 @@ describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
     expect(n.n).toBe(0);
   });
 
+  it('summarizer 旧名 DIM 行：不并入且缺维补空串、job 不失败；新名行取值（DM-2）', async () => {
+    let canned = 'DIM: 写作特点: 短句为主\nRULES: 平均句长 10-20 字。';
+    const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-style-http-dim-'));
+    const config2 = loadConfig({ STRATA_BASE_URL: 'http://127.0.0.1:47831/v1', STRATA_API_KEY: 'strata', STRATA_MODEL: 'iq3_xxs', INKFORGE_DATA_DIR: d2 });
+    const db2 = openDb(path.join(config2.dataDir, 'inkforge.db'));
+    const app2 = await buildApp({
+      config: config2,
+      provider: createMockProvider({ draft: { text: '样章。' }, qc: { text: '' }, summarize: { text: '摘要。' } }),
+      summarizerProvider: createMockProvider({ summarize: { textFn: () => canned } }),
+      db: db2,
+      inlineQueue: true,
+    });
+    const run = async (): Promise<DistillStyleDraftDto> => {
+      const r = await app2.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '旧名测', text: SAMPLE_TEXT } });
+      expect(r.statusCode).toBe(202);
+      const jobId = (r.json() as { jobId: string }).jobId;
+      const deadline = Date.now() + 30000;
+      for (;;) {
+        const g = await app2.inject({ method: 'GET', url: `/api/style-profiles/jobs/${jobId}` });
+        expect(g.statusCode).toBe(200);
+        const job = g.json() as DistillJobDto;
+        if (job.status === 'done') return job.result as DistillStyleDraftDto;
+        if (job.status === 'failed') throw new Error(`蒸馏 job 失败：${job.error}`);
+        if (Date.now() > deadline) throw new Error(`蒸馏 job 未收敛：${JSON.stringify(job)}`);
+        await new Promise((res) => setTimeout(res, 20));
+      }
+    };
+    try {
+      const oldName = await run();
+      expect(oldName.analysis.dims['叙述方式']).toBe('');
+      canned = 'DIM: 写作特点: 短句为主\nDIM: 叙述方式: 统计式幽默\nRULES: 平均句长 10-20 字。';
+      const both = await run();
+      expect(both.analysis.dims['叙述方式']).toBe('统计式幽默');
+    } finally {
+      await app2.close();
+      try {
+        db2.close();
+      } catch {
+        /* ignore */
+      }
+      try {
+        fs.rmSync(d2, { recursive: true, force: true });
+      } catch {
+        /* Windows 锁瞬态 */
+      }
+    }
+  });
+
   it('distill 参数校验：temperature 越界 / maxSegments 越界 / 空样本 → 400；zod 400 人话化（回归 owner 反馈）', async () => {
     const t1 = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: 'x', text: SAMPLE_TEXT, temperature: 2 } });
     expect(t1.statusCode).toBe(400);
