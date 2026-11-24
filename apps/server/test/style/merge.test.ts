@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DIM_SOURCE_COEXIST, STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
 import type { StyleSample } from '../../src/style/distill';
 import {
   buildStyleBundle,
@@ -572,5 +572,25 @@ describe('七维共存（DEC-2026-1118-03）', () => {
     const m = mergeStyleProfiles(b, 1);
     expect(m.axes['叙述温度']).toBe(64); // (60×70+40×56)/100=64.4→64
     expect(m.dims['特色词汇']).toBe('A词汇；B词汇');
+  });
+});
+
+describe('七维不采用（DEC-2026-1124-04）', () => {
+  it('哨兵维空文本零贡献：特色词汇=DIM_SOURCE_NONE → 该维恒空，其余维照常；axes/samples 与「来源文本空」对照组全等，对照组回落主档文本（分界钉）', () => {
+    const profiles = {
+      pA: prof({ dims: { 特色词汇: 'A词汇', 节奏: 'A节奏' }, axes: { ...fullAxes, 叙述温度: 70 } }),
+      pB: prof({ dims: { 特色词汇: '', 节奏: 'B节奏' }, axes: { ...fullAxes, 叙述温度: 56 } }), // pB 特色词汇文本空
+    };
+    const sent = mergeStyleProfiles(
+      bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 特色词汇: DIM_SOURCE_NONE, 节奏: 'pB' }, profiles }), 1,
+    );
+    expect(sent.dims['特色词汇']).toBe(''); // 哨兵维空文本，不回落主档
+    expect(sent.dims['节奏']).toBe('B节奏'); // 其余维不受影响
+    const ctrl = mergeStyleProfiles(
+      bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 特色词汇: 'pB', 节奏: 'pB' }, profiles }), 1,
+    );
+    expect(sent.axes).toEqual(ctrl.axes); // 哨兵零贡献 ≈ 该维来源文本空（对照）→ 加权不受影响
+    expect(sent.samples.map((s) => s.id)).toEqual(ctrl.samples.map((s) => s.id)); // 席位不受影响
+    expect(ctrl.dims['特色词汇']).toBe('A词汇'); // 对照分界：来源文本空→回落主档文本；哨兵→恒空
   });
 });

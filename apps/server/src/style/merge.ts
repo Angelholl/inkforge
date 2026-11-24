@@ -4,6 +4,7 @@
  * 0. 去重防御：auxProfileIds 滤除 primaryProfileId（同一档案不得双计权重与样本）。
  * 1. 七维来源判定：缺键/空串/值 ∉ {主∪辅} → primary（merge 内按 ids 全集解析；normalizeDimsSource 导出为「仅主合法」收窄形态，签名不含辅集合，勿用于多档案归一）。
  * 1'. 共存维（dimsSource[dim]=DIM_SOURCE_COEXIST，DEC-2026-1118-03）：按绑定序（主→辅）收集各档案该维 trim 非空文本、与已收段全等判重跳过，'；' 连接为该维文本；实际贡献=所有被收段档案（可多档案同记）。
+ * 1''. 不采用维（dimsSource[dim]=DIM_SOURCE_NONE，DEC-2026-1124-04）：该维空文本、零贡献，不回落。
  * 2. dims[dim]（单源维）：来源档案该维文本 trim 非空即用并记实际贡献；来源不在 profiles 或文本空 → 回落主档案该维文本（贡献=主）；仍空 → ''（贡献=无）。
  * 3. 权重（双分支，DEC-2026-1117-05）：bundle.weights 键集非空 → 加权路径 w_p=weights[p]（正有限数，缺键/非法=0，主保底废除）；缺席/空对象 → legacy 路径 w_p=实际贡献维数（每维给其贡献档案各 +1，共存维可多档案同加）、主 max(w,1) 保底（改前行为逐字节保留）。第 4/7 步消费方式不变。
  * 4. axes[axis]：参与集合 P = 该轴值为有限数字 且 w_p > 0 的档案；P 空 → 该轴不写入；否则 Math.round(Σ w_p·v / Σ w_p)。
@@ -16,7 +17,7 @@
  *    拼接顺序主在前辅按绑定序；全池空 → []。
  * 8. primaryMetricsJson = profiles[primary]?.metricsJson ?? ''。
  */
-import { DIM_SOURCE_COEXIST, STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import { getLatestProfile, type StyleSample } from './distill';
 import { pickStyleSamples } from './inject';
@@ -202,6 +203,13 @@ export function mergeStyleProfiles(bundle: StyleBundleV2, chapterNo: number): Me
       }
       dims[dim] = segs.join('；');
       contributors[dim] = contrib;
+      continue;
+    }
+    // 「不采用」哨兵（DEC-2026-1124-04）：该维不采用任何档案风格、按正文与设定走；
+    // 必须先于下方越权回落判定，否则 __none__ 被 validIds 三元静默回落主档（红线①）
+    if (raw === DIM_SOURCE_NONE) {
+      dims[dim] = '';
+      contributors[dim] = [];
       continue;
     }
     const src = typeof raw === 'string' && raw !== '' && validIds.has(raw) ? raw : primaryProfileId;

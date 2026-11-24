@@ -432,6 +432,60 @@ COMMENT: 节奏拖沓，需压缩。`;
     expect(contDraft.system).toContain('【文风画像】');
     expect(contDraft.user).toContain('前文腔调优先，文风档案作质感参照。');
   }, 60000);
+
+  it('不采用哨兵：特色词汇=__none__ → draft prompt 不含该维画像行，其余维照常（DEC-2026-1124-04）', async () => {
+    const bid = createBook(db, { title: '不采用哨兵测试书', description: '混合档案注入测试设定。' }).id;
+    db.prepare(
+      "INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      'none-ch',
+      bid,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '不采用哨兵注入测试', beats: [], mustHaveBeats: [], bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+    // 主档保留该维文本，哨兵须阻断回落主档（否则画像行仍进 prompt）；辅档同维文本在场但不采用
+    const dimsSource = { 写作特点: 'mix-aux', 特色词汇: '__none__', 章节结构: 'mix-aux' };
+    const bundle = buildStyleBundle({
+      primaryProfileId: 'mix-main',
+      auxProfileIds: ['mix-aux'],
+      dimsSource,
+      profiles: {
+        'mix-main': {
+          version: 1,
+          metricsJson: '{}',
+          rulesText: '主规则甲',
+          dims: { 节奏: '主节奏文本', 对话: '主对话文本', 描写: '主描写文本', 情感基调: '主情感基调文本', 特色词汇: '主特色词汇文本' },
+          axes: { 叙述温度: 70 },
+          terms: [],
+          samples: [
+            { id: 's1', text: '混合主样本一' },
+            { id: 's2', text: '混合主样本二' },
+          ],
+        },
+        'mix-aux': {
+          version: 1,
+          metricsJson: '',
+          rulesText: '辅规则乙',
+          dims: { 写作特点: '辅写作特点文本', 特色词汇: '辅特色词汇文本', 章节结构: '辅章节结构文本' },
+          axes: { 叙述温度: 56 },
+          terms: [],
+          samples: [{ id: 'a1', text: '辅样本一' }],
+        },
+      } satisfies Record<string, StyleProfileContent>,
+    });
+    setBookStyleBinding(db, bid, { primaryProfileId: 'mix-main', auxProfileIds: ['mix-aux'], dimsSource, weights: {} }, JSON.stringify(bundle));
+
+    const runId = runFor(bid);
+    const cap = capturing(createDefaultMockProvider());
+    const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    expect(outcome.status).toBe('done');
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.system).not.toContain('特色词汇：');
+    expect(draft.system).toContain('节奏：主节奏文本');
+  }, 60000);
 });
 
 describe('B3 入库分阈值 app_meta 覆盖（章级生效）', () => {

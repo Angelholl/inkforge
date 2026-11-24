@@ -202,6 +202,68 @@ describe('polishBenchmarks（混合档案基准）', () => {
     expect(rewrites).toHaveLength(3);
     expect(rewrites.some((c) => c.user.includes('灵力：代指法力'))).toBe(true);
   });
+
+  it('不采用哨兵：特色词汇=__none__ → merged 该维空、terms 与 rewrite 词表不受影响（DEC-2026-1124-04）', async () => {
+    const bid = createBook(db, { title: '校对不采用哨兵书', description: '修真。' }).id;
+    db.prepare(
+      "INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      'pb-none-ch',
+      bid,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '不采用哨兵校对测试', beats: [], mustHaveBeats: [], bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+    const ch = getChapter(db, bid, 1)!;
+    const v = appendChapterVersion(db, { chapterId: ch.id, kind: 'draft', content: '原始正文，包含「不是…而是…」套话句式。'.repeat(6) });
+    setCurrentVersion(db, ch.id, v.id);
+    // 主档保留该维文本，哨兵须阻断回落主档；辅档同维文本在场但不采用
+    const dimsSource = { 写作特点: 'pb-aux', 特色词汇: '__none__', 章节结构: 'pb-aux' };
+    const bundle = buildStyleBundle({
+      primaryProfileId: 'pb-main',
+      auxProfileIds: ['pb-aux'],
+      dimsSource,
+      profiles: {
+        'pb-main': {
+          version: 1,
+          metricsJson: '{}',
+          rulesText: '主规则',
+          dims: { 节奏: '主节奏', 对话: '主对话', 描写: '主描写', 情感基调: '主情感基调', 特色词汇: '主特色词汇文本' },
+          axes: {},
+          terms: [],
+          samples: [
+            { id: 's1', text: '主样本一' },
+            { id: 's2', text: '主样本二' },
+          ],
+        },
+        'pb-aux': {
+          version: 1,
+          metricsJson: '',
+          rulesText: '',
+          dims: { 写作特点: '辅写作特点', 特色词汇: '辅特色词汇文本', 章节结构: '辅章节结构' },
+          axes: {},
+          terms: [{ term: '灵力', note: '代指法力' }],
+          samples: [{ id: 'a1', text: '辅样本一' }],
+        },
+      } satisfies Record<string, StyleProfileContent>,
+    });
+    setBookStyleBinding(db, bid, { primaryProfileId: 'pb-main', auxProfileIds: ['pb-aux'], dimsSource, weights: {} }, JSON.stringify(bundle));
+
+    const book = booksRepo.getBook(db, bid)!;
+    const merged = mergeStyleProfiles(JSON.parse(book.styleSnapshotJson!) as Parameters<typeof mergeStyleProfiles>[0], 2);
+    expect(merged.dims['特色词汇']).toBe('');
+
+    const out = polishBenchmarks(db, book, 2);
+    expect(out.terms).toContainEqual({ term: '灵力', note: '代指法力' });
+
+    const runId = createRun(db, { bookId: bid, mode: 'generate', chapterScope: { from: 1, to: 1 }, kind: 'polish' }).id;
+    const cap = capturing(createDefaultMockProvider());
+    await runPolishChapter({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    const rewrites = cap.calls.filter((c) => c.step === 'rewrite');
+    expect(rewrites.some((c) => c.user.includes('灵力：代指法力'))).toBe(true);
+  });
 });
 
 function waitForDone(runId: string, timeoutMs = 15000): Promise<void> {
