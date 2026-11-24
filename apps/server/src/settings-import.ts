@@ -107,12 +107,14 @@ const PLAIN_KEYWORD_MAP: ReadonlyArray<readonly [string, string]> = [
   ['规则', '规则'],
 ];
 
-/** S2：行式节标题判定。命中返回 { bucket, body }，未命中返回 null。 */
+/** S2/S2a：行式节标题判定。命中返回 { bucket, body }，未命中返回 null。 */
 function plainSectionHeading(t: string): { bucket: string; body: string } | null {
   const braced = t.match(/^【(.+)】$/) ?? t.match(/^\[(.+)\]$/);
   const inner = braced !== null ? braced[1].trim() : t;
   const rest = inner
     .replace(/^(?:[〇零一二三四五六七八九十百千两\d]{1,4}\s*[、.．)）]\s*)?/, '')
+    // S2a：剥可选修饰前缀（三卷大纲→大纲、全书人物→人物）
+    .replace(/^[〇零一二三四五六七八九十百千两全书]{1,3}[卷部篇本集]?/, '')
     .trim();
   for (const [keyword, bucket] of PLAIN_KEYWORD_MAP) {
     if (!rest.startsWith(keyword)) continue;
@@ -122,6 +124,8 @@ function plainSectionHeading(t: string): { bucket: string; body: string } | null
     if (/^[：:]/.test(trimmed) && trimmed.slice(1).trim().length >= 2) {
       return { bucket, body: trimmed.slice(1).trim() };
     }
+    // S2a：整串全角括号注（≤24 字）→ 节标题，注文不入节体
+    if (/^（.+）$/.test(trimmed) && trimmed.length <= 24) return { bucket, body: '' };
     if (tail.length <= 8 && !/[。！？]/.test(tail)) return { bucket, body: '' };
   }
   return null;
@@ -561,10 +565,12 @@ function parseOutline(
     const t = rawLine.trim();
     if (t === '') continue;
     if (plain) {
+      // S4a：编号前缀只在卷分支内部尝试（1｜/1. /1 大一上 各走自身分支）
+      const volT = t.replace(/^\d{1,3}(?:\.\d{1,2})?[、.．]?\s*/, '');
       // 卷行两形态：第N卷/部/篇(分) 或 卷/部/篇第N（「第」起头或倒装，散文行不误命中）
-      const volFwd = t.match(/^第\s*([〇零一二三四五六七八九十百千两\d]{1,6})\s*(卷|部|篇)(分)?\s*[：:]?\s*(.*)$/);
+      const volFwd = volT.match(/^第\s*([〇零一二三四五六七八九十百千两\d]{1,6})\s*(卷|部|篇)(分)?\s*[：:]?\s*(.*)$/);
       const volInv = volFwd === null
-        ? t.match(/^([卷部篇])\s*(?:第\s*)?([〇零一二三四五六七八九十百千两\d]{1,6})\s*[：:]?\s*(.*)$/)
+        ? volT.match(/^([卷部篇])\s*(?:第\s*)?([〇零一二三四五六七八九十百千两\d]{1,6})\s*[：:]?\s*(.*)$/)
         : null;
       if (volFwd !== null || volInv !== null) {
         const rawN = volFwd !== null ? volFwd[1] : (volInv as RegExpMatchArray)[2];
@@ -583,10 +589,17 @@ function parseOutline(
             vbody = stripMd(bodyRaw.slice(open + 1, close)).trim();
           }
         }
+        // S4a：题面书名号（MD 先例）——题=第N卷 内文，》后余文入 body
+        const bm = bodyRaw.match(/^(.*?)《(.+?)》/);
+        if (bm !== null) {
+          head = `${bm[1].trim()} ${bm[2].trim()}`.trim();
+          vbody = bodyRaw.slice(bm[0].length).trim();
+        }
         const title = `第${nText}${unit}${hasFen ? '分' : ''} ${head}`.trim();
         vol = makeVolume(title, vbody);
         stage = null;
-        const rangeM = `${head} ${vbody}`.match(/(\d{1,3})\s*[–—-]\s*(\d{1,3})/);
+        // S4e：章后缀必在，年份串（1995.9–1999.6）不成假 range
+        const rangeM = `${head} ${vbody}`.match(/第?\s*(\d{1,3})\s*[–—-]\s*(\d{1,3})\s*章/);
         volRange = rangeM !== null ? { from: Number(rangeM[1]), to: Number(rangeM[2]) } : null;
         volRangeWarned = false;
         outlineLines.push(vbody !== '' ? `${title}（${vbody}）` : title);
@@ -615,6 +628,52 @@ function parseOutline(
         }
         stage = null;
         continue;
+      }
+      // S4b 弧/场合行：编号+空格+弧名｜... → 阶段（余格为场合池，不跑 extractCards；行后脱离阶段）
+      const arc = t.match(/^(\d{1,3})\s+([^｜\n]{2,40})｜/);
+      if (arc !== null) {
+        if (vol === null) vol = makeVolume(pendingSubTitle, '');
+        const cells = t.slice(arc[0].length).split(/[｜|]/).map((x) => x.trim()).filter((x) => x !== '');
+        const stDto: OutlineStageDto = {
+          title: arc[2].trim().replace(/[（(][^）)]*[）)]\s*$/, '').trim(),
+          body: cells.join('；'),
+          seq: vol.stages.length,
+          cards: [],
+        };
+        vol.stages.push(stDto);
+        stage = null;
+        continue;
+      }
+      // S4c 章号拍平行：区间 N–M｜题｜线｜落地 → 卡
+      const pipeRange = t.match(/^(\d{1,3})\s*[–—-]\s*(\d{1,3})[｜|](.+)$/);
+      if (pipeRange !== null) {
+        const cells = pipeRange[3].split(/[｜|]/).map((x) => x.trim());
+        const body = (cells.length >= 3 ? cells[2] : cells[1]) ?? '';
+        addCard({
+          title: cells[0] !== '' ? cells[0] : body.slice(0, 20),
+          body,
+          chapterFrom: Number(pipeRange[1]),
+          chapterTo: Number(pipeRange[2]),
+        });
+        continue;
+      }
+      // S4c 单章拍平行：N｜题｜线｜落地 → 卡
+      const pipeChap = t.match(/^(\d{1,3})[｜|](.+)$/);
+      if (pipeChap !== null) {
+        const cells = pipeChap[2].split(/[｜|]/).map((x) => x.trim());
+        const body = (cells.length >= 3 ? cells[2] : cells[1]) ?? '';
+        addCard({
+          title: cells[0] !== '' ? cells[0] : body.slice(0, 20),
+          body,
+          chapterFrom: Number(pipeChap[1]),
+          chapterTo: Number(pipeChap[1]),
+        });
+        continue;
+      }
+      // S4d 表头/池行前置门：含分隔符但首格非章号/章区间 → 整行跳过
+      if (/[｜|]/.test(t)) {
+        const firstCell = t.split(/[｜|]/)[0].trim();
+        if (!/^\d{1,3}$/.test(firstCell) && !/^\d{1,3}\s*[–—-]\s*\d{1,3}$/.test(firstCell)) continue;
       }
       // 编号行：章号按卷区间偏移；越界回退字面 n 并推全卷一条 warning
       const numLine = t.match(/^(\d{1,3})\s*[、.．]\s*(.*)$/);

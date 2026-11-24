@@ -666,3 +666,67 @@ describe('纯文本降级分节', () => {
     expect(splitCompendiumSections(PLAIN_FIXTURE)).toEqual([]);
   });
 });
+
+describe('真实剥平稿形态', () => {
+  it('Task-05 S2a 节标题放宽：三卷大纲/全书人物成节，剧情引擎库被拒', () => {
+    const threeVol = parseSettingsCompendium('5. 三卷大纲（场合配场；L＝轻、H＝重）');
+    expect(threeVol.consumedSections).toContain('大纲');
+
+    const engine = parseSettingsCompendium('9. 剧情引擎库（可无限扩充；新桥段带新具名角色时必须绑 ≥2 场并写明契机）');
+    expect(engine.consumedSections).toEqual([]);
+
+    const whole = parseSettingsCompendium('全书人物');
+    expect(whole.consumedSections).toContain('人物');
+  });
+
+  it('Task-05 S4a/S4e 卷行剥编号+书名号；年份串不成假 range，Task-03 卷区间回归', () => {
+    const d = parseSettingsCompendium(
+      '【大纲】\n5.1 卷一《大学篇》1995.9–1999.6（≥50 章，实排约 60 章）\n1. 甲',
+    );
+    const vols = d.outlineTree.volumes;
+    expect(vols).toHaveLength(1);
+    expect(vols[0].title).toBe('第1卷 大学篇');
+    expect(vols[0].body).toContain('1995.9–1999.6');
+    const cards = vols.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(cards.map((c) => c.chapterFrom)).toEqual([1]);
+    expect(d.warnings.some((w) => w.includes('不一致'))).toBe(false);
+
+    const legacy = parseSettingsCompendium('【大纲】\n第二卷 转折（第4-6章）\n1. 甲');
+    expect(legacy.outlineTree.volumes[0].body).toBe('第4-6章');
+    expect(legacy.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards)).map((c) => c.chapterFrom)).toEqual([4]);
+  });
+
+  it('Task-05 S4b/S4c 弧行成阶段不抽卡；单章拍平行取题/落地格', () => {
+    const d = parseSettingsCompendium(
+      '【大纲】\n1 大一上·入学与宿舍（1995.9–11，6 章）｜四人房下铺、磁卡公话｜L 王磊×阿泰 舍友线起｜钩：她替他盛了两碗汤\n1｜下铺｜L1｜H（室友展示：班长×周末来访女友）',
+    );
+    const stages = d.outlineTree.volumes.flatMap((v) => v.stages);
+    expect(stages[0].title).toBe('大一上·入学与宿舍');
+    expect(stages[0].body).toContain('四人房下铺');
+    expect(stages[0].body).toContain('钩：');
+    expect(stages[0].cards).toEqual([]);
+
+    const cards = stages.flatMap((s) => s.cards);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].title).toBe('下铺');
+    expect(cards[0].chapterFrom).toBe(1);
+    expect(cards[0].chapterTo).toBe(1);
+    expect(cards[0].body.startsWith('H（')).toBe(true);
+  });
+
+  it('Task-05 S4d 表头/池行五类跳过不成卡', () => {
+    const d = parseSettingsCompendium(
+      '【大纲】\n章｜标题｜线｜落地（峰值）\n弧（时段·章数）｜场合池｜落地配场｜新边入轨／章末钩\nL1 宿舍-校园线｜卷一｜学年局、联谊复演\n宿舍四人房·查勤·顶楼｜卷一主战场；制度即观众\n主角×老王｜5｜A·4｜A·5/7/12',
+    );
+    expect(d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards))).toEqual([]);
+  });
+
+  it('Task-05 S4c 区间拍平行：N–M｜题｜线｜落地 → 卡带 chapterTo', () => {
+    const d = parseSettingsCompendium('【大纲】\n24–26｜三连｜L2｜H（民宿三连：阿美×小林）');
+    const cards = d.outlineTree.volumes.flatMap((v) => v.stages.flatMap((s) => s.cards));
+    expect(cards).toHaveLength(1);
+    expect(cards[0].chapterFrom).toBe(24);
+    expect(cards[0].chapterTo).toBe(26);
+    expect(cards[0].title).toBe('三连');
+  });
+});
