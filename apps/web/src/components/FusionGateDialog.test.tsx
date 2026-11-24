@@ -32,7 +32,7 @@ const report: FusionGateReportDto = {
   headWindowWarn: false,
   hasArchive: true,
   binding: {
-    styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1', 尺度: 'sp1' }, weights: { sp1: 60, sp2: 40 } },
+    styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 结构与节奏: 'sp1', 尺度: 'sp1' }, weights: { sp1: 60, sp2: 40 } },
     styleFewshotOn: true,
     snapshotPresent: true,
     plotProfileId: 'pp1',
@@ -160,8 +160,8 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     expect(screen.getAllByTitle('sp1').map((el) => el.textContent)).toContain('示例主档案');
 
     fireEvent.click(screen.getByLabelText('文风调整：逐维度选跟随哪本档案'));
-    expect(screen.getByLabelText('跟随：节奏')).toBeTruthy();
-    const select = screen.getByLabelText('跟随：节奏') as HTMLSelectElement;
+    expect(screen.getByLabelText('跟随：结构与节奏')).toBeTruthy();
+    const select = screen.getByLabelText('跟随：结构与节奏') as HTMLSelectElement;
     expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['示例主档案', '示例辅档案', '不采用档案风格（按正文走）']);
   });
 
@@ -228,7 +228,7 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     const { container } = renderDialog({
       report: {
         ...report,
-        binding: { ...report.binding, styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1' }, weights: { sp1: 60 } } },
+        binding: { ...report.binding, styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 结构与节奏: 'sp1' }, weights: { sp1: 60 } } },
       },
     });
     expect(container.textContent).not.toContain('undefined');
@@ -256,7 +256,7 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     ...report,
     binding: {
       ...report.binding,
-      styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 节奏: 'sp1', 尺度: 'sp1' }, weights: {} },
+      styleBinding: { primaryProfileId: 'sp1', auxProfileIds: ['sp2'], dimsSource: { 结构与节奏: 'sp1', 尺度: 'sp1' }, weights: {} },
     },
   };
 

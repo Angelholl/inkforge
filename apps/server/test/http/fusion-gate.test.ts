@@ -557,7 +557,7 @@ describe('GET/POST /api/books/:bookId/fusion-gate（Task-04；指纹三态 + 单
       styleBinding: {
         primaryProfileId: PROFILE_A,
         auxProfileIds: [PROFILE_B],
-        dimsSource: { ['对话']: '__none__' },
+        dimsSource: { ['语言与描写']: '__none__' },
         weights: {},
       },
     });
@@ -569,7 +569,7 @@ describe('GET/POST /api/books/:bookId/fusion-gate（Task-04；指纹三态 + 单
       styleSnapshotJson: string;
     };
     expect(g.styleBinding.weights).toEqual({});
-    expect(g.styleBinding.dimsSource['对话']).toBe('__none__');
+    expect(g.styleBinding.dimsSource['语言与描写']).toBe('__none__');
     const snap = JSON.parse(g.styleSnapshotJson) as Record<string, unknown>;
     expect('weights' in snap).toBe(false);
   });

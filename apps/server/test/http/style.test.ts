@@ -16,8 +16,8 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 const SAMPLE_TEXT =
   '山风掠过松林，少年抬头望向远方。他说：“路还长。”夜色深沉，灯火摇曳。'.repeat(6);
 
-const ANALYSIS_TEXT = `DIM: 节奏: 短句为主，段落 3-6 行。
-DIM: 对话: 对话占比约三成，多短对答。
+const ANALYSIS_TEXT = `DIM: 结构与节奏: 短句为主，段落 3-6 行。
+DIM: 语言与描写: 对话占比约三成，多短对答。
 AXIS: 叙述温度: 72
 AXIS: 语言密度: 55
 RULES: 平均句长 10-20 字。
@@ -74,7 +74,7 @@ async function distill(name = '山风体'): Promise<DistillStyleDraftDto> {
 describe('蒸馏两步流（DEC-2026-1115-04 #7 确认门）', () => {
   it('distill → 202 登记 job，轮询到 done 得 draft（七维六轴+样本）且不入库', async () => {
     const draft = await distill();
-    expect(draft.analysis.dims['节奏']).toBe('短句为主，段落 3-6 行。');
+    expect(draft.analysis.dims['结构与节奏']).toBe('短句为主，段落 3-6 行。');
     expect(draft.analysis.axes['叙述温度']).toBe(72);
     expect(draft.analysis.rules.length).toBeGreaterThan(0);
     expect(draft.samples.length).toBeGreaterThan(0);
@@ -196,12 +196,36 @@ describe('档案详情端点（DEC-2026-1120-08 查看细节）', () => {
     expect(d.version).toBeGreaterThanOrEqual(1); // SAMPLE_TEXT 各用例共用 → 同 hash 版本族递增
     expect(typeof d.createdAt).toBe('string');
     expect(d.sourcePath.startsWith('inline:')).toBe(true);
-    expect(d.analysis.dims['节奏']).toBe('短句为主，段落 3-6 行。');
+    expect(d.analysis.dims['结构与节奏']).toBe('短句为主，段落 3-6 行。');
     expect(d.analysis.axes['叙述温度']).toBe(72);
     expect(d.analysis.rules).toEqual(['平均句长 10-20 字。', '对话占比 20%-40%。']);
     expect(d.analysis.terms).toEqual([]);
     expect(d.analysis.freqTerms).toEqual([]);
 
+    expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+  });
+
+  it('GET /:id 旧档案八维 rules_json → 详情 dims 恒六键、组内文本按旧表序「；」拼接（DM-1）', async () => {
+    const pid = 'legacy-dims-detail';
+    db.prepare(
+      'INSERT INTO style_profiles(id, name, source_path, source_hash, version, rules_json, samples_json, metrics_json, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+    ).run(
+      pid,
+      '旧维档案',
+      'src/legacy.txt',
+      'legacyhash',
+      1,
+      JSON.stringify({ rulesText: '', dims: { 节奏: '甲', 章节结构: '乙', 对话: '丙', 描写: '丁' }, axes: {}, terms: [] }),
+      '[]',
+      '{}',
+      new Date().toISOString(),
+    );
+    const r = await app.inject({ method: 'GET', url: `/api/style-profiles/${pid}` });
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as { analysis: { dims: Record<string, string> } };
+    expect(Object.keys(d.analysis.dims)).toHaveLength(6);
+    expect(d.analysis.dims['结构与节奏']).toBe('甲；乙');
+    expect(d.analysis.dims['语言与描写']).toBe('丙；丁');
     expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
   });
 
@@ -330,7 +354,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     const bind = await app.inject({
       method: 'PUT',
       url: `/api/books/${book.id}/style`,
-      payload: { primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['对话']: p2, ['节奏']: p3 } },
+      payload: { primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['语言与描写']: p2, ['结构与节奏']: p3 } },
     });
     expect(bind.statusCode).toBe(200);
     expect((bind.json() as { ok: boolean; styleProfileId: string }).styleProfileId).toBe(p1);
@@ -340,7 +364,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
       styleBinding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string> };
     };
     expect(g.styleProfileId).toBe(p1);
-    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['对话']: p2, ['节奏']: p3 }, weights: {} });
+    expect(g.styleBinding).toEqual({ primaryProfileId: p1, auxProfileIds: [p2, p3], dimsSource: { ['语言与描写']: p2, ['结构与节奏']: p3 }, weights: {} });
     const row = db.prepare('SELECT style_fewshot_on FROM books WHERE id = ?').get(book.id) as { style_fewshot_on: number };
     expect(row.style_fewshot_on).toBe(1); // 绑定/重绑置 1（DEC-2026-1122-03③）
 
@@ -371,7 +395,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     const bad = await app.inject({
       method: 'PUT',
       url: `/api/books/${book.id}/style`,
-      payload: { primaryProfileId: p1, dimsSource: { ['对话']: 'no-such-profile' } },
+      payload: { primaryProfileId: p1, dimsSource: { ['语言与描写']: 'no-such-profile' } },
     });
     expect(bad.statusCode).toBe(400);
 
@@ -389,14 +413,14 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     const bind = await app.inject({
       method: 'PUT',
       url: `/api/books/${book.id}/style`,
-      payload: { primaryProfileId: p1, auxProfileIds: [p2], dimsSource: { ['对话']: DIM_SOURCE_NONE } },
+      payload: { primaryProfileId: p1, auxProfileIds: [p2], dimsSource: { ['语言与描写']: DIM_SOURCE_NONE } },
     });
     expect(bind.statusCode).toBe(200);
     const g = (await app.inject({ method: 'GET', url: `/api/books/${book.id}` })).json() as {
       styleBinding: { dimsSource: Record<string, string> };
       styleSnapshotJson: string;
     };
-    expect(g.styleBinding.dimsSource['对话']).toBe('__none__');
+    expect(g.styleBinding.dimsSource['语言与描写']).toBe('__none__');
     expect(g.styleSnapshotJson).toContain('__none__');
 
     // 哨兵放行不放宽其余校验：非八维键、越权 id 照旧 400
@@ -410,7 +434,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     const badId = await app.inject({
       method: 'PUT',
       url: `/api/books/${book.id}/style`,
-      payload: { primaryProfileId: p1, dimsSource: { ['对话']: 'no-such-profile' } },
+      payload: { primaryProfileId: p1, dimsSource: { ['语言与描写']: 'no-such-profile' } },
     });
     expect(badId.statusCode).toBe(400);
     expect((badId.json() as { error: string }).error).toContain('维度来源必须在已勾选档案中');
@@ -459,7 +483,7 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
     const cases: Array<{ payload: Record<string, unknown>; msg: string }> = [
       { payload: { primaryProfileId: p1, auxProfileIds: [p2, p3, p4, p5] }, msg: '风格档案最多绑定 4 个' },
       { payload: { auxProfileIds: [p2] }, msg: '必须显式指定主风格' },
-      { payload: { primaryProfileId: p1, dimsSource: { ['对话']: p2 } }, msg: '维度来源必须在已勾选档案中' },
+      { payload: { primaryProfileId: p1, dimsSource: { ['语言与描写']: p2 } }, msg: '维度来源必须在已勾选档案中' },
       { payload: { primaryProfileId: p1, dimsSource: { ['语感']: p1 } }, msg: '未知风格维度' },
       { payload: { primaryProfileId: p1, auxProfileIds: [p1] }, msg: '主风格不可重复勾选' },
     ];

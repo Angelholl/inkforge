@@ -738,7 +738,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     );
   }
 
-  it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 八键 dimsSource + weights 均分', async () => {
+  it('风格多选面板：勾 2 档案保存 → PUT body 为 1 主 1 辅 + 六键 dimsSource + weights 均分', async () => {
     installBindStub({});
     renderPanel();
     fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
@@ -748,7 +748,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect((screen.getByLabelText('比例-风格A') as HTMLInputElement).value).toBe('50');
     expect((screen.getByLabelText('比例-风格B') as HTMLInputElement).value).toBe('50');
     (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
-    fireEvent.change(screen.getByLabelText('维度来源-对话'), { target: { value: 'p2' } });
+    fireEvent.change(screen.getByLabelText('维度来源-语言与描写'), { target: { value: 'p2' } });
     fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
     const put = await waitFor(() => {
       const c = calls.find((c) => c.url.endsWith('/api/books/b1/style') && c.init?.method === 'PUT');
@@ -758,21 +758,21 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({
       primaryProfileId: 'p1',
       auxProfileIds: ['p2'],
-      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 尺度: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
+      dimsSource: { 语言与描写: 'p2', 特色词汇: 'p1', 结构与节奏: 'p1', 情感基调: 'p1', 尺度: 'p1', 叙述方式: 'p1' },
       weights: { p1: 50, p2: 50 },
     });
   });
 
-  it('高级设置共存选项（DEC-2026-1118-03）：勾 2 档案时八维各追加「共存」，选共存保存 → 该维=__coexist__；单档案不出现', async () => {
+  it('高级设置共存选项（DEC-2026-1118-03）：勾 2 档案时六维各追加「共存」，选共存保存 → 该维=__coexist__；单档案不出现', async () => {
     installBindStub({});
     renderPanel();
     // 单档案：无共存选项
     fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
     (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
     expect(screen.queryByRole('option', { name: /共存/ })).toBeNull();
-    // 勾第 2 档案：八维各出现一个「共存」选项（DEC-2026-1122-03④ 七→八）
+    // 勾第 2 档案：六维各出现一个「共存」选项（DEC-2026-1122-03④ 七→八）
     fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
-    expect(screen.getAllByRole('option', { name: /共存/ })).toHaveLength(8);
+    expect(screen.getAllByRole('option', { name: /共存/ })).toHaveLength(6);
     fireEvent.change(screen.getByLabelText('维度来源-特色词汇'), { target: { value: '__coexist__' } });
     expect((screen.getByLabelText('维度来源-特色词汇') as HTMLSelectElement).value).toBe('__coexist__');
     fireEvent.click(screen.getByRole('button', { name: '保存绑定' }));
@@ -783,16 +783,16 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     });
     const body = JSON.parse(String(put.init?.body)) as { dimsSource: Record<string, string> };
     expect(body.dimsSource['特色词汇']).toBe('__coexist__');
-    expect(body.dimsSource['对话']).toBe('p1'); // 其余维不受影响
+    expect(body.dimsSource['语言与描写']).toBe('p1'); // 其余维不受影响
   });
 
-  it('高级设置「不采用档案风格」选项（DEC-2026-1124-04）：单档案也在（八维各一），选存 → 该维=__none__；其余维不受影响', async () => {
+  it('高级设置「不采用档案风格」选项（DEC-2026-1124-04）：单档案也在（六维各一），选存 → 该维=__none__；其余维不受影响', async () => {
     installBindStub({});
     renderPanel();
     fireEvent.click(await screen.findByLabelText('风格档案勾选-风格A'));
     (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
-    // 无条件渲染：单档案也在，八维各一个「不采用」选项
-    expect(screen.getAllByRole('option', { name: /不采用档案风格/ })).toHaveLength(8);
+    // 无条件渲染：单档案也在，六维各一个「不采用」选项
+    expect(screen.getAllByRole('option', { name: /不采用档案风格/ })).toHaveLength(6);
     fireEvent.click(screen.getByLabelText('风格档案勾选-风格B'));
     fireEvent.change(screen.getByLabelText('维度来源-特色词汇'), { target: { value: '__none__' } });
     expect((screen.getByLabelText('维度来源-特色词汇') as HTMLSelectElement).value).toBe('__none__');
@@ -804,7 +804,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     });
     const body = JSON.parse(String(put.init?.body)) as { dimsSource: Record<string, string> };
     expect(body.dimsSource['特色词汇']).toBe('__none__');
-    expect(body.dimsSource['对话']).toBe('p1'); // 其余维不受影响
+    expect(body.dimsSource['语言与描写']).toBe('p1'); // 其余维不受影响
   });
 
   it('哨兵回填（DEC-2026-1124-04）：styleBinding.dimsSource 带 __none__ → 高级设置下拉显示该项（非主档/空白）', async () => {
@@ -838,13 +838,13 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: null });
   });
 
-  it('已绑书初值渲染：binding 非空 → 勾选/基准档案/八维值全部落对（legacy 提示在场）', async () => {
+  it('已绑书初值渲染：binding 非空 → 勾选/基准档案/六维值全部落对（legacy 提示在场）', async () => {
     installBindStub({
       firstFrameUndefined: true,
       bookOverride: {
         styleProfileId: 'p1',
         styleFewshotOn: false,
-        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: { 对话: 'p2' } },
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: { 语言与描写: 'p2' } },
       },
     });
     renderPanel();
@@ -859,8 +859,8 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(screen.getByText('旧绑定：按贡献维数计权（保持原行为）')).toBeTruthy();
     expect((screen.getByLabelText('比例-风格A') as HTMLInputElement).value).toBe('');
     (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
-    expect((screen.getByLabelText('维度来源-对话') as HTMLSelectElement).value).toBe('p2');
-    expect((screen.getByLabelText('维度来源-节奏') as HTMLSelectElement).value).toBe('p1');
+    expect((screen.getByLabelText('维度来源-语言与描写') as HTMLSelectElement).value).toBe('p2');
+    expect((screen.getByLabelText('维度来源-结构与节奏') as HTMLSelectElement).value).toBe('p1');
     expect((screen.getByRole('button', { name: '保存绑定' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -903,7 +903,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
       bookOverride: {
         styleProfileId: 'p1',
         styleFewshotOn: false,
-        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: { 对话: 'p2' }, weights: {} },
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: ['p2'], dimsSource: { 语言与描写: 'p2' }, weights: {} },
       },
     });
     renderPanel();
@@ -921,7 +921,7 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({
       primaryProfileId: 'p1',
       auxProfileIds: ['p2', 'p3'],
-      dimsSource: { 节奏: 'p1', 对话: 'p2', 描写: 'p1', 情感基调: 'p1', 尺度: 'p1', 写作特点: 'p1', 特色词汇: 'p1', 章节结构: 'p1' },
+      dimsSource: { 语言与描写: 'p2', 特色词汇: 'p1', 结构与节奏: 'p1', 情感基调: 'p1', 尺度: 'p1', 叙述方式: 'p1' },
     });
   });
 

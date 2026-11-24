@@ -47,22 +47,22 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
     expect(m.primaryMetricsJson).toBe('');
   });
 
-  it('双档案按贡献维数加权取整：主 4 维 70 / 辅 3 维 56 → 64', () => {
-    const dimsA = { 节奏: 'A节奏', 对话: 'A对话', 描写: 'A描写', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
-    const dimsB = { 写作特点: 'B写作', 特色词汇: 'B词汇', 章节结构: 'B章节' } as Partial<Record<StyleDimension, string>>;
+  it('双档案按贡献维数加权取整：主 2 维 70 / 辅 3 维 56 → 62', () => {
+    const dimsA = { 语言与描写: 'A对话；A描写', 结构与节奏: 'A节奏', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 叙述方式: 'B写作', 特色词汇: 'B词汇', 结构与节奏: 'B章节' } as Partial<Record<StyleDimension, string>>;
     const b = bundle({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
-      dimsSource: { 写作特点: 'pB', 特色词汇: 'pB', 章节结构: 'pB' },
+      dimsSource: { 叙述方式: 'pB', 特色词汇: 'pB', 结构与节奏: 'pB' },
       profiles: {
         pA: prof({ dims: dimsA, axes: { ...fullAxes, 叙述温度: 70 } }),
         pB: prof({ dims: dimsB, axes: { ...fullAxes, 叙述温度: 56 } }),
       },
     });
     const m = mergeStyleProfiles(b, 1);
-    expect(m.axes['叙述温度']).toBe(64);
-    expect(m.dims['写作特点']).toBe('B写作');
-    expect(m.dims['节奏']).toBe('A节奏');
+    expect(m.axes['叙述温度']).toBe(62);
+    expect(m.dims['叙述方式']).toBe('B写作');
+    expect(m.dims['结构与节奏']).toBe('B章节');
   });
 
   it('主零贡献保底权重 1：主 70 / 辅 56 → 58', () => {
@@ -80,14 +80,14 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
   });
 
   it('辅档案缺轴值 → 该轴在有余值档案间重归一', () => {
-    const dimsA = { 节奏: 'A节奏', 对话: 'A对话', 描写: 'A描写', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
-    const dimsB = { 写作特点: 'B写作', 特色词汇: 'B词汇', 章节结构: 'B章节' } as Partial<Record<StyleDimension, string>>;
+    const dimsA = { 语言与描写: 'A对话；A描写', 结构与节奏: 'A节奏', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 叙述方式: 'B写作', 特色词汇: 'B词汇', 结构与节奏: 'B章节' } as Partial<Record<StyleDimension, string>>;
     const axesB = { ...fullAxes } as Partial<Record<StyleAxis, number>>;
     delete axesB['叙述温度'];
     const b = bundle({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
-      dimsSource: { 写作特点: 'pB', 特色词汇: 'pB', 章节结构: 'pB' },
+      dimsSource: { 叙述方式: 'pB', 特色词汇: 'pB', 结构与节奏: 'pB' },
       profiles: {
         pA: prof({ dims: dimsA, axes: { ...fullAxes, 叙述温度: 70 } }),
         pB: prof({ dims: dimsB, axes: axesB }),
@@ -153,35 +153,35 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
     expect(none.freqTerms).toEqual([]);
   });
 
-  it('样本席位最大余数法：wA=4/wB=3 → A2+B1', () => {
-    const dimsA = { 节奏: 'A节奏', 对话: 'A对话', 描写: 'A描写', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
-    const dimsB = { 写作特点: 'B写作', 特色词汇: 'B词汇', 章节结构: 'B章节' } as Partial<Record<StyleDimension, string>>;
+  it('样本席位最大余数法：wA=2/wB=3 → A1+B2', () => {
+    const dimsA = { 语言与描写: 'A对话；A描写', 结构与节奏: 'A节奏', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 叙述方式: 'B写作', 特色词汇: 'B词汇', 结构与节奏: 'B章节' } as Partial<Record<StyleDimension, string>>;
     const poolA: StyleSample[] = [{ id: 'a0', text: 'xa0' }, { id: 'a1', text: 'xa1' }, { id: 'a2', text: 'xa2' }];
     const poolB: StyleSample[] = [{ id: 'b0', text: 'xb0' }, { id: 'b1', text: 'xb1' }];
     const b = bundle({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
-      dimsSource: { 写作特点: 'pB', 特色词汇: 'pB', 章节结构: 'pB' },
+      dimsSource: { 叙述方式: 'pB', 特色词汇: 'pB', 结构与节奏: 'pB' },
       profiles: { pA: prof({ dims: dimsA, samples: poolA }), pB: prof({ dims: dimsB, samples: poolB }) },
     });
     const m = mergeStyleProfiles(b, 1);
     const ids = m.samples.map((s) => s.id);
-    expect(ids.filter((id) => id.startsWith('pA:'))).toHaveLength(2);
-    expect(ids.filter((id) => id.startsWith('pB:'))).toHaveLength(1);
+    expect(ids.filter((id) => id.startsWith('pA:'))).toHaveLength(1);
+    expect(ids.filter((id) => id.startsWith('pB:'))).toHaveLength(2);
     // id 命名空间前缀且不改池内原对象
     expect(ids.every((id) => id.includes(':'))).toBe(true);
     expect(poolA[0].id).toBe('a0');
   });
 
   it('样本逐章轮转：chapterNo=1 → [pA:s0,pA:s1]，chapterNo=2 → [pA:s1,pA:s2]', () => {
-    const dimsA = { 节奏: 'A节奏', 对话: 'A对话' } as Partial<Record<StyleDimension, string>>;
+    const dimsA = { 结构与节奏: 'A节奏', 语言与描写: 'A对话' } as Partial<Record<StyleDimension, string>>;
     const poolA: StyleSample[] = [{ id: 's0', text: 'x0' }, { id: 's1', text: 'x1' }, { id: 's2', text: 'x2' }, { id: 's3', text: 'x3' }];
     const poolB: StyleSample[] = [{ id: 'b0', text: 'xb0' }];
     const b = bundle({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
-      dimsSource: { 描写: 'pB' },
-      profiles: { pA: prof({ dims: dimsA, samples: poolA }), pB: prof({ dims: { 描写: 'B描写' }, samples: poolB }) },
+      dimsSource: { 语言与描写: 'pB' },
+      profiles: { pA: prof({ dims: dimsA, samples: poolA }), pB: prof({ dims: { 语言与描写: 'B描写' }, samples: poolB }) },
     });
     const m1 = mergeStyleProfiles(b, 1);
     const idsA1 = m1.samples.map((s) => s.id).filter((id) => id.startsWith('pA:'));
@@ -243,19 +243,19 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
     const b = bundle({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
-      dimsSource: Object.fromEntries(['写作特点', '特色词汇', '章节结构'].map((d) => [d, 'pB'])),
+      dimsSource: Object.fromEntries(['叙述方式', '特色词汇', '结构与节奏'].map((d) => [d, 'pB'])),
       profiles: {
         pA: prof({ dims: dimsA, axes: { ...fullAxes, 叙述温度: 70 } }),
-        pB: prof({ dims: { 写作特点: '', 特色词汇: '', 章节结构: '' }, axes: { ...fullAxes, 叙述温度: 56 } }),
+        pB: prof({ dims: { 叙述方式: '', 特色词汇: '', 结构与节奏: '' }, axes: { ...fullAxes, 叙述温度: 56 } }),
       },
     });
     const m = mergeStyleProfiles(b, 1);
     expect(m.axes['叙述温度']).toBe(70);
-    expect(m.dims['写作特点']).toBe('写作特点的画像描述');
+    expect(m.dims['叙述方式']).toBe('叙述方式的画像描述');
   });
 
   it('轴参与需 w>0：主缺该轴且其余档案均零贡献 → 该轴不写入结果', () => {
-    const dimsB = { 节奏: 'B节奏', 对话: 'B对话', 描写: 'B描写', 情感基调: 'B情感', 写作特点: 'B写作', 特色词汇: 'B词汇', 章节结构: 'B章节' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 结构与节奏: 'B节奏；B章节', 语言与描写: 'B对话；B描写', 情感基调: 'B情感', 叙述方式: 'B写作', 特色词汇: 'B词汇' } as Partial<Record<StyleDimension, string>>;
     const axesA = { ...fullAxes } as Partial<Record<StyleAxis, number>>;
     delete axesA['叙述温度'];
     const b = bundle({
@@ -263,7 +263,7 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
       auxProfileIds: ['pB'],
       dimsSource: {},
       profiles: {
-        pA: prof({ dims: { 节奏: 'A节奏', 对话: 'A对话' }, axes: axesA }),
+        pA: prof({ dims: { 结构与节奏: 'A节奏', 语言与描写: 'A对话' }, axes: axesA }),
         pB: prof({ dims: dimsB, axes: { ...fullAxes, 叙述温度: 56 } }),
       },
     });
@@ -290,9 +290,9 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
   });
 
   it('样本顺延多轮循环：A 池 1/B 池 0/C 池 5 → A1+C2', () => {
-    const dimsA = { 节奏: 'A节奏', 对话: 'A对话', 描写: 'A描写' } as Partial<Record<StyleDimension, string>>;
-    const dimsB = { 情感基调: 'B情感', 写作特点: 'B写作' } as Partial<Record<StyleDimension, string>>;
-    const dimsC = { 特色词汇: 'C词汇', 章节结构: 'C章节' } as Partial<Record<StyleDimension, string>>;
+    const dimsA = { 结构与节奏: 'A节奏', 语言与描写: 'A对话；A描写' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 情感基调: 'B情感', 叙述方式: 'B写作' } as Partial<Record<StyleDimension, string>>;
+    const dimsC = { 特色词汇: 'C词汇', 结构与节奏: 'C章节' } as Partial<Record<StyleDimension, string>>;
     const poolA: StyleSample[] = [{ id: 'a0', text: 'xa0' }];
     const poolC: StyleSample[] = [{ id: 'c0', text: 'xc0' }, { id: 'c1', text: 'xc1' }, { id: 'c2', text: 'xc2' }, { id: 'c3', text: 'xc3' }, { id: 'c4', text: 'xc4' }];
     const b = bundle({
@@ -319,7 +319,7 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
   it('contentFromProfileRow：坏 JSON/缺键降级空内容不抛', () => {
     const c = contentFromProfileRow({ version: 3, rules_json: 'not-json{', samples_json: 'x', metrics_json: '' });
     expect(c.rulesText).toBe('');
-    expect(c.dims).toEqual({});
+    expect(c.dims).toEqual({ 语言与描写: '', 特色词汇: '', 结构与节奏: '', 情感基调: '', 尺度: '', 叙述方式: '' });
     expect(c.axes).toEqual({});
     expect(c.terms).toEqual([]);
     expect(c.samples).toEqual([]);
@@ -328,26 +328,26 @@ describe('mergeStyleProfiles 风格合并纯函数', () => {
   });
 
   it('确定性：同输入两次 deep-equal + profiles 键序置换输出不变', () => {
-    const dimsA = { 节奏: 'A节奏', 对话: 'A对话' } as Partial<Record<StyleDimension, string>>;
-    const dimsB = { 描写: 'B描写' } as Partial<Record<StyleDimension, string>>;
+    const dimsA = { 结构与节奏: 'A节奏', 语言与描写: 'A对话' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 语言与描写: 'B描写' } as Partial<Record<StyleDimension, string>>;
     const profiles: Record<string, StyleProfileContent> = {
       pA: prof({ dims: dimsA, axes: { ...fullAxes, 叙述温度: 70 }, samples: [{ id: 'a0', text: 'xa0' }, { id: 'a1', text: 'xa1' }] }),
       pB: prof({ dims: dimsB, axes: { ...fullAxes, 叙述温度: 56 }, samples: [{ id: 'b0', text: 'xb0' }] }),
     };
-    const b1 = bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 描写: 'pB' }, profiles });
+    const b1 = bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 语言与描写: 'pB' }, profiles });
     const r1 = mergeStyleProfiles(b1, 1);
     const r2 = mergeStyleProfiles(b1, 1);
     expect(r2).toEqual(r1);
-    const b2 = bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 描写: 'pB' }, profiles: { pB: profiles.pB, pA: profiles.pA } });
+    const b2 = bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 语言与描写: 'pB' }, profiles: { pB: profiles.pB, pA: profiles.pA } });
     expect(mergeStyleProfiles(b2, 1)).toEqual(r1);
   });
 });
 
 describe('weights 加权路径（DEC-2026-1117-05）', () => {
-  /** 与「双档案按贡献维数加权取整」同型的基准 fixture：主 pA 叙述温度 70（4 维画像）、辅 pB 56（3 维画像）。 */
+  /** 与「双档案按贡献维数加权取整」同型的基准 fixture：主 pA 叙述温度 70（2 维实际贡献）、辅 pB 56（3 维实际贡献）。 */
   function abProfiles(samplesA = false, samplesB = false, axesB?: Partial<Record<StyleAxis, number>>): Record<string, StyleProfileContent> {
-    const dimsA = { 节奏: 'A节奏', 对话: 'A对话', 描写: 'A描写', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
-    const dimsB = { 写作特点: 'B写作', 特色词汇: 'B词汇', 章节结构: 'B章节' } as Partial<Record<StyleDimension, string>>;
+    const dimsA = { 语言与描写: 'A对话；A描写', 结构与节奏: 'A节奏', 情感基调: 'A情感' } as Partial<Record<StyleDimension, string>>;
+    const dimsB = { 叙述方式: 'B写作', 特色词汇: 'B词汇', 结构与节奏: 'B章节' } as Partial<Record<StyleDimension, string>>;
     const poolA: StyleSample[] = [{ id: 'a0', text: 'xa0' }, { id: 'a1', text: 'xa1' }, { id: 'a2', text: 'xa2' }, { id: 'a3', text: 'xa3' }];
     const poolB: StyleSample[] = [{ id: 'b0', text: 'xb0' }, { id: 'b1', text: 'xb1' }];
     return {
@@ -356,10 +356,10 @@ describe('weights 加权路径（DEC-2026-1117-05）', () => {
     };
   }
 
-  const DIMS_SRC_3B = { 写作特点: 'pB', 特色词汇: 'pB', 章节结构: 'pB' };
+  const DIMS_SRC_3B = { 叙述方式: 'pB', 特色词汇: 'pB', 结构与节奏: 'pB' };
   const DIMS_SRC_ALL_B = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, 'pB']));
 
-  it('legacy 回归：mergeVersion=1 无 weights bundle 走贡献维数计权（主 4 维 70/辅 3 维 56 → 64）', () => {
+  it('legacy 回归：mergeVersion=1 无 weights bundle 走贡献维数计权（主 2 维 70/辅 3 维 56 → 62）', () => {
     // 手写字面量直喂（不经 buildStyleBundle，防 mergeVersion=2 污染）：无 weights 键 = legacy 路径
     const legacyBundle: StyleBundleV2 = {
       v: 2,
@@ -371,13 +371,13 @@ describe('weights 加权路径（DEC-2026-1117-05）', () => {
       profiles: abProfiles(true, true),
     };
     const m = mergeStyleProfiles(legacyBundle, 1);
-    expect(m.axes['叙述温度']).toBe(64);
+    expect(m.axes['叙述温度']).toBe(62);
     const parsed = parseStyleBundle(JSON.stringify(legacyBundle));
     expect(parsed?.weights).toBeUndefined();
   });
 
-  it('legacy 回归：主保底 1 生效（七维全辅 wA=1/wB=7 → 58）', () => {
-    // pB 七维文本俱全 → 七维实际来源全为 pB（主零实际贡献）→ legacy 主保底 1
+  it('legacy 回归：主保底 1 生效（六维全辅 wA=1/wB=6 → 58）', () => {
+    // pB 六维文本俱全 → 六维实际来源全为 pB（主零实际贡献）→ legacy 主保底 1
     const legacyBundle: StyleBundleV2 = {
       v: 2,
       mergeVersion: 1,
@@ -404,8 +404,8 @@ describe('weights 加权路径（DEC-2026-1117-05）', () => {
     });
     const m = mergeStyleProfiles(b, 1);
     expect(m.axes['叙述温度']).toBe(66);
-    expect(m.dims['写作特点']).toBe('B写作'); // 七维不受比例影响
-    expect(m.dims['节奏']).toBe('A节奏');
+    expect(m.dims['叙述方式']).toBe('B写作'); // 七维不受比例影响
+    expect(m.dims['结构与节奏']).toBe('B章节');
   });
 
   it('加权样本席位：70/30 → pA 2 席 pB 1 席', () => {
@@ -436,7 +436,7 @@ describe('weights 加权路径（DEC-2026-1117-05）', () => {
     expect(m.axes['叙述温度']).toBe(70);
   });
 
-  it('主保底废除：加权路径七维全辅 weights {50,50} → 63（legacy 同输入为 58）', () => {
+  it('主保底废除：加权路径六维全辅 weights {50,50} → 63（legacy 同输入为 58）', () => {
     const b = bundle({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
@@ -510,11 +510,11 @@ describe('七维共存（DEC-2026-1118-03）', () => {
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
       dimsSource: { 特色词汇: DIM_SOURCE_COEXIST },
-      profiles: { pA: prof({ dims: { 特色词汇: 'A词汇', 节奏: 'A节奏' } }), pB: prof({ dims: { 特色词汇: 'B词汇' } }) },
+      profiles: { pA: prof({ dims: { 特色词汇: 'A词汇', 结构与节奏: 'A节奏' } }), pB: prof({ dims: { 特色词汇: 'B词汇' } }) },
     });
     const m = mergeStyleProfiles(b, 1);
     expect(m.dims['特色词汇']).toBe('A词汇；B词汇');
-    expect(m.dims['节奏']).toBe('A节奏');
+    expect(m.dims['结构与节奏']).toBe('A节奏');
   });
 
   it('共存全等去重：辅文本与主全等 → 只出现一次，legacy 计权只记主（辅零贡献 → 该轴取主原值）', () => {
@@ -530,7 +530,7 @@ describe('七维共存（DEC-2026-1118-03）', () => {
     expect(m.axes['叙述温度']).toBe(70); // 去重段不计辅贡献 → wB=0 不参与
   });
 
-  it('共存计权：七维全共存主辅文本各异 → legacy wA=7/wB=7 → 轴 63、样本 A2+B1', () => {
+  it('共存计权：六维全共存主辅文本各异 → legacy wA=6/wB=6 → 轴 63、样本 A2+B1', () => {
     const dimsA = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, `A${d}`])) as Partial<Record<StyleDimension, string>>;
     const dimsB = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, `B${d}`])) as Partial<Record<StyleDimension, string>>;
     const poolA: StyleSample[] = [{ id: 'a0', text: 'xa0' }, { id: 'a1', text: 'xa1' }, { id: 'a2', text: 'xa2' }];
@@ -542,23 +542,23 @@ describe('七维共存（DEC-2026-1118-03）', () => {
       profiles: { pA: prof({ dims: dimsA, axes: { ...fullAxes, 叙述温度: 70 }, samples: poolA }), pB: prof({ dims: dimsB, axes: { ...fullAxes, 叙述温度: 56 }, samples: poolB }) },
     });
     const m = mergeStyleProfiles(b, 1);
-    expect(m.axes['叙述温度']).toBe(63); // (7×70+7×56)/14
+    expect(m.axes['叙述温度']).toBe(63); // (6×70+6×56)/12
     const ids = m.samples.map((s) => s.id);
     expect(ids.filter((id) => id.startsWith('pA:'))).toHaveLength(2); // 1.5/1.5 平手主先补足
     expect(ids.filter((id) => id.startsWith('pB:'))).toHaveLength(1);
-    expect(m.dims['节奏']).toBe('A节奏；B节奏');
+    expect(m.dims['结构与节奏']).toBe('A结构与节奏；B结构与节奏');
   });
 
   it('共存单边空/全空：辅该维空 → 仅主文本；该维全空 → 空串不占注入行', () => {
     const b = bundle({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB'],
-      dimsSource: { 特色词汇: DIM_SOURCE_COEXIST, 节奏: DIM_SOURCE_COEXIST },
+      dimsSource: { 特色词汇: DIM_SOURCE_COEXIST, 结构与节奏: DIM_SOURCE_COEXIST },
       profiles: { pA: prof({ dims: { 特色词汇: 'A词汇' } }), pB: prof({ dims: {} }) },
     });
     const m = mergeStyleProfiles(b, 1);
     expect(m.dims['特色词汇']).toBe('A词汇');
-    expect(m.dims['节奏']).toBe('');
+    expect(m.dims['结构与节奏']).toBe('');
   });
 
   it('加权路径与共存正交：weights {pA:60,pB:40} + 共存维 → 轴 64、共存拼接照常', () => {
@@ -578,19 +578,61 @@ describe('七维共存（DEC-2026-1118-03）', () => {
 describe('七维不采用（DEC-2026-1124-04）', () => {
   it('哨兵维空文本零贡献：特色词汇=DIM_SOURCE_NONE → 该维恒空，其余维照常；axes/samples 与「来源文本空」对照组全等，对照组回落主档文本（分界钉）', () => {
     const profiles = {
-      pA: prof({ dims: { 特色词汇: 'A词汇', 节奏: 'A节奏' }, axes: { ...fullAxes, 叙述温度: 70 } }),
-      pB: prof({ dims: { 特色词汇: '', 节奏: 'B节奏' }, axes: { ...fullAxes, 叙述温度: 56 } }), // pB 特色词汇文本空
+      pA: prof({ dims: { 特色词汇: 'A词汇', 结构与节奏: 'A节奏' }, axes: { ...fullAxes, 叙述温度: 70 } }),
+      pB: prof({ dims: { 特色词汇: '', 结构与节奏: 'B节奏' }, axes: { ...fullAxes, 叙述温度: 56 } }), // pB 特色词汇文本空
     };
     const sent = mergeStyleProfiles(
-      bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 特色词汇: DIM_SOURCE_NONE, 节奏: 'pB' }, profiles }), 1,
+      bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 特色词汇: DIM_SOURCE_NONE, 结构与节奏: 'pB' }, profiles }), 1,
     );
     expect(sent.dims['特色词汇']).toBe(''); // 哨兵维空文本，不回落主档
-    expect(sent.dims['节奏']).toBe('B节奏'); // 其余维不受影响
+    expect(sent.dims['结构与节奏']).toBe('B节奏'); // 其余维不受影响
     const ctrl = mergeStyleProfiles(
-      bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 特色词汇: 'pB', 节奏: 'pB' }, profiles }), 1,
+      bundle({ primaryProfileId: 'pA', auxProfileIds: ['pB'], dimsSource: { 特色词汇: 'pB', 结构与节奏: 'pB' }, profiles }), 1,
     );
     expect(sent.axes).toEqual(ctrl.axes); // 哨兵零贡献 ≈ 该维来源文本空（对照）→ 加权不受影响
     expect(sent.samples.map((s) => s.id)).toEqual(ctrl.samples.map((s) => s.id)); // 席位不受影响
     expect(ctrl.dims['特色词汇']).toBe('A词汇'); // 对照分界：来源文本空→回落主档文本；哨兵→恒空
+  });
+});
+
+describe('读时别名接线（DM-1）', () => {
+  it('parseStyleBundle：V2 旧键 dimsSource 归六维（哨兵优先）、逐 profile dims 旧文按组拼接', () => {
+    const raw = JSON.stringify({
+      profileId: 'pA',
+      auxProfileIds: ['pB'],
+      dimsSource: { 对话: 'pB', 节奏: 'pC', 章节结构: DIM_SOURCE_COEXIST },
+      profiles: {
+        pA: prof({ dims: { 对话: '甲', 描写: '乙' } as unknown as Partial<Record<StyleDimension, string>> }),
+        pB: prof({ dims: { 节奏: '丙' } as unknown as Partial<Record<StyleDimension, string>> }),
+      },
+    });
+    const bundle = parseStyleBundle(raw)!;
+    expect(bundle.dimsSource).toEqual({ 语言与描写: 'pB', 结构与节奏: DIM_SOURCE_COEXIST });
+    expect(bundle.profiles.pA.dims['语言与描写']).toBe('甲；乙');
+    expect(bundle.profiles.pB.dims['结构与节奏']).toBe('丙');
+  });
+
+  it('parseStyleBundle：V1 旧快照 rulesJson 内八维 dims 读出即六维', () => {
+    const raw = JSON.stringify({
+      profileId: 'pA',
+      version: 1,
+      rulesJson: JSON.stringify({ rulesText: '', dims: { 节奏: '丁' } }),
+      samplesJson: '[]',
+    });
+    const bundle = parseStyleBundle(raw)!;
+    expect(bundle.profiles.pA.dims['结构与节奏']).toBe('丁');
+  });
+
+  it('contentFromProfileRow：rules_json 含旧八维 dims → 返回恰六键', () => {
+    const row = {
+      version: 1,
+      rules_json: JSON.stringify({ rulesText: 'R', dims: { 节奏: '甲', 对话: '乙', 描写: '丙', 写作特点: '丁', 章节结构: '戊' } }),
+      samples_json: '[]',
+      metrics_json: '{}',
+    };
+    const content = contentFromProfileRow(row);
+    expect(Object.keys(content.dims)).toHaveLength(6);
+    expect(content.dims['结构与节奏']).toBe('甲；戊');
+    expect(content.dims['语言与描写']).toBe('乙；丙');
   });
 });

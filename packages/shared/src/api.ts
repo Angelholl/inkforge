@@ -303,11 +303,11 @@ export interface ImportOriginalResult {
 }
 
 export interface StyleBindBody {
-  /** legacy：null=解绑；字符串=等价 {primaryProfileId} 七维全主（旧客户端兼容） */
+  /** legacy：null=解绑；字符串=等价 {primaryProfileId} 六维全主（旧客户端兼容） */
   profileId?: string | null;
   primaryProfileId?: string;
   auxProfileIds?: string[];
-  /** 七维→贡献档案 id；缺省维归主；值=DIM_SOURCE_COEXIST（'__coexist__'）→ 该维各档案文本共存拼接 */
+  /** 六维→贡献档案 id；缺省维归主；值=DIM_SOURCE_COEXIST（'__coexist__'）→ 该维各档案文本共存拼接 */
   dimsSource?: Record<string, string>;
   /** 融合比例：客户端最大余数归一后提交（Σ=100、整数≥1、键集=绑定全集）；缺省=legacy（贡献维数计权） */
   weights?: Record<string, number>;
@@ -319,6 +319,8 @@ export interface StyleBindingDto {
   dimsSource: Record<string, string>;
   /** 空对象=legacy（旧绑定：按贡献维数计权） */
   weights: Record<string, number>;
+  /** 读时别名诊断：mapLegacyDimSource 的 splits（仅非空时由服务端携带）；不入库 */
+  legacySplits?: Record<string, string>;
 }
 
 export interface RewriteSelectionBody {
@@ -396,17 +398,104 @@ export interface StyleProfileCreateBody {
   evaluation?: SelfEvalItemDto[];
 }
 
-// ── 蒸馏结构化档案（八维文本 + 六轴量化，MirrorNovel 对标；RULES 行保留为文本补充）──
-export const STYLE_DIMENSIONS = ['节奏', '对话', '描写', '情感基调', '尺度', '写作特点', '特色词汇', '章节结构'] as const; // 八维，尺度=直白度/性描写尺度（DEC-2026-1122-03④）
+// ── 蒸馏结构化档案（六维文本 + 六轴量化，MirrorNovel 对标；RULES 行保留为文本补充）──
+export const STYLE_DIMENSIONS = ['语言与描写', '特色词汇', '结构与节奏', '情感基调', '尺度', '叙述方式'] as const; // 六维，八并六 owner 2026-11-24 拍板（最保守档）+读时别名（语言与描写=对话+描写、结构与节奏=节奏+章节结构、叙述方式=写作特点并吸收 视角/人称/POV/心理距离）；尺度=直白度/性描写尺度（DEC-2026-1122-03④）
 export const STYLE_AXES = ['叙述温度', '语言密度', '叙述者姿态', '节奏', '幽默', '情绪表达'] as const;
 
-/** 七维来源「共存」哨兵（DEC-2026-1118-03）：dimsSource[dim]=该值 → 该维文本按绑定序（主→辅）拼接各勾选档案的非空文本（全等段去重，'；' 连接）。双下划线包边，不会与真实档案 id 冲突。 */
+/** 维度来源「共存」哨兵（DEC-2026-1118-03）：dimsSource[dim]=该值 → 该维文本按绑定序（主→辅）拼接各勾选档案的非空文本（全等段去重，'；' 连接）。双下划线包边，不会与真实档案 id 冲突。 */
 export const DIM_SOURCE_COEXIST = '__coexist__';
 
-/** 七维来源「不采用」哨兵（DEC-2026-1124-04）：dimsSource[dim]=该值 → 该维不采用任何档案风格、
+/** 维度来源「不采用」哨兵（DEC-2026-1124-04）：dimsSource[dim]=该值 → 该维不采用任何档案风格、
  *  按正文与设定走；merge 产出该维空文本、不记贡献（不参与六轴加权与样本席位之外的回落）。
  *  双下划线包边，不会与真实档案 id 冲突。 */
 export const DIM_SOURCE_NONE = '__none__';
+
+/** 退役八维名 → 新六维名（恒等项写全；按旧表序）。新键优先，旧名仅在读时别名折算使用。 */
+export const LEGACY_DIM_ALIAS: Record<string, string> = {
+  节奏: '结构与节奏',
+  对话: '语言与描写',
+  描写: '语言与描写',
+  情感基调: '情感基调',
+  尺度: '尺度',
+  写作特点: '叙述方式',
+  特色词汇: '特色词汇',
+  章节结构: '结构与节奏',
+};
+
+/** 新维 → 该组退役旧维名（按旧表序）；存量档案/快照的组内文本按此序拼接去重。 */
+export const LEGACY_DIM_GROUPS: Record<StyleDimension, readonly string[]> = {
+  语言与描写: ['对话', '描写'],
+  特色词汇: ['特色词汇'],
+  结构与节奏: ['节奏', '章节结构'],
+  情感基调: ['情感基调'],
+  尺度: ['尺度'],
+  叙述方式: ['写作特点'],
+};
+
+export interface DimsSourceMapping {
+  dimsSource: Record<string, string>;
+  splits: Record<string, string>;
+}
+
+/** 读时别名：把旧八维 dims 文本归一为新六维；新键原样优先，旧键按旧表序拼接去重、空段丢弃，未知键忽略。 */
+export function mergeLegacyDimTexts(structure: Record<string, string>): Record<string, string> {
+  const src = structure ?? {};
+  const out: Record<string, string> = {};
+  for (const dim of STYLE_DIMENSIONS) {
+    const direct = src[dim];
+    const directText = typeof direct === 'string' ? direct.trim() : '';
+    if (directText !== '') {
+      out[dim] = directText;
+      continue;
+    }
+    const segments: string[] = [];
+    for (const old of LEGACY_DIM_GROUPS[dim]) {
+      const raw = src[old];
+      const text = typeof raw === 'string' ? raw.trim() : '';
+      if (text !== '' && !segments.includes(text)) segments.push(text);
+    }
+    out[dim] = segments.join('；');
+  }
+  return out;
+}
+
+/** 读时别名：把旧八维 dimsSource 折算为新六维；哨兵优先，异值折主并记 splits 诊断（不入库）。 */
+export function mapLegacyDimSource(dimsSource: Record<string, string>, primaryProfileId: string): DimsSourceMapping {
+  const src = dimsSource ?? {};
+  const out: Record<string, string> = {};
+  const splits: Record<string, string> = {};
+  for (const dim of STYLE_DIMENSIONS) {
+    const direct = src[dim];
+    if (typeof direct === 'string') out[dim] = direct; // 新键原样带走，旧组不再并入
+  }
+  const groups = new Map<string, Array<{ old: string; value: string }>>();
+  for (const [oldDim, newDim] of Object.entries(LEGACY_DIM_ALIAS)) {
+    if (Object.prototype.hasOwnProperty.call(out, newDim)) continue;
+    const raw = src[oldDim];
+    if (typeof raw !== 'string' || raw.trim() === '') continue;
+    const group = groups.get(newDim) ?? [];
+    group.push({ old: oldDim, value: raw.trim() });
+    groups.set(newDim, group);
+  }
+  for (const [newDim, group] of groups) {
+    const values = group.map((g) => g.value);
+    if (group.length === 1 || values.every((v) => v === values[0])) {
+      out[newDim] = values[0]!;
+      continue;
+    }
+    // 多键异值：哨兵表达显式意图（共存/不采用），不记 splits；否则折主并记钉死诊断文案
+    const sentinel = values.includes(DIM_SOURCE_COEXIST)
+      ? DIM_SOURCE_COEXIST
+      : values.includes(DIM_SOURCE_NONE)
+        ? DIM_SOURCE_NONE
+        : undefined;
+    out[newDim] = sentinel ?? primaryProfileId;
+    if (sentinel === undefined) {
+      splits[newDim] = `旧结构里这一组原本分开跟随档案（${group.map((g) => g.old).join('/')}），重蒸该档案后可再分开`;
+    }
+  }
+  return { dimsSource: out, splits };
+}
 
 /** 全文改写长度硬门（DEC-2026-1120-01）：countChars 口径（去空白）。依据 maxOutput=8192 tokens 的汉字规模留余量，超出后单轮改写会输出截断/静默丢文，须改走选段重写（分段）或批量校对。 */
 export const FULL_TEXT_REWRITE_MAX_CHARS = 8000;

@@ -24,7 +24,7 @@ const B2_CHAPTERS = Array.from({ length: 21 }, (_, i) => ({ chapterNo: i + 1, ti
 
 const DRAFT = {
   analysis: {
-    dims: { 节奏: '短句为主', 对话: '三成', 描写: '', 情感基调: '', 写作特点: '', 特色词汇: '', 章节结构: '' },
+    dims: { 结构与节奏: '短句为主', 语言与描写: '三成', 情感基调: '', 叙述方式: '', 特色词汇: '', 尺度: '' },
     axes: { 叙述温度: 72, 语言密度: 55, 叙述者姿态: 0, 节奏: 60, 幽默: 0, 情绪表达: 40 },
     rules: ['平均句长 10-20 字', '对话占比 20%-40%'],
     terms: [
@@ -193,7 +193,7 @@ describe('StyleProfilesSection 三态确认门', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles/distill', expect.anything()));
     // 预览态：七维/六轴输入框在场且回显草稿值
-    const dimInput = await waitFor(() => screen.getByLabelText('维度-节奏') as HTMLInputElement);
+    const dimInput = await waitFor(() => screen.getByLabelText('维度-结构与节奏') as HTMLInputElement);
     expect(dimInput.value).toBe('短句为主');
     expect((screen.getByLabelText('轴-叙述温度') as HTMLInputElement).value).toBe('72');
     expect((screen.getByLabelText('规则编辑') as HTMLTextAreaElement).value).toContain('平均句长');
@@ -217,7 +217,7 @@ describe('StyleProfilesSection 三态确认门', () => {
     fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '新档案' } });
     fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
     fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
-    await waitFor(() => expect(screen.getByLabelText('维度-节奏')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('维度-结构与节奏')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: '确认入库' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles', expect.anything()));
@@ -230,16 +230,16 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(screen.getByText('档案已入库：新档案 v2')).toBeTruthy();
     // 回表单态
     expect(screen.getByPlaceholderText('档案名称')).toBeTruthy();
-    expect(screen.queryByLabelText('维度-节奏')).toBeNull();
+    expect(screen.queryByLabelText('维度-结构与节奏')).toBeNull();
 
     // 放弃路径：再次蒸馏 → 放弃 → 回表单 + 草稿清空
     fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '再蒸' } });
     fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'y'.repeat(200) } });
     fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
-    await waitFor(() => expect(screen.getByLabelText('维度-节奏')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('维度-结构与节奏')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '放弃' }));
     expect(screen.getByText('已放弃草稿')).toBeTruthy();
-    expect(screen.queryByLabelText('维度-节奏')).toBeNull();
+    expect(screen.queryByLabelText('维度-结构与节奏')).toBeNull();
   });
 
   it('档案列表渲染版本与句长中位数', async () => {
@@ -462,7 +462,7 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(await screen.findByText(/蒸馏中（30%）· 分析中/)).toBeTruthy();
     // 第二次轮询（间隔 2s）转 done → 预览态
     expect(await screen.findByText('蒸馏完成（草稿未入库），可编辑后点「确认入库」', {}, { timeout: 4000 })).toBeTruthy();
-    expect(screen.getByLabelText('维度-节奏')).toBeTruthy();
+    expect(screen.getByLabelText('维度-结构与节奏')).toBeTruthy();
     expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/style-profiles/jobs/')).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -477,7 +477,7 @@ describe('StyleProfilesSection 三态确认门', () => {
     fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
 
     expect(await screen.findByText(`蒸馏失败：${JOB_ERROR}`)).toBeTruthy();
-    expect(screen.queryByLabelText('维度-节奏')).toBeNull();
+    expect(screen.queryByLabelText('维度-结构与节奏')).toBeNull();
     expect(screen.getByRole('button', { name: '蒸馏' })).toBeTruthy();
   });
 
@@ -585,7 +585,7 @@ describe('档案查看细节（DEC-2026-1120-08）', () => {
     expect(within(row).getByText(/抬眸/)).toBeTruthy();
     expect(within(row).getByText(/SCORE 4\/5 · REASON：整体贴合样本/)).toBeTruthy();
     // 只读：面板里没有编辑输入框
-    expect(within(row).queryByLabelText('维度-节奏')).toBeNull();
+    expect(within(row).queryByLabelText('维度-结构与节奏')).toBeNull();
 
     fireEvent.click(within(row).getByRole('button', { name: '收起' }));
     await waitFor(() => expect(within(row).queryByText(/青云剑诀/)).toBeNull());

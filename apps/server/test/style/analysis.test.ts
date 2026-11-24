@@ -13,8 +13,8 @@ import { createMockProvider } from '../../src/llm/mock';
 import type { LlmProvider } from '../../src/llm/types';
 import { STYLE_AXES, STYLE_DIMENSIONS } from '@inkforge/shared';
 
-const ANALYSIS_TEXT = `DIM: 节奏: 短句为主，段落 3-6 行。
-DIM: 对话: 对话占比约三成，多短对答。
+const ANALYSIS_TEXT = `DIM: 结构与节奏: 短句为主，段落 3-6 行。
+DIM: 语言与描写: 对话占比约三成，多短对答。
 AXIS: 叙述温度: 72
 AXIS: 语言密度: 55
 AXIS: 节奏: 150
@@ -47,11 +47,11 @@ describe('parseAnalysis', () => {
   it('正例+容错：缺行补默认（轴 0/维空串）、越界钳制 0-100、未知行记 error 不抛', () => {
     const r = parseAnalysis(ANALYSIS_TEXT);
     expect(r.errors.some((e) => e.includes('越界'))).toBe(false);
-    expect(r.dims['节奏']).toBe('短句为主，段落 3-6 行。');
-    expect(r.dims['对话']).toBe('对话占比约三成，多短对答。');
-    // 缺行容错：五维缺省补 ''、四轴缺省补 0
+    expect(r.dims['结构与节奏']).toBe('短句为主，段落 3-6 行。');
+    expect(r.dims['语言与描写']).toBe('对话占比约三成，多短对答。');
+    // 缺行容错：未指定维缺省补 ''、四轴缺省补 0
     expect(Object.keys(r.dims)).toHaveLength(STYLE_DIMENSIONS.length);
-    expect(r.dims['描写']).toBe('');
+    expect(r.dims['尺度']).toBe('');
     expect(Object.keys(r.axes)).toHaveLength(STYLE_AXES.length);
     expect(r.axes['幽默']).toBe(0);
     // 越界钳制
@@ -70,7 +70,7 @@ RULES: 禁用「不是…而是…」句式`);
     expect(messy.errors.some((e) => e.includes('无法识别的行'))).toBe(true);
     // 纯垃圾输入不抛
     const garbage = parseAnalysis('这是一段没有标记的文字');
-    expect(garbage.dims['节奏']).toBe('');
+    expect(garbage.dims['情感基调']).toBe('');
     expect(garbage.axes['叙述温度']).toBe(0);
     expect(garbage.rules).toEqual([]);
   });
@@ -100,7 +100,7 @@ describe('analyzeStyle + saveStyleProfile', () => {
   it('mock 文样 → 七维六轴结构化档案落库：rules_json 含 rulesText/dims/axes；同源二存 version+1 旧行不变', async () => {
     const provider = createMockProvider({ summarize: { text: ANALYSIS_TEXT } });
     const { analysis } = await analyzeStyle({ provider }, { sourceText: '正文样本'.repeat(200), samples: ['样本一', '样本二'] });
-    expect(analysis.dims['节奏']).toBe('短句为主，段落 3-6 行。');
+    expect(analysis.dims['结构与节奏']).toBe('短句为主，段落 3-6 行。');
     expect(analysis.axes['叙述温度']).toBe(72);
     expect(analysis.axes['节奏']).toBe(100);
     expect(analysis.rules).toHaveLength(2);
@@ -110,7 +110,7 @@ describe('analyzeStyle + saveStyleProfile', () => {
     const row1 = db.prepare('SELECT * FROM style_profiles WHERE id = ?').get(s1.id) as { rules_json: string; source_path: string };
     const rules1 = JSON.parse(row1.rules_json) as { rulesText: string; dims: Record<string, string>; axes: Record<string, number> };
     expect(rules1.rulesText).toContain('平均句长');
-    expect(rules1.dims['对话']).toBe('对话占比约三成，多短对答。');
+    expect(rules1.dims['语言与描写']).toBe('对话占比约三成，多短对答。');
     expect(rules1.axes['语言密度']).toBe(55);
     expect(row1.source_path).toMatch(/^inline:[0-9a-f]{8}$/);
 
@@ -147,7 +147,7 @@ describe('analyzeStyle + saveStyleProfile', () => {
 
 describe('术语表（B9）', () => {
   it('parseAnalysis TERMS 行 + saveStyleProfile 落 rules_json.terms + renderStyleBlock 注入术语段（预算截断）', async () => {
-    const withTerms = parseAnalysis(`DIM: 节奏: 短句。
+    const withTerms = parseAnalysis(`DIM: 结构与节奏: 短句。
 TERMS: 青云剑诀: 主角核心功法，首次出现需全称
 TERMS: 临水城: 故事主城，禁用「临水市」
 RULES: 平均句长 10-20 字。`);

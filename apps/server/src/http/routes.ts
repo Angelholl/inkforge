@@ -37,7 +37,7 @@ import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } fro
 import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
 import type { DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto } from '@inkforge/shared';
-import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, parseLandingMandate } from '@inkforge/shared';
+import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, mergeLegacyDimTexts, parseLandingMandate } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
@@ -833,7 +833,7 @@ ${repairPrompt(first.errors)}`))).text,
       booksRepo.setBookStyleBinding(db, bookId, null, null);
       return reply.send({ ok: true, styleProfileId: null });
     }
-    // legacy {profileId: 字符串} 归一单主七维全主；新 body 走 primary/aux/dimsSource/weights
+    // legacy {profileId: 字符串} 归一单主六维全主；新 body 走 primary/aux/dimsSource/weights
     const primaryProfileId = typeof body.profileId === 'string' ? body.profileId : body.primaryProfileId!;
     const auxProfileIds = typeof body.profileId === 'string' ? [] : (body.auxProfileIds ?? []);
     const dimsSource = typeof body.profileId === 'string' ? {} : (body.dimsSource ?? {});
@@ -904,7 +904,7 @@ ${repairPrompt(first.errors)}`))).text,
       freqTerms?: StyleAnalysisDto['freqTerms'];
     };
     const analysis: StyleAnalysisDto = {
-      dims: rulesData.dims ?? ({} as StyleAnalysisDto['dims']),
+      dims: mergeLegacyDimTexts(rulesData.dims ?? ({} as StyleAnalysisDto['dims'])),
       axes: rulesData.axes ?? ({} as StyleAnalysisDto['axes']),
       rules: rulesData.rules ?? (rulesData.rulesText ?? '').split('\n').map((s) => s.trim()).filter((s) => s !== ''),
       terms: rulesData.terms ?? [],

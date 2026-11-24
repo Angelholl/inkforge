@@ -2,7 +2,7 @@
  * 风格合并模块（DEC-2026-1117-04 规格 B）：把多档案 bundle 合并成单档案形态（MergedStyleProfile，与现单档案注入同形）。
  * 算法钉死（全部确定性，无随机）：
  * 0. 去重防御：auxProfileIds 滤除 primaryProfileId（同一档案不得双计权重与样本）。
- * 1. 七维来源判定：缺键/空串/值 ∉ {主∪辅} → primary（merge 内按 ids 全集解析；normalizeDimsSource 导出为「仅主合法」收窄形态，签名不含辅集合，勿用于多档案归一）。
+ * 1. 维度来源判定：缺键/空串/值 ∉ {主∪辅} → primary（merge 内按 ids 全集解析；normalizeDimsSource 导出为「仅主合法」收窄形态，签名不含辅集合，勿用于多档案归一）。
  * 1'. 共存维（dimsSource[dim]=DIM_SOURCE_COEXIST，DEC-2026-1118-03）：按绑定序（主→辅）收集各档案该维 trim 非空文本、与已收段全等判重跳过，'；' 连接为该维文本；实际贡献=所有被收段档案（可多档案同记）。
  * 1''. 不采用维（dimsSource[dim]=DIM_SOURCE_NONE，DEC-2026-1124-04）：该维空文本、零贡献，不回落。
  * 2. dims[dim]（单源维）：来源档案该维文本 trim 非空即用并记实际贡献；来源不在 profiles 或文本空 → 回落主档案该维文本（贡献=主）；仍空 → ''（贡献=无）。
@@ -17,7 +17,7 @@
  *    拼接顺序主在前辅按绑定序；全池空 → []。
  * 8. primaryMetricsJson = profiles[primary]?.metricsJson ?? ''。
  */
-import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_AXES, STYLE_DIMENSIONS, mapLegacyDimSource, mergeLegacyDimTexts, type StyleAxis, type StyleDimension, type StyleTermDto } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import { getLatestProfile, type StyleSample } from './distill';
 import { pickStyleSamples } from './inject';
@@ -120,7 +120,7 @@ function tolerantSamples(raw: string | undefined | null): StyleSample[] {
 export function contentFromProfileRow(row: { version: number; rules_json: string; samples_json: string; metrics_json: string }): StyleProfileContent {
   const rulesData = tolerantParse(row.rules_json);
   const rulesText = typeof rulesData.rulesText === 'string' ? rulesData.rulesText : '';
-  const dims = rulesData.dims && typeof rulesData.dims === 'object' && !Array.isArray(rulesData.dims) ? (rulesData.dims as Partial<Record<StyleDimension, string>>) : {};
+  const dims = mergeLegacyDimTexts(rulesData.dims && typeof rulesData.dims === 'object' && !Array.isArray(rulesData.dims) ? (rulesData.dims as Partial<Record<StyleDimension, string>>) : {});
   const axes = rulesData.axes && typeof rulesData.axes === 'object' && !Array.isArray(rulesData.axes) ? (rulesData.axes as Partial<Record<StyleAxis, number>>) : {};
   const terms = Array.isArray(rulesData.terms) ? (rulesData.terms as StyleTermDto[]) : [];
   const freqTerms = Array.isArray(rulesData.freqTerms) ? (rulesData.freqTerms as StyleTermDto[]) : [];
@@ -153,17 +153,21 @@ export function parseStyleBundle(raw: string | null | undefined): StyleBundleV2 
       version: typeof obj.version === 'number' ? obj.version : 1,
       metricsJson: '',
       rulesText: typeof rulesData.rulesText === 'string' ? rulesData.rulesText : '',
-      dims: rulesData.dims && typeof rulesData.dims === 'object' && !Array.isArray(rulesData.dims) ? (rulesData.dims as Partial<Record<StyleDimension, string>>) : {},
+      dims: mergeLegacyDimTexts(rulesData.dims && typeof rulesData.dims === 'object' && !Array.isArray(rulesData.dims) ? (rulesData.dims as Partial<Record<StyleDimension, string>>) : {}),
       axes: rulesData.axes && typeof rulesData.axes === 'object' && !Array.isArray(rulesData.axes) ? (rulesData.axes as Partial<Record<StyleAxis, number>>) : {},
       terms: Array.isArray(rulesData.terms) ? (rulesData.terms as StyleTermDto[]) : [],
       freqTerms: Array.isArray(rulesData.freqTerms) ? (rulesData.freqTerms as StyleTermDto[]) : [],
       samples: tolerantSamples(typeof obj.samplesJson === 'string' ? obj.samplesJson : undefined),
     };
-    return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds: [], dimsSource: {}, weights: undefined, profiles: { [primaryProfileId]: content } };
+    return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds: [], dimsSource: mapLegacyDimSource(dimsSource, primaryProfileId).dimsSource, weights: undefined, profiles: { [primaryProfileId]: content } };
   }
 
-  const profiles = obj.profiles && typeof obj.profiles === 'object' && !Array.isArray(obj.profiles) ? (obj.profiles as Record<string, StyleProfileContent>) : {};
-  return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds, dimsSource, weights, profiles };
+  const profilesRaw = obj.profiles && typeof obj.profiles === 'object' && !Array.isArray(obj.profiles) ? (obj.profiles as Record<string, StyleProfileContent>) : {};
+  const profiles: Record<string, StyleProfileContent> = {};
+  for (const [id, c] of Object.entries(profilesRaw)) {
+    profiles[id] = { ...c, dims: mergeLegacyDimTexts(c?.dims ?? {}) };
+  }
+  return { v: 2, mergeVersion, boundAt, primaryProfileId, auxProfileIds, dimsSource: mapLegacyDimSource(dimsSource, primaryProfileId).dimsSource, weights, profiles };
 }
 
 /** 绑定读取：快照优先回落 live 行（快照缺/坏时按单主组装），无绑定/无行 → undefined。 */

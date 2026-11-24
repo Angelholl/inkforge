@@ -148,13 +148,13 @@ describe('polishBenchmarks（混合档案基准）', () => {
     const bundle = buildStyleBundle({
       primaryProfileId: 'pb-main',
       auxProfileIds: ['pb-aux'],
-      dimsSource: { 写作特点: 'pb-aux', 特色词汇: 'pb-aux', 章节结构: 'pb-aux' },
+      dimsSource: { 叙述方式: 'pb-aux', 特色词汇: 'pb-aux', 结构与节奏: 'pb-aux' },
       profiles: {
         'pb-main': {
           version: 1,
           metricsJson: '{}',
           rulesText: '主规则',
-          dims: { 节奏: '主节奏', 对话: '主对话', 描写: '主描写', 情感基调: '主情感基调' },
+          dims: { 结构与节奏: '主节奏', 语言与描写: '主对话；主描写', 情感基调: '主情感基调' },
           axes: {},
           terms: [],
           samples: [
@@ -166,7 +166,7 @@ describe('polishBenchmarks（混合档案基准）', () => {
           version: 1,
           metricsJson: '',
           rulesText: '',
-          dims: { 写作特点: '辅写作特点', 特色词汇: '辅特色词汇', 章节结构: '辅章节结构' },
+          dims: { 叙述方式: '辅写作特点', 特色词汇: '辅特色词汇', 结构与节奏: '辅章节结构' },
           axes: {},
           terms: [{ term: '灵力', note: '代指法力' }],
           samples: [{ id: 'a1', text: '辅样本一' }],
@@ -176,7 +176,7 @@ describe('polishBenchmarks（混合档案基准）', () => {
     setBookStyleBinding(
       db,
       bid,
-      { primaryProfileId: 'pb-main', auxProfileIds: ['pb-aux'], dimsSource: { 写作特点: 'pb-aux', 特色词汇: 'pb-aux', 章节结构: 'pb-aux' }, weights: {} },
+      { primaryProfileId: 'pb-main', auxProfileIds: ['pb-aux'], dimsSource: { 叙述方式: 'pb-aux', 特色词汇: 'pb-aux', 结构与节奏: 'pb-aux' }, weights: {} },
       JSON.stringify(bundle),
     );
     return bid;
@@ -220,7 +220,7 @@ describe('polishBenchmarks（混合档案基准）', () => {
     const v = appendChapterVersion(db, { chapterId: ch.id, kind: 'draft', content: '原始正文，包含「不是…而是…」套话句式。'.repeat(6) });
     setCurrentVersion(db, ch.id, v.id);
     // 主档保留该维文本，哨兵须阻断回落主档；辅档同维文本在场但不采用
-    const dimsSource = { 写作特点: 'pb-aux', 特色词汇: '__none__', 章节结构: 'pb-aux' };
+    const dimsSource = { 叙述方式: 'pb-aux', 特色词汇: '__none__', 结构与节奏: 'pb-aux' };
     const bundle = buildStyleBundle({
       primaryProfileId: 'pb-main',
       auxProfileIds: ['pb-aux'],
@@ -230,7 +230,7 @@ describe('polishBenchmarks（混合档案基准）', () => {
           version: 1,
           metricsJson: '{}',
           rulesText: '主规则',
-          dims: { 节奏: '主节奏', 对话: '主对话', 描写: '主描写', 情感基调: '主情感基调', 特色词汇: '主特色词汇文本' },
+          dims: { 结构与节奏: '主节奏', 语言与描写: '主对话；主描写', 情感基调: '主情感基调', 特色词汇: '主特色词汇文本' },
           axes: {},
           terms: [],
           samples: [
@@ -242,7 +242,7 @@ describe('polishBenchmarks（混合档案基准）', () => {
           version: 1,
           metricsJson: '',
           rulesText: '',
-          dims: { 写作特点: '辅写作特点', 特色词汇: '辅特色词汇文本', 章节结构: '辅章节结构' },
+          dims: { 叙述方式: '辅写作特点', 特色词汇: '辅特色词汇文本', 结构与节奏: '辅章节结构' },
           axes: {},
           terms: [{ term: '灵力', note: '代指法力' }],
           samples: [{ id: 'a1', text: '辅样本一' }],

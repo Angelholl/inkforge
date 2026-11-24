@@ -264,7 +264,7 @@ describe('NewBookPage 建档直选蒸馏档案（DEC-2026-1120-07）', () => {
     fireEvent.click(screen.getByRole('button', { name: '建书并进入导入' }));
   }
 
-  it('勾选 2 档提交 → createBook 后调用 bindStyle 且首位=主档、八维 dimsSource 全归主档（DEC-2026-1122-03④）', async () => {
+  it('勾选 2 档提交 → createBook 后调用 bindStyle 且首位=主档、六维 dimsSource 全归主档（DEC-2026-1122-03④）', async () => {
     installFetch();
     await createWithChecks(['甲档', '乙档']);
     await waitFor(() => screen.getByPlaceholderText(/粘贴全文/));
@@ -273,7 +273,7 @@ describe('NewBookPage 建档直选蒸馏档案（DEC-2026-1120-07）', () => {
     expect(body.primaryProfileId).toBe('p1');
     expect(body.auxProfileIds).toEqual(['p2']);
     expect(Object.values(body.dimsSource).every((v) => v === 'p1')).toBe(true);
-    expect(Object.keys(body.dimsSource)).toHaveLength(8); // 七→八（DEC-2026-1122-03④ 尺度维）
+    expect(Object.keys(body.dimsSource)).toHaveLength(6); // 八并六（owner 2026-11-24 拍板）
   });
 
   it('不勾选 → 不调用 bindStyle', async () => {

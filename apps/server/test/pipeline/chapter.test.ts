@@ -211,7 +211,7 @@ describe('B1 风格注入接线（T7B）', () => {
       500,
       new Date().toISOString(),
     );
-    const dims = { 节奏: '场景从容，少跳切', 对话: '对话稀疏', 描写: '白描为主', 情感基调: '克制', 写作特点: '短句为主', 特色词汇: '冷僻字少', 章节结构: '单层推进' };
+    const dims = { 结构与节奏: '场景从容，少跳切；单层推进', 语言与描写: '对话稀疏；白描为主', 情感基调: '克制', 叙述方式: '短句为主', 特色词汇: '冷僻字少', 尺度: '' };
     const axes = { 叙述温度: 20, 语言密度: 80, 叙述者姿态: 50, 节奏: 50, 幽默: 50, 情绪表达: 50 };
     db.prepare(
       'INSERT INTO style_profiles(id, name, source_path, source_hash, version, rules_json, samples_json, metrics_json, created_at) VALUES(?,?,?,?,?,?,?,?,?)',
@@ -264,7 +264,7 @@ describe('B1 风格注入接线（T7B）', () => {
     const draft = cap.calls.find((c) => c.step === 'draft')!;
     // stable 槽进 system（不进 user）：断言抓 system
     expect(draft.system).toContain('【文风画像】');
-    expect(draft.system).toContain('· 节奏：场景从容，少跳切');
+    expect(draft.system).toContain('· 结构与节奏：场景从容，少跳切；单层推进');
     expect(draft.system).toContain('【六轴锚点】');
     expect(draft.system).toContain('叙述温度：叙述温度偏冷');
     expect(draft.system).toContain('（值 20）');
@@ -371,13 +371,13 @@ COMMENT: 节奏拖沓，需压缩。`;
     const bundle = buildStyleBundle({
       primaryProfileId: 'mix-main',
       auxProfileIds: ['mix-aux'],
-      dimsSource: { 写作特点: 'mix-aux', 特色词汇: 'mix-aux', 章节结构: 'mix-aux' },
+      dimsSource: { 叙述方式: 'mix-aux', 特色词汇: 'mix-aux', 结构与节奏: 'mix-aux' },
       profiles: {
         'mix-main': {
           version: 1,
           metricsJson: '{}',
           rulesText: '主规则甲',
-          dims: { 节奏: '主节奏文本', 对话: '主对话文本', 描写: '主描写文本', 情感基调: '主情感基调文本' },
+          dims: { 结构与节奏: '主节奏文本', 语言与描写: '主对话文本；主描写文本', 情感基调: '主情感基调文本' },
           axes: { 叙述温度: 70 },
           terms: [],
           samples: [
@@ -389,7 +389,7 @@ COMMENT: 节奏拖沓，需压缩。`;
           version: 1,
           metricsJson: '',
           rulesText: '辅规则乙',
-          dims: { 写作特点: '辅写作特点文本', 特色词汇: '辅特色词汇文本', 章节结构: '辅章节结构文本' },
+          dims: { 叙述方式: '辅写作特点文本', 特色词汇: '辅特色词汇文本', 结构与节奏: '辅章节结构文本' },
           axes: { 叙述温度: 56 },
           terms: [],
           samples: [{ id: 'a1', text: '辅样本一' }],
@@ -399,21 +399,21 @@ COMMENT: 节奏拖沓，需压缩。`;
     setBookStyleBinding(
       db,
       bid,
-      { primaryProfileId: 'mix-main', auxProfileIds: ['mix-aux'], dimsSource: { 写作特点: 'mix-aux', 特色词汇: 'mix-aux', 章节结构: 'mix-aux' }, weights: {} },
+      { primaryProfileId: 'mix-main', auxProfileIds: ['mix-aux'], dimsSource: { 叙述方式: 'mix-aux', 特色词汇: 'mix-aux', 结构与节奏: 'mix-aux' }, weights: {} },
       JSON.stringify(bundle),
     );
 
-    // generate：混合注入（主 4 维 w=4 / 辅 3 维 w=3 → 叙述温度 (70*4+56*3)/7=64）
+    // generate：混合注入（主 2 维 w=2 / 辅 3 维 w=3 → 叙述温度 (70*2+56*3)/5=62）
     const runId = runFor(bid);
     const cap = capturing(createDefaultMockProvider());
     const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
     expect(outcome.status).toBe('done');
     const draft = cap.calls.find((c) => c.step === 'draft')!;
     expect(draft.system).toContain('【文风画像】');
-    expect(draft.system).toContain('主节奏文本');
+    expect(draft.system).toContain('主对话文本；主描写文本');
     expect(draft.system).toContain('辅写作特点文本');
     expect(draft.system).toContain('辅章节结构文本');
-    expect(draft.system).toContain('（值 64）');
+    expect(draft.system).toContain('（值 62）');
     expect(draft.system).toContain('主规则甲');
     expect(draft.system).toContain('辅规则乙');
 
@@ -447,7 +447,7 @@ COMMENT: 节奏拖沓，需压缩。`;
       new Date().toISOString(),
     );
     // 主档保留该维文本，哨兵须阻断回落主档（否则画像行仍进 prompt）；辅档同维文本在场但不采用
-    const dimsSource = { 写作特点: 'mix-aux', 特色词汇: '__none__', 章节结构: 'mix-aux' };
+    const dimsSource = { 叙述方式: 'mix-aux', 特色词汇: '__none__', 结构与节奏: 'mix-aux' };
     const bundle = buildStyleBundle({
       primaryProfileId: 'mix-main',
       auxProfileIds: ['mix-aux'],
@@ -457,7 +457,7 @@ COMMENT: 节奏拖沓，需压缩。`;
           version: 1,
           metricsJson: '{}',
           rulesText: '主规则甲',
-          dims: { 节奏: '主节奏文本', 对话: '主对话文本', 描写: '主描写文本', 情感基调: '主情感基调文本', 特色词汇: '主特色词汇文本' },
+          dims: { 结构与节奏: '主节奏文本', 语言与描写: '主对话文本；主描写文本', 情感基调: '主情感基调文本', 特色词汇: '主特色词汇文本' },
           axes: { 叙述温度: 70 },
           terms: [],
           samples: [
@@ -469,7 +469,7 @@ COMMENT: 节奏拖沓，需压缩。`;
           version: 1,
           metricsJson: '',
           rulesText: '辅规则乙',
-          dims: { 写作特点: '辅写作特点文本', 特色词汇: '辅特色词汇文本', 章节结构: '辅章节结构文本' },
+          dims: { 叙述方式: '辅写作特点文本', 特色词汇: '辅特色词汇文本', 结构与节奏: '辅章节结构文本' },
           axes: { 叙述温度: 56 },
           terms: [],
           samples: [{ id: 'a1', text: '辅样本一' }],
@@ -484,7 +484,7 @@ COMMENT: 节奏拖沓，需压缩。`;
     expect(outcome.status).toBe('done');
     const draft = cap.calls.find((c) => c.step === 'draft')!;
     expect(draft.system).not.toContain('特色词汇：');
-    expect(draft.system).toContain('节奏：主节奏文本');
+    expect(draft.system).toContain('结构与节奏：辅章节结构文本');
   }, 60000);
 });
 

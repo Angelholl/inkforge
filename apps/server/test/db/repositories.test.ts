@@ -215,7 +215,7 @@ describe('风格绑定关联表（0010）', () => {
   it('setBookStyleBinding/getBookStyleBinding 往返：主辅行+dims 映射+绑定默认开 fewshot', () => {
     const bid = booksRepo.createBook(db, { title: '绑定之书' }).id;
     booksRepo.setBookFewshot(db, bid, false); // 先手动关，证明绑定强制置 1（DEC-2026-1122-03③）
-    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB', 'pC'], dimsSource: { 对话: 'pB' }, weights: {} }, '{"v":2}');
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB', 'pC'], dimsSource: { 语言与描写: 'pB' }, weights: {} }, '{"v":2}');
     const b = booksRepo.getBook(db, bid)!;
     expect(b.styleProfileId).toBe('pA');
     expect(b.styleSnapshotJson).toBe('{"v":2}');
@@ -223,7 +223,7 @@ describe('风格绑定关联表（0010）', () => {
     expect(booksRepo.getBookStyleBinding(db, bid)).toEqual({
       primaryProfileId: 'pA',
       auxProfileIds: ['pB', 'pC'],
-      dimsSource: { 对话: 'pB' },
+      dimsSource: { 语言与描写: 'pB' },
       weights: {},
     });
     booksRepo.deleteBook(db, bid);
@@ -264,6 +264,18 @@ describe('风格绑定关联表（0010）', () => {
     expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles WHERE book_id = ?').get(bid) as { n: number }).n).toBe(1);
     expect(booksRepo.deleteBook(db, bid)).toBe(true);
     expect((db.prepare('SELECT COUNT(*) AS n FROM book_style_profiles').get() as { n: number }).n).toBe(0);
+  });
+
+  it('旧键绑定读出归六维：组异值折主档并带 legacySplits，库内 dims_json 原文字节不变（DM-1）', () => {
+    const bid = booksRepo.createBook(db, { title: '旧键绑定之书' }).id;
+    const legacyDims = { 对话: 'pB', 节奏: 'pC', 章节结构: 'pB' };
+    booksRepo.setBookStyleBinding(db, bid, { primaryProfileId: 'pA', auxProfileIds: ['pB', 'pC'], dimsSource: legacyDims, weights: {} }, '{"v":2}');
+    const binding = booksRepo.getBookStyleBinding(db, bid)!;
+    expect(binding.dimsSource).toEqual({ 语言与描写: 'pB', 结构与节奏: 'pA' });
+    expect(binding.legacySplits?.['结构与节奏']).toContain('重蒸该档案后可再分开');
+    const rows = db.prepare('SELECT dims_json FROM book_style_profiles WHERE book_id = ? ORDER BY is_primary DESC').all(bid) as Array<{ dims_json: string }>;
+    expect(rows.map((r) => r.dims_json)).toEqual([JSON.stringify(legacyDims), JSON.stringify(legacyDims), JSON.stringify(legacyDims)]);
+    booksRepo.deleteBook(db, bid);
   });
 });
 

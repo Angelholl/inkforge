@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { LandingMandate } from '@inkforge/shared';
+import { mapLegacyDimSource, type LandingMandate } from '@inkforge/shared';
 import type { Database } from '../open';
 
 export interface Book {
@@ -143,6 +143,8 @@ export interface StyleBinding {
   dimsSource: Record<string, string>;
   /** 融合比例（0011）：Record<profileId, 整数≥1> Σ=100；空对象=legacy 按贡献维数计权（DEC-2026-1117-05） */
   weights: Record<string, number>;
+  /** 读时别名诊断：mapLegacyDimSource 的 splits（仅非空时由读出方携带）；不入库 */
+  legacySplits?: Record<string, string>;
 }
 
 export function setBookStyleBinding(db: Database, bookId: string, binding: StyleBinding | null, snapshotJson: string | null): void {
@@ -190,11 +192,13 @@ export function getBookStyleBinding(db: Database, bookId: string): StyleBinding 
     .all(bookId) as Array<{ profile_id: string; is_primary: number; dims_json: string; weights_json: string }>;
   if (rows.length === 0) return null;
   const primary = rows[0]!;
+  const mapped = mapLegacyDimSource(JSON.parse(primary.dims_json) as Record<string, string>, primary.profile_id);
   return {
     primaryProfileId: primary.profile_id,
     auxProfileIds: rows.slice(1).map((r) => r.profile_id),
-    dimsSource: JSON.parse(primary.dims_json) as Record<string, string>,
+    dimsSource: mapped.dimsSource,
     weights: JSON.parse(primary.weights_json) as Record<string, number>,
+    ...(Object.keys(mapped.splits).length > 0 ? { legacySplits: mapped.splits } : {}),
   };
 }
 

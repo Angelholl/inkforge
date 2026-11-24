@@ -195,7 +195,7 @@ CARD: 未定章号的卡`);
 
 describe('parseAnalysis FREQTERMS 行（DEC-2026-1120-06）', () => {
   it('解析 FREQTERMS: <词组>: <说明> → freqTerms（同 TERMS 形态）；缺行补 []', () => {
-    const r = parseAnalysis(`DIM: 节奏: 短句。
+    const r = parseAnalysis(`DIM: 结构与节奏: 短句。
 FREQTERMS: 抬眸: 常用于人物对视前的停顿，多出现于对峙语境
 FREQTERMS: 沉默: 高频收尾用语，承担留白功能
 RULES: 平均句长 10-20 字。`);

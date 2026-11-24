@@ -15,8 +15,8 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 
 const SAMPLE_TEXT = '山风掠过松林，少年抬头望向远方。他说：“路还长。”夜色深沉，灯火摇曳。'.repeat(6);
 
-const ANALYSIS_TEXT = `DIM: 节奏: 短句为主，段落 3-6 行。
-DIM: 对话: 对话占比约三成，多短对答。
+const ANALYSIS_TEXT = `DIM: 结构与节奏: 短句为主，段落 3-6 行。
+DIM: 语言与描写: 对话占比约三成，多短对答。
 AXIS: 叙述温度: 72
 AXIS: 语言密度: 55
 RULES: 平均句长 10-20 字。
@@ -101,7 +101,7 @@ describe('蒸馏后台化与同源重蒸（B5，DEC-2026-1116-01 反馈⑤）', 
     expect(job.result).not.toBeNull();
     const analysis = (job.result as DistillStyleDraftDto).analysis;
     expect(Object.keys(analysis.dims).length).toBeGreaterThan(0);
-    expect(analysis.dims['节奏']).toBeTruthy();
+    expect(analysis.dims['结构与节奏']).toBeTruthy();
     // 重蒸后「确认入库」要用的整篇原文随 result 一并回给前端
     expect((job.result as DistillStyleDraftDto).sourceText).toBe(SAMPLE_TEXT);
     expect(profileCount()).toBe(before); // 蒸馏本身永不自动入库（确认门）

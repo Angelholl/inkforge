@@ -12,7 +12,7 @@ import type { LlmProvider } from '../../src/llm/types';
 import type { StyleAnalysisDto } from '@inkforge/shared';
 import { STYLE_AXES, STYLE_DIMENSIONS } from '@inkforge/shared';
 
-const ANALYSIS_TEXT = `DIM: 节奏: 短句为主。
+const ANALYSIS_TEXT = `DIM: 结构与节奏: 短句为主。
 AXIS: 叙述温度: 60
 RULES: 平均句长 10-20 字。`;
 
