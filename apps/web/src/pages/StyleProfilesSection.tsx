@@ -346,7 +346,7 @@ export default function StyleProfilesSection() {
                 {detailMap[p.id]?.status === 'ok' && detailMap[p.id].detail && (
                   <div className="space-y-3">
                     <div>
-                      <div className="text-sm font-medium">七维</div>
+                      <div className="text-sm font-medium">六维</div>
                       {STYLE_DIMENSIONS.map((dim) => (
                         <p key={dim} className="mt-1 text-muted">
                           <span className="text-ink">{dim}</span>：{detailMap[p.id].detail!.analysis.dims[dim] || '—'}
@@ -467,7 +467,7 @@ export default function StyleProfilesSection() {
             <div className="mt-2 space-y-3 rounded-card border border-line bg-bg p-3">
               <h3 className="text-sm font-semibold">草稿预览编辑（未入库）</h3>
               <div>
-                <div className="text-sm font-medium">七维</div>
+                <div className="text-sm font-medium">六维</div>
                 {STYLE_DIMENSIONS.map((dim) => (
                   <label key={dim} className="mt-1 flex items-center gap-2 text-xs">
                     <span className="w-16 shrink-0 text-muted">{dim}</span>

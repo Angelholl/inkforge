@@ -165,6 +165,42 @@ describe('FusionGateDialog（Task-05 门组件）', () => {
     expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['示例主档案', '示例辅档案', '不采用档案风格（按正文走）']);
   });
 
+  it('legacySplits 在场：六组逐维 label + 旧结构分裂灰字 + 哨兵项共存', () => {
+    const dimsSource = {
+      语言与描写: 'sp1',
+      特色词汇: 'sp1',
+      结构与节奏: 'sp1',
+      情感基调: 'sp1',
+      尺度: 'sp1',
+      叙述方式: 'sp1',
+    };
+    renderDialog({
+      report: {
+        ...report,
+        binding: {
+          ...report.binding,
+          styleBinding: {
+            ...report.binding.styleBinding!,
+            dimsSource,
+            legacySplits: { 叙述方式: '旧结构里这一组原本分开跟随档案（写作特点/视角），重蒸该档案后可再分开' },
+          },
+        },
+      },
+    });
+    fireEvent.click(screen.getByLabelText('文风调整：逐维度选跟随哪本档案'));
+    for (const dim of ['语言与描写', '特色词汇', '结构与节奏', '情感基调', '尺度', '叙述方式']) {
+      expect(screen.getByLabelText(`跟随：${dim}`)).toBeTruthy();
+    }
+    expect(screen.getByText(/重蒸该档案后可再分开/)).toBeTruthy();
+    // 哨兵项与六组共存（TL-4 口径）
+    const select = screen.getByLabelText('跟随：语言与描写') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      '示例主档案',
+      '示例辅档案',
+      '不采用档案风格（按正文走）',
+    ]);
+  });
+
   it('profileNames 缺失 → 回落 id 前 8 位灰字', () => {
     const { container } = renderDialog({ report: { ...report, binding: { ...report.binding, profileNames: {} } } });
     expect(container.textContent).toContain('主参考《sp1》＋辅助《sp2》');

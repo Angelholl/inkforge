@@ -363,6 +363,9 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
                       </label>
                     ))}
                   </div>
+                  {Object.entries(binding.styleBinding?.legacySplits ?? {}).map(([dim, text]) => (
+                    <p key={dim} className="mt-1 text-xs text-faint">{dim}：{text}</p>
+                  ))}
                 </>
               )}
             </>

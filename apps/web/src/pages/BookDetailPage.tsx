@@ -110,13 +110,13 @@ export function buildStyleBindBody(checked: string[], dimsSource?: Record<string
   };
 }
 
-/** 风格绑定面板（多选融合，DEC-2026-1117-05）：档案勾选（上限 4）+ 基准档案 + 比例区（六轴与范例取样）+ 七维来源收进高级设置；保存经 onBind 发多选 body，解绑发 {profileId:null}。 */
+/** 风格绑定面板（多选融合，DEC-2026-1117-05）：档案勾选（上限 4）+ 基准档案 + 比例区（六轴与范例取样）+ 维度来源收进高级设置；保存经 onBind 发多选 body，解绑发 {profileId:null}。 */
 function StyleBindPanel({
   binding,
   profiles,
   onBind,
 }: {
-  binding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string>; weights?: Record<string, number> } | null;
+  binding: { primaryProfileId: string; auxProfileIds: string[]; dimsSource: Record<string, string>; weights?: Record<string, number>; legacySplits?: Record<string, string> } | null;
   profiles: StyleProfileDto[];
   onBind: (body: StyleBindBody) => void;
 }) {
@@ -136,7 +136,7 @@ function StyleBindPanel({
   const [weightsTouched, setWeightsTouched] = useState(false);
 
   const profileOf = (id: string) => profiles.find((p) => p.id === id);
-  // 主+已勾辅（主排首）＝七维 select 与比例区的选项序
+  // 主+已勾辅（主排首）＝维度 select 与比例区的选项序
   const ordered = [primary, ...checked.filter((id) => id !== primary)].filter(Boolean);
 
   const resetWeightsFor = (np: string, nextIds: string[]) => {
@@ -300,6 +300,9 @@ function StyleBindPanel({
                 <option value={DIM_SOURCE_NONE}>不采用档案风格（按正文走）</option>
               </select>
             </label>
+          ))}
+          {Object.entries(binding?.legacySplits ?? {}).map(([dim, text]) => (
+            <p key={dim} className="mt-1 w-full text-xs text-faint">{dim}：{text}</p>
           ))}
           <p className="mt-1 w-full text-xs text-faint">共存＝该维文本按绑定序（主→辅）拼接各勾选档案的非空文本，重复段去重。不采用＝该维不注入任何档案画像，按正文与设定写。</p>
         </div>

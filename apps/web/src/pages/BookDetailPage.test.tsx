@@ -821,6 +821,46 @@ describe('StyleBindPanel（风格多选绑定面板）', () => {
     expect((screen.getByLabelText('维度来源-特色词汇') as HTMLSelectElement).value).toBe('__none__');
   });
 
+  it('legacySplits 在场：高级设置显六组维度下拉 + 旧结构分裂灰字提示', async () => {
+    installBindStub({
+      bookOverride: {
+        styleProfileId: 'p1',
+        styleFewshotOn: false,
+        styleBinding: {
+          primaryProfileId: 'p1',
+          auxProfileIds: [],
+          dimsSource: {},
+          legacySplits: { 叙述方式: '旧结构里这一组原本分开跟随档案（写作特点/视角），重蒸该档案后可再分开' },
+        },
+      },
+    });
+    renderPanel();
+    await screen.findByLabelText('风格档案勾选-风格A');
+    (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
+    expect(screen.getByLabelText('维度来源-语言与描写')).toBeTruthy();
+    expect(screen.getByLabelText('维度来源-特色词汇')).toBeTruthy();
+    expect(screen.getByLabelText('维度来源-结构与节奏')).toBeTruthy();
+    expect(screen.getByLabelText('维度来源-情感基调')).toBeTruthy();
+    expect(screen.getByLabelText('维度来源-尺度')).toBeTruthy();
+    expect(screen.getByLabelText('维度来源-叙述方式')).toBeTruthy();
+    expect(screen.getByText(/重蒸该档案后可再分开/)).toBeTruthy();
+  });
+
+  it('legacySplits 缺省：高级设置不渲染旧结构分裂灰字提示', async () => {
+    installBindStub({
+      bookOverride: {
+        styleProfileId: 'p1',
+        styleFewshotOn: false,
+        styleBinding: { primaryProfileId: 'p1', auxProfileIds: [], dimsSource: {} },
+      },
+    });
+    renderPanel();
+    await screen.findByLabelText('风格档案勾选-风格A');
+    (screen.getByText('高级设置').closest('details') as HTMLDetailsElement).open = true;
+    expect(screen.getByLabelText('维度来源-语言与描写')).toBeTruthy();
+    expect(screen.queryByText(/重蒸该档案后可再分开/)).toBeNull();
+  });
+
   it('上限 4：第 5 个档案勾选框 disabled；解绑发 {profileId:null}', async () => {
     installBindStub({});
     renderPanel();

@@ -584,6 +584,7 @@ describe('档案查看细节（DEC-2026-1120-08）', () => {
     expect(within(row).getByText(/青云剑诀/)).toBeTruthy();
     expect(within(row).getByText(/抬眸/)).toBeTruthy();
     expect(within(row).getByText(/SCORE 4\/5 · REASON：整体贴合样本/)).toBeTruthy();
+    expect(within(row).getByText('六维')).toBeTruthy();
     // 只读：面板里没有编辑输入框
     expect(within(row).queryByLabelText('维度-结构与节奏')).toBeNull();
 
