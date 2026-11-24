@@ -515,4 +515,46 @@ describe('纯文本降级分节', () => {
     expect(inline.consumedSections).toEqual(['人物']);
     expect(inline.warnings.some((w) => w.includes('未识别'))).toBe(false);
   });
+
+  const CHAR_PLAIN = `《人物示例》设定集
+
+【人物】
+阿美：连锁公司业务员。
+性格黏人爽利、记账精。弧光：藏→半摊→共谋。
+老王：中介。
+阿珍：业主。
+阿芳
+隔壁宝妈，热心。
+`;
+
+  it('Task-02 人物-only：冒号行+裸名行+续行 → 四卡，尾文不成卡', () => {
+    const d = parseSettingsCompendium(CHAR_PLAIN);
+    expect(d.characters.map((c) => c.name)).toEqual(['阿美', '老王', '阿珍', '阿芳']);
+    expect(d.characters.some((c) => c.name === '弧光')).toBe(false);
+    expect(d.characters[0].baseSetting).toContain('连锁公司业务员');
+    expect(d.characters[0].baseSetting).toContain('弧光：藏→半摊→共谋。');
+    expect(d.characters[3].baseSetting).toContain('隔壁宝妈');
+  });
+
+  it('Task-02 人物护栏：无冒号短尾不成卡；重名去重 warning', () => {
+    const noColon = parseSettingsCompendium('人物：阿美、老王与阿珍三人。');
+    expect(noColon.characters).toEqual([]);
+
+    const dup = parseSettingsCompendium('【人物】\n阿美：甲。\n阿美：乙。');
+    expect(dup.characters.map((c) => c.name)).toEqual(['阿美']);
+    expect(dup.warnings.some((w) => w.includes('重名'))).toBe(true);
+  });
+
+  it('Task-02 人物护栏：标签前缀与带标点短行不成卡（异议③）', () => {
+    const d = parseSettingsCompendium('【人物】\n性格泼辣。\n背景介绍：略。\n老王：中介。');
+    expect(d.characters.map((c) => c.name)).toEqual(['老王']);
+  });
+
+  it('Task-02 同桶合并：两个【人物】节跨节重名仅一条 warning', () => {
+    const d = parseSettingsCompendium(
+      '《合并示例》设定集\n\n【人物】\n阿美：甲。\n\n【人物】\n阿美：乙。\n老王：丙。\n',
+    );
+    expect(d.characters.map((c) => c.name)).toEqual(['阿美', '老王']);
+    expect(d.warnings.filter((w) => w.includes('重名'))).toHaveLength(1);
+  });
 });

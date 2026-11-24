@@ -340,11 +340,31 @@ function extractCards(text: string): ParsedCard[] {
   return cards;
 }
 
-/** 人物卡三形态：①粗体行段 ②表格行首格粗体 ③bullet 首粗体；'**标签**：…' 段与重名跳过。 */
+// S3：纯文本人物行守卫白名单（钉值，按前缀起头判定）
+const NON_NAME_LABELS = [
+  '弧光', '功能', '简介', '设定', '备注', '年龄', '身份', '职业', '关系', '出场', '登场',
+  '能力', '缺陷', '秘密', '结局', '外号', '代号', '住所', '立场', '说话腔', '性格', '背景',
+  '定位', '机制', '原则',
+];
+
+/** S3：名段守卫（form A ≤10 字 / 裸名 ≤12 字），两形态共用。 */
+function plainNameOk(rawName: string, bare: boolean): boolean {
+  const name = stripParensNote(rawName).trim();
+  const re = bare
+    ? /^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9·]{0,11}$/
+    : /^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9·]{0,9}$/;
+  if (!re.test(name)) return false;
+  if (NON_NAME_LABELS.some((label) => name.startsWith(label))) return false;
+  if (/^[〇零一二三四五六七八九十百千两\d]+[卷部篇章节]$/.test(name)) return false;
+  return true;
+}
+
+/** 人物卡三形态：①粗体行段 ②表格行首格粗体 ③bullet 首粗体；'**标签**：…' 段与重名跳过。plain 时走行式形态。 */
 function parseCharacters(
   sec: Section | undefined,
   warnings: string[],
   out: SettingsImportCharacterDraft[],
+  plain = false,
 ): void {
   if (!sec) return;
   const seen = new Set<string>();
@@ -367,6 +387,33 @@ function parseCharacters(
     const t = rawLine.trim();
     if (t === '' || /^#{2,6}\s/.test(t)) {
       flush();
+      continue;
+    }
+    if (plain) {
+      // 冒号名行：^(?:[-·•]\s*)?(名)[：:]\s*(尾)$，名段 ≤20 字
+      const named = t.match(/^(?:[-·•]\s*)?([^：:\n]{1,20})[：:]\s*(.*)$/);
+      if (named !== null) {
+        const name = named[1].trim();
+        if (plainNameOk(name, false)) {
+          flush();
+          const tail = named[2].trim();
+          cur = { name: stripParensNote(name).trim(), parts: tail !== '' ? [tail] : [] };
+          continue;
+        }
+      } else {
+        // 裸名行：^(?:[-·•]\s*)?([^：:\n]{1,12})$
+        const bare = t.match(/^(?:[-·•]\s*)?([^：:\n]{1,12})$/);
+        if (bare !== null) {
+          const name = bare[1].trim();
+          if (plainNameOk(name, true)) {
+            flush();
+            cur = { name: stripParensNote(name).trim(), parts: [] };
+            continue;
+          }
+        }
+      }
+      // 其余非空行并入当前卡；无当前卡则忽略
+      if (cur !== null) cur.parts.push(stripMd(t));
       continue;
     }
     if (t.startsWith('|')) {
@@ -629,7 +676,7 @@ export function parseSettingsCompendium(raw: string): SettingsImportDraftDto {
 
   const characters: SettingsImportCharacterDraft[] = [];
   const charactersSec = doc.sections.find((s) => s.heading.includes('人物'));
-  parseCharacters(charactersSec, warnings, characters);
+  parseCharacters(charactersSec, warnings, characters, plain);
 
   const tree: OutlineTreeDto = { volumes: [] };
   const allCards: ParsedCard[] = [];
