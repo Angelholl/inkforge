@@ -60,13 +60,46 @@ describe('fusion/tension 行协议（Task-03；规格 §3.5）', () => {
     expect(rows.some((r) => r.entry === '非法规格')).toBe(false);
   });
 
-  it('维度=非八维名（视角）→ lever:none 且 dim undefined', () => {
+  it('维度=视角 → 折算 dim:\'叙述方式\'（旧例只翻转钉值；DM-3）', () => {
     const text = 'TENSION: 描写密度 | 甲侧 | 乙侧 | 拉扯 | 偏向档案 | 维度=视角';
     const { rows, invalid } = parseTensionRows(text);
     expect(invalid).toBe(0);
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.lever).toBe('none');
-    expect(rows[0]!.dim).toBeUndefined();
+    expect(rows[0]!.lever).toBe('dim');
+    expect(rows[0]!.dim).toBe('叙述方式');
+  });
+
+  it('旧八维名与视角词落点 → 折算为新六维 dim（DM-3）', () => {
+    const foldCases: Array<[string, string | undefined]> = [
+      ['写作特点', '叙述方式'],
+      ['节奏', '结构与节奏'],
+      ['对话', '语言与描写'],
+      ['描写', '语言与描写'],
+      ['章节结构', '结构与节奏'],
+      ['视角', '叙述方式'],
+      ['人称', '叙述方式'],
+      ['POV', '叙述方式'],
+      ['pov', '叙述方式'],
+      ['视点', '叙述方式'],
+      ['描写密度', undefined], // 旧名取消且不在折算表 → lever:none
+      ['叙述视角', undefined], // 旧名取消且不在折算表 → lever:none
+    ];
+    const text = foldCases
+      .map(([raw], i) => `TENSION: 条目${i} | 甲侧 | 乙侧 | 拉扯 | 偏向档案 | 维度=${raw}`)
+      .join('\n');
+    const { rows, invalid } = parseTensionRows(text);
+    expect(invalid).toBe(0);
+    expect(rows).toHaveLength(foldCases.length);
+    foldCases.forEach(([, dim], i) => {
+      const row = rows[i]!;
+      if (dim) {
+        expect(row.lever).toBe('dim');
+        expect(row.dim).toBe(dim);
+      } else {
+        expect(row.lever).toBe('none');
+        expect(row.dim).toBeUndefined();
+      }
+    });
   });
 
   it('落点段空串 / 未知前缀写法 → lever:none', () => {
@@ -130,6 +163,19 @@ describe('fusion/tension 行协议（Task-03；规格 §3.5）', () => {
     expect(prompt).toContain('已绑结构甲');
     expect(prompt).toContain('候选规则乙');
     expect(prompt).toContain('候选结构乙');
+  });
+
+  it('prompt 落点写法/负约束行含六维名与旧名+视角折算字样（DM-3）', () => {
+    const prompt = buildTensionPrompt({
+      description: '',
+      outline: '',
+      boundStyles: [],
+      boundPlanner: [],
+      candidateStyles: [],
+      candidatePlanner: [],
+    });
+    expect(prompt).toContain('维度=<六维名');
+    expect(prompt).toContain('视角/人称/POV');
   });
 
   it('超长 description → prompt 中被截至 2000 字+省略号', () => {

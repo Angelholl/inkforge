@@ -248,6 +248,20 @@ describe('POST /api/books/:bookId/fusion-gate/analyze（Task-03；可见降级�
         },
       ]);
     });
+
+    it('维度=写作特点（旧八维名）→ 响应行 {lever:dim, dim:叙述方式}（折算，profileId 缺省）', async () => {
+      const body = await analyzeWith(
+        'TENSION: 叙述落点 | 甲侧 | 乙侧 | 拉扯 | 偏向档案 | 维度=写作特点',
+        mappedBookId,
+      );
+      expect(body.degraded).toBe(false);
+      expect(body.rows).toHaveLength(1);
+      expect(body.rows[0]).toEqual({
+        entry: '叙述落点', mdSide: '甲侧', profileSide: '乙侧', nature: '拉扯',
+        suggestion: '偏向档案', lever: 'dim', dim: '叙述方式',
+      });
+      expect((body.rows[0] as { profileId?: string }).profileId).toBeUndefined();
+    });
   });
 });
 

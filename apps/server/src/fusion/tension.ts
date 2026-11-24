@@ -3,7 +3,7 @@
  * 纯函数：构造 prompt（截断常量模块内定值，不动 config）+ 解析协议行（非法行丢弃并计数）。
  * canned 文本中性仿形，内容无关：模块不引用任何具体设定集文本。
  */
-import { STYLE_DIMENSIONS, type StyleDimension } from '@inkforge/shared';
+import { LEGACY_DIM_ALIAS, STYLE_DIMENSIONS, type StyleDimension } from '@inkforge/shared';
 
 /** 截断常量：模块内定值（冲击 #7 存证——不进 config、不随环境漂移）。 */
 const HEAD_EXCERPT_CHARS = 2000; // description / outline
@@ -21,7 +21,7 @@ export interface TensionRow {
   nature: '拉扯' | '冗余' | '缺口';
   suggestion: string;
   lever: 'dim' | 'weights' | 'none';
-  /** lever='dim' 时必有：∈ STYLE_DIMENSIONS 八维名 */
+  /** lever='dim' 时必有：∈ STYLE_DIMENSIONS 六维名（兼容旧名与视角/人称/POV 折算） */
   dim?: string;
   /** 占比类原始档案名，映射到 id 留给 routes 层 */
   profileName?: string;
@@ -64,8 +64,8 @@ export function buildTensionPrompt(args: {
     '【任务】对照描述/大纲产物与已绑及候选档案，列出张力对清单。',
     '【输出格式】每行一条协议行，冒号后六段以竖线分隔：',
     'TENSION: <条目> | <MD 侧> | <档案侧> | <性质: 拉扯|冗余|缺口> | <建议偏向> | <落点>',
-    '【落点写法】维度=<八维名> / 占比=<档案名> / 门外（无法对应到具体维度或档案时写 门外）；模型给空或给不认的写法一律视为门外。',
-    `【负约束】不要输出 JSON、markdown 代码块或任何解释；不要复述原文整段；每行前缀必须为 ${TENSION_PREFIX}；性质必须为拉扯/冗余/缺口三者之一；落点只能是 维度=八维名/占比=档案名/门外 三种写法之一。`,
+    '【落点写法】维度=<六维名，兼容旧八维名与 视角/人称/POV> / 占比=<档案名> / 门外（无法对应到具体维度或档案时写 门外）；模型给空或给不认的写法一律视为门外。',
+    `【负约束】不要输出 JSON、markdown 代码块或任何解释；不要复述原文整段；每行前缀必须为 ${TENSION_PREFIX}；性质必须为拉扯/冗余/缺口三者之一；落点只能是 维度=六维名（兼容旧名与视角/人称/POV）/占比=档案名/门外 三种写法之一。`,
     `【描述】${headExcerpt(args.description, HEAD_EXCERPT_CHARS) || '（无）'}`,
     `【大纲】${headExcerpt(args.outline, HEAD_EXCERPT_CHARS) || '（无）'}`,
     `【已绑文风】${truncateNote(boundStyles.truncated)}`,
@@ -79,6 +79,15 @@ export function buildTensionPrompt(args: {
   ].join('\n');
 }
 
+/** 落点维度名折算：新六维名原样 / 旧八维名经别名 / 视角词归并「叙述方式」；其余不认。 */
+const LANDING_VIEWPOINT_WORDS = ['视角', '人称', 'POV', 'pov', '视点'];
+function foldDimName(raw: string): StyleDimension | undefined {
+  if ((STYLE_DIMENSIONS as readonly string[]).includes(raw)) return raw as StyleDimension;
+  const alias = LEGACY_DIM_ALIAS[raw];
+  if (alias) return alias as StyleDimension;
+  return LANDING_VIEWPOINT_WORDS.includes(raw) ? '叙述方式' : undefined;
+}
+
 /**
  * 落点归一化：只认 维度=/占比= 两类前缀；模型给空或给不认的写法一律视为门外。
  */
@@ -86,10 +95,8 @@ function normalizeLanding(landing: string): Pick<TensionRow, 'lever' | 'dim' | '
   const value = landing.trim();
   if (!value) return { lever: 'none' };
   if (value.startsWith('维度=')) {
-    const dim = value.slice('维度='.length).trim();
-    return STYLE_DIMENSIONS.includes(dim as StyleDimension)
-      ? { lever: 'dim', dim: dim as StyleDimension }
-      : { lever: 'none' };
+    const dim = foldDimName(value.slice('维度='.length).trim());
+    return dim ? { lever: 'dim', dim } : { lever: 'none' };
   }
   if (value.startsWith('占比=')) {
     const profileName = value.slice('占比='.length).trim();
