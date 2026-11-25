@@ -11,8 +11,6 @@ export default function PlotProfilesSection() {
         analyze: api.analyzePlot,
         save: api.savePlotProfile,
         remove: api.deletePlotProfile,
-        bind: api.bindPlot,
-        listBooks: api.listBooks,
       }}
       labels={{
         title: '剧情蒸馏（剧情档案）',
@@ -41,10 +39,6 @@ export default function PlotProfilesSection() {
         removedMsg: (label) => `剧情档案「${label}」已删除（相关书绑定已清空）`,
         removeFailMsg: (message) => `删除失败：${message}`,
         deleteWarning: '该剧情档案将删除，已绑定书将自动解绑，不可恢复。',
-        chooseBookMsg: '请先选择要绑定的书',
-        boundMsg: (bookTitle) => `已绑定到《${bookTitle}》：AI 建议蓝图将注入该剧情参考`,
-        bindFailMsg: (message) => `绑定失败：${message}`,
-        bindLabelPrefix: '绑定书-',
         structureCount: (count) => `${count} 条剧情骨架`,
       }}
     />

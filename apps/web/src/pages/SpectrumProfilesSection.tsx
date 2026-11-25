@@ -11,8 +11,6 @@ export default function SpectrumProfilesSection() {
         analyze: api.analyzeSpectrum,
         save: api.saveSpectrumProfile,
         remove: api.deleteSpectrumProfile,
-        bind: api.bindSpectrum,
-        listBooks: api.listBooks,
       }}
       labels={{
         title: '人物光谱蒸馏（人物光谱档案）',
@@ -41,10 +39,6 @@ export default function SpectrumProfilesSection() {
         removedMsg: (label) => `人物光谱档案「${label}」已删除（相关书绑定已清空）`,
         removeFailMsg: (message) => `删除失败：${message}`,
         deleteWarning: '该人物光谱档案将删除，已绑定书将自动解绑，不可恢复。',
-        chooseBookMsg: '请先选择要绑定的书',
-        boundMsg: (bookTitle) => `已绑定到《${bookTitle}》：AI 建议蓝图时将注入该人物光谱参考`,
-        bindFailMsg: (message) => `绑定失败：${message}`,
-        bindLabelPrefix: '绑定书-',
         structureCount: (count) => `${count} 条人物原型`,
       }}
     />

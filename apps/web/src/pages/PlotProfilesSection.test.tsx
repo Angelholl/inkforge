@@ -172,26 +172,25 @@ describe('PlotProfilesSection（DEC-2026-1120-03）', () => {
     expect(screen.getByText('剧情档案已入库：剧情乙')).toBeTruthy();
   });
 
-  it('绑定书：选择书 → PUT /api/books/b1/plot 携带 profileId', async () => {
+  it('BR：蒸馏页剧情卡无绑定控件，徽标只读显示已绑定书', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
         const u = String(url);
         calls.push({ url: u, init });
-        if (u.endsWith('/api/plot-profiles') && (!init?.method || init.method === 'GET')) return jsonResponse(rows);
+        if (u.endsWith('/api/plot-profiles') && (!init?.method || init.method === 'GET'))
+          return jsonResponse([{ ...PROFILE, boundBooks: [{ id: 'b1', title: '测试书' }] }]);
         if (u.endsWith('/api/books')) return jsonResponse([{ id: 'b1', title: '测试书' }]);
-        if (u.endsWith('/api/books/b1/plot') && init?.method === 'PUT') return jsonResponse({ ok: true, plotProfileId: 'pp1' });
         return jsonResponse({});
       }),
     );
     renderSection();
 
     await waitFor(() => expect(screen.getByText('剧情甲')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('绑定书-剧情甲'), { target: { value: 'b1' } });
-    fireEvent.click(screen.getByRole('button', { name: '绑定' }));
-    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/api/books/b1/plot') && c.init?.method === 'PUT')).toBe(true));
-    const bind = calls.find((c) => c.url.endsWith('/api/books/b1/plot') && c.init?.method === 'PUT')!;
-    expect(JSON.parse(String(bind.init?.body))).toEqual({ profileId: 'pp1' });
-    expect(await screen.findByText(/已绑定到《测试书》/)).toBeTruthy();
+    expect(screen.queryByLabelText(/绑定书-/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '绑定' })).toBeNull();
+    const badge = screen.getByText(/已绑定：《测试书》/);
+    expect(badge.querySelector('select, button')).toBeNull();
+    expect(badge.closest('select, button')).toBeNull();
   });
 });

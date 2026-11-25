@@ -1,7 +1,7 @@
 import { Fragment, useId, useState, type ReactNode } from 'react';
 import { useQuery, type QueryKey } from '@tanstack/react-query';
 import { Button } from './ui';
-import { inputBase, selectBase, textareaBase } from './Field';
+import { inputBase, textareaBase } from './Field';
 import { EmptyState } from './EmptyState';
 import { decodeTextFile } from './textFile';
 
@@ -9,8 +9,8 @@ import { decodeTextFile } from './textFile';
  * 三份蒸馏档案分区的公共骨架（纯重构，行为不变）。
  *
  * - ProfilesListShell：列表卡片布局 + 空态 + L2 两步删除确认（style/plot/spectrum 共用）；查询留在各分区，以便各自持有 refetch。
- * - DistillProfilesShell：在列表之上补齐「四函数骨架（analyze/save/remove/bind）+ 绑定下拉 +
- *   蒸馏表单（来源文本+名称+前置校验）+ 可编辑草稿预览」这一完整形状，plot/spectrum 直接作配置壳使用。
+ * - DistillProfilesShell：在列表之上补齐「三函数骨架（analyze/save/remove）+
+ *   蒸馏表单（来源文本+名称+前置校验）+ 可编辑草稿预览 + 只读绑定徽标」这一完整形状，plot/spectrum 直接作配置壳使用。
  *
  * style 特有的七维编辑表单 / 查看细节面板 / 版本·重蒸面板不进本文件，留在 StyleProfilesSection
  * 内以 render-prop 注入（它复用 ProfilesListShell，但蒸馏态有自己的三态机，不走 DistillProfilesShell）。
@@ -76,22 +76,16 @@ export function ProfilesListShell<P extends ListProfileBase>({
   );
 }
 
-interface BookLike {
-  id: string;
-  title: string;
-}
-
 export interface DistillProfileBase extends ListProfileBase {
   sourcePath: string;
   structure: string[];
+  boundBooks?: Array<{ id: string; title: string }>;
 }
 
 interface DistillApi<D> {
   analyze: (body: { name: string; text: string }) => Promise<{ draft: D }>;
   save: (draft: D) => Promise<unknown>;
   remove: (id: string) => Promise<unknown>;
-  bind: (bookId: string, profileId: string) => Promise<unknown>;
-  listBooks: () => Promise<BookLike[]>;
 }
 
 interface DistillLabels {
@@ -120,10 +114,6 @@ interface DistillLabels {
   removedMsg: (label: string) => string;
   removeFailMsg: (message: string) => string;
   deleteWarning: ReactNode;
-  chooseBookMsg: string;
-  boundMsg: (bookTitle: string) => string;
-  bindFailMsg: (message: string) => string;
-  bindLabelPrefix: string;
   structureCount: (count: number) => string;
 }
 
@@ -134,7 +124,7 @@ interface DistillProfilesShellProps<P extends DistillProfileBase, D> {
   labels: DistillLabels;
 }
 
-/** 完整蒸馏分区骨架：列表 + 绑定 + 蒸馏表单 + 可编辑草稿预览。plot/spectrum 仅传配置即可。 */
+/** 完整蒸馏分区骨架：列表 + 只读绑定徽标 + 蒸馏表单 + 可编辑草稿预览。plot/spectrum 仅传配置即可。 */
 export function DistillProfilesShell<P extends DistillProfileBase, D>({
   queryKey,
   listApi,
@@ -143,9 +133,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
 }: DistillProfilesShellProps<P, D>) {
   const inputId = useId();
   const { data: profilesData, refetch } = useQuery({ queryKey, queryFn: listApi, refetchInterval: 5000 });
-  const { data: booksData } = useQuery({ queryKey: ['books'], queryFn: api.listBooks, refetchInterval: 5000 });
   const profiles = Array.isArray(profilesData) ? profilesData : [];
-  const books = Array.isArray(booksData) ? booksData : [];
   const [name, setName] = useState('');
   const [text, setText] = useState('');
   const [fileInfo, setFileInfo] = useState('');
@@ -154,7 +142,6 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [msg, setMsg] = useState('');
-  const [bindBook, setBindBook] = useState<Record<string, string>>({});
 
   const analyze = async () => {
     setMsg('');
@@ -222,25 +209,6 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
     }
   };
 
-  const bind = async (profileId: string) => {
-    const bookId = bindBook[profileId];
-    if (!bookId) {
-      setMsg(labels.chooseBookMsg);
-      return;
-    }
-    setBusy(true);
-    try {
-      await api.bind(bookId, profileId);
-      const bookTitle = books.find((b) => b.id === bookId)?.title ?? bookId;
-      setMsg(labels.boundMsg(bookTitle));
-      void refetch();
-    } catch (e) {
-      setMsg(labels.bindFailMsg((e as Error).message));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <section className="mt-10" data-testid={labels.testid}>
       <h2 className="text-lg font-semibold">{labels.title}</h2>
@@ -257,6 +225,11 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
               <span className="font-medium">{p.name}</span>
               <span className="text-xs text-muted">{labels.structureCount(p.structure.length)}</span>
               <span className="min-w-0 break-all text-xs text-faint">{p.sourcePath}</span>
+              {p.boundBooks && p.boundBooks.length > 0 && (
+                <span className="text-xs text-primary-strong">
+                  已绑定：{p.boundBooks.map((b) => `《${b.title}》`).join('')}
+                </span>
+              )}
               {ctx.confirming ? (
                 <>
                   <span className="text-danger text-xs">{labels.deleteWarning}</span>
@@ -278,24 +251,6 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
                 <li key={i}>{s}</li>
               ))}
             </ul>
-            <div className="mt-2 flex items-center gap-2 text-sm">
-              <select
-                className={selectBase}
-                aria-label={`${labels.bindLabelPrefix}${p.name}`}
-                value={bindBook[p.id] ?? ''}
-                onChange={(e) => setBindBook({ ...bindBook, [p.id]: e.target.value })}
-              >
-                <option value="">（选择要绑定的书）</option>
-                {books.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.title}
-                  </option>
-                ))}
-              </select>
-              <Button variant="secondary" size="sm" disabled={busy} onClick={() => void bind(p.id)}>
-                绑定
-              </Button>
-            </div>
           </li>
         )}
       />
