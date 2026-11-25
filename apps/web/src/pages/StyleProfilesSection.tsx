@@ -469,7 +469,7 @@ export default function StyleProfilesSection() {
               <h3 className="text-sm font-semibold">草稿预览编辑（未入库）</h3>
               {draft.warnings.length > 0 && (
                 <div role="alert" className="rounded-card border border-line bg-bg p-2 text-xs text-muted">
-                  单维字数不足（草稿未达标，请编辑补厚后再确认入库）：{draft.warnings.join('；')}
+                  字数不足（草稿未达标，请编辑补厚后再确认入库）：{draft.warnings.join('；')}
                 </div>
               )}
               <div>

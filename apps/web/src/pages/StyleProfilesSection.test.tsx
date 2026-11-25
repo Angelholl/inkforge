@@ -471,7 +471,7 @@ describe('StyleProfilesSection 三态确认门', () => {
 
   it('蒸馏草稿 warning：预览区顶部 role=alert 显示钉死文案（DF-6）', async () => {
     distilled = false;
-    jobWarnings = ['维度语言与描写仅42字，低于下限70字', '维度情感基调仅0字，低于下限70字'];
+    jobWarnings = ['维度语言与描写仅42字，低于下限70字', '维度情感基调仅0字，低于下限70字', '高频词「抬眸」说明仅12字，低于下限30字'];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
     vi.stubGlobal('fetch', fetchMock);
     renderSection();
@@ -483,9 +483,12 @@ describe('StyleProfilesSection 三态确认门', () => {
 
     await screen.findByRole('alert');
     const alertText = screen.getByRole('alert').textContent ?? '';
-    expect(alertText).toContain('单维字数不足（草稿未达标，请编辑补厚后再确认入库）：');
+    // R-F1-6（DEC-2026-1125-03①）：前缀泛化——高频词缺口同走本 alert
+    expect(alertText.startsWith('字数不足（')).toBe(true); // 硬钉：「单维」前缀已去掉
+    expect(alertText).toContain('字数不足（草稿未达标，请编辑补厚后再确认入库）：');
     expect(alertText).toContain('维度语言与描写仅42字，低于下限70字');
     expect(alertText).toContain('维度情感基调仅0字，低于下限70字');
+    expect(alertText).toContain('高频词「抬眸」说明仅12字，低于下限30字');
 
     // 红线：warnings 仅草稿层展示，不随确认入库 POST 落库
     fireEvent.click(screen.getByRole('button', { name: '确认入库' }));
