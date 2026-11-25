@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { StyleAnalysisDto } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import type { LlmProvider } from '../llm/types';
-import { parseAnalysis, parseSelfEval, STYLE_DIM_MIN_CHARS } from '../llm/plainproto';
+import { FREQ_TERM_MIN_CHARS, parseAnalysis, parseSelfEval, STYLE_DIM_MIN_CHARS } from '../llm/plainproto';
 import { computeStyleMetrics } from './metrics';
 import type { StyleSample } from './distill';
 
@@ -20,7 +20,7 @@ DIM: <维度>: <一段描述>（六维：语言与描写、特色词汇、结构
 AXIS: <轴名>: <0-100 整数>（六轴：叙述温度、语言密度、叙述者姿态、节奏、幽默、情绪表达，每轴一行）
 RULES: <一条可执行、可判分的量化规则>（3-8 条，作为六轴的文本补充）
 TERMS: <术语>: <用法说明>（抽取地名/专有词/称谓/器物/组织等世界观术语与用法偏好 3-10 条，严禁人物姓名；无则省略本行）
-FREQTERMS: <词组>: <总结说明>（结合上方统计总结 3-8 条高频用语：何处高频/什么语境/表达功能；与 TERMS 的世界观术语区分，同样严禁人物姓名；无则省略本行）
+FREQTERMS: <词组>: <总结说明>（结合上方统计总结 3-8 条高频用语：何处高频/什么语境/表达功能；每行说明不少于 30 字，请写足语境与表达功能，勿只给短评；与 TERMS 的世界观术语区分，同样严禁人物姓名；无则省略本行）
 NAMES: <原文人物姓名列表，顿号分隔，仅报备不入档案；无则省略本行>
 不要输出 JSON、markdown 代码块或任何解释。
 【样本开始】`;
@@ -59,18 +59,27 @@ export async function analyzeStyle(
     Object.values(a.dims).every((v) => v === '') && a.rules.length === 0;
   const first = parseAnalysis((await deps.provider.complete(baseReq(user))).text);
   let analysis: StyleAnalysisDto = { dims: first.dims as StyleAnalysisDto['dims'], axes: first.axes as StyleAnalysisDto['axes'], rules: first.rules, terms: first.terms, freqTerms: first.freqTerms };
-  // DF-3：「全空」∨「有单维字数缺口」→ 带反馈重试一次（上限 1，自评调用不计入）
+  // DF-3（FB-F1-1 扩高频词）：「全空」∨「有单维字数缺口」∨「高频词说明缺口」→ 带反馈重试一次（上限 1，自评调用不计入）
   let shortfalls = first.dimShortfalls;
-  if (isEmpty(analysis) || shortfalls.length > 0) {
-    const feedback = isEmpty(analysis)
-      ? '【解析失败重试】上一轮输出缺少 DIM/AXIS/RULES 标记，请严格按【输出格式】重新输出。'
-      : `【单维字数不足，需重写】${shortfalls.map((s) => `维度${s.dim}仅${s.chars}字，低于下限${STYLE_DIM_MIN_CHARS}字，请重写该维`).join('；')}`;
-    const second = parseAnalysis((await deps.provider.complete(baseReq(`${user}\n\n${feedback}`))).text);
+  let freqShortfalls = first.freqShortfalls;
+  if (isEmpty(analysis) || shortfalls.length > 0 || freqShortfalls.length > 0) {
+    const feedbackParts: string[] = [];
+    if (isEmpty(analysis)) {
+      feedbackParts.push('【解析失败重试】上一轮输出缺少 DIM/AXIS/RULES 标记，请严格按【输出格式】重新输出。');
+    } else {
+      if (shortfalls.length > 0) feedbackParts.push(`【单维字数不足，需重写】${shortfalls.map((s) => `维度${s.dim}仅${s.chars}字，低于下限${STYLE_DIM_MIN_CHARS}字，请重写该维`).join('；')}`);
+      if (freqShortfalls.length > 0) feedbackParts.push(`【高频词说明不足，需重写】${freqShortfalls.map((s) => `高频词「${s.term}」说明仅${s.chars}字，低于下限${FREQ_TERM_MIN_CHARS}字，请重写该条说明`).join('；')}`);
+    }
+    const second = parseAnalysis((await deps.provider.complete(baseReq(`${user}\n\n${feedbackParts.join('\n')}`))).text);
     analysis = { dims: second.dims as StyleAnalysisDto['dims'], axes: second.axes as StyleAnalysisDto['axes'], rules: second.rules, terms: second.terms, freqTerms: second.freqTerms };
     shortfalls = second.dimShortfalls;
+    freqShortfalls = second.freqShortfalls;
     if (isEmpty(analysis)) throw new Error('文风分析失败：输出缺少 DIM/AXIS/RULES 行');
   }
-  const warnings = shortfalls.map((s) => `维度${s.dim}仅${s.chars}字，低于下限${STYLE_DIM_MIN_CHARS}字`);
+  const warnings = [
+    ...shortfalls.map((s) => `维度${s.dim}仅${s.chars}字，低于下限${STYLE_DIM_MIN_CHARS}字`),
+    ...freqShortfalls.map((s) => `高频词「${s.term}」说明仅${s.chars}字，低于下限${FREQ_TERM_MIN_CHARS}字`),
+  ];
 
   // 自评（held-out 2 段；缺行/未传 → evaluation=[]）
   let evaluation: SelfEvalItem[] = [];

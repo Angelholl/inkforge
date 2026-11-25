@@ -345,10 +345,14 @@ export interface ParsedAnalysis {
   freqTerms: StyleTermDto[];
   errors: string[];
   dimShortfalls: Array<{ dim: string; chars: number }>;
+  freqShortfalls: Array<{ term: string; chars: number }>; // FB-F1-1（DEC-2026-1125-03）：只对写了但不足的行触发；无 FREQTERMS 行=不产生缺口
 }
 
 /** 六维统一单维字数下限（DF-2）：合并维不双倍、不分组待遇。 */
 export const STYLE_DIM_MIN_CHARS = 70;
+
+/** FREQTERMS 每条说明字数下限（FB-F1-1，DEC-2026-1125-03）：与 DF 三层机制同构，仅对写了但不足的行触发。 */
+export const FREQ_TERM_MIN_CHARS = 30;
 
 /** trim 后按 Unicode 码点计字符数：CJK/ASCII/标点/串内空白各计 1，空串或纯空白=0。 */
 function countDimChars(s: string): number {
@@ -436,8 +440,13 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
     const chars = countDimChars(dims[d]);
     if (chars < STYLE_DIM_MIN_CHARS) dimShortfalls.push({ dim: d, chars });
   }
+  const freqShortfalls: Array<{ term: string; chars: number }> = [];
+  for (const t of freqTerms) {
+    const chars = countDimChars(t.note);
+    if (chars < FREQ_TERM_MIN_CHARS) freqShortfalls.push({ term: t.term, chars });
+  }
   for (const a of STYLE_AXES) if (axes[a] === undefined) axes[a] = 0;
-  return { dims, axes, rules, terms, freqTerms, errors, dimShortfalls };
+  return { dims, axes, rules, terms, freqTerms, errors, dimShortfalls, freqShortfalls };
 }
 
 // ── 蒸馏自评（SCORE:/REASON: 行协议，held-out 检验）──
