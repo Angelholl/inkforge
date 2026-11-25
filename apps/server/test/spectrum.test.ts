@@ -56,15 +56,34 @@ describe('analyzeSpectrum（人物光谱蒸馏）', () => {
     expect(draft.sourcePath.startsWith('inline:')).toBe(true);
   });
 
-  it('条数钳制：>8 条截到 8 条；<3 条抛「ROLE 行不足 3 条」', async () => {
-    const many = Array.from({ length: 10 }, (_, i) => `ROLE: 男角色${i}：特性${i}。`).join('\n') + '\nNAMES: 张三';
+  it('条数钳制：>16 条截到 16 条；<3 条抛「ROLE 行不足 3 条」', async () => {
+    const many = Array.from({ length: 20 }, (_, i) => `ROLE: 男角色${i}：特性${i}。`).join('\n') + '\nNAMES: 张三';
     const provider = createMockProvider({ summarize: { text: many } });
     const draft = await analyzeSpectrum({ db, provider }, { name: '光谱B', text: SAMPLE });
-    expect(draft.structure).toHaveLength(8);
+    expect(draft.structure).toHaveLength(16);
 
     const few = 'ROLE: 男角色A：唯一一条。\nNAMES: 张三';
     const provider2 = createMockProvider({ summarize: { text: few } });
     await expect(analyzeSpectrum({ db, provider: provider2 }, { name: '光谱C', text: SAMPLE })).rejects.toThrow('ROLE 行不足 3 条');
+  });
+
+  it('抽样调用点：长文本仅取 16 段且 prompt 写 3-16 条', async () => {
+    let captured = '';
+    let calls = 0;
+    const inner = createMockProvider({ summarize: { text: SPECTRUM_TEXT } });
+    const provider: LlmProvider = {
+      async complete(req) {
+        calls++;
+        captured = req.user;
+        return inner.complete(req);
+      },
+    };
+    const longText = '甲'.repeat(2000 * 21); // 42000 字 → 21 个非空块，均匀取 16
+    const draft = await analyzeSpectrum({ db, provider }, { name: '光谱G', text: longText });
+    expect(calls).toBe(1); // SPECTRUM_TEXT 无脱敏泄漏，恰一次调用
+    expect(draft.structure).toHaveLength(4);
+    expect((captured.match(/----/g) ?? []).length).toBe(15);
+    expect(captured).toContain('3-16 条');
   });
 
   it('脱敏命中 → 自动重蒸成功（第二次干净即放行）', async () => {
