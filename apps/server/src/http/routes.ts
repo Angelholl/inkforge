@@ -20,6 +20,7 @@ import { backupBookPredelete } from '../db/backup';
 import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
 import { mergeSeedIntoBlueprint } from './blueprint-merge';
+import { batchBlueprintSuggest } from './blueprint-batch';
 import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
@@ -37,7 +38,7 @@ import { saveStyleProfile } from '../style/analysis';
 import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } from '../style/merge';
 import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
-import type { DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto } from '@inkforge/shared';
+import type { ChapterBlueprint, DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto } from '@inkforge/shared';
 import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, mergeLegacyDimTexts, parseLandingMandate } from '@inkforge/shared';
 import { runSummarizeStep } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
@@ -408,11 +409,36 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
 
   app.post('/api/books/:bookId/blueprint-suggest', async (req, reply) => {
     const { bookId } = req.params as { bookId: string };
-    const book = booksRepo.getBook(db, bookId);
-    if (!book) return reply.code(404).send({ error: 'not found' });
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
     const body = parseBody(reply, blueprintSuggestSchema, req.body);
     if (!body) return;
-    const { chapterNo } = body;
+    // FB-F5-1（DEC-2026-1125-03）：核心提取为 suggestBlueprintCore，单章路由与批量端点共用同一装配/合并语义
+    const r = await suggestBlueprintCore(bookId, body.chapterNo, body.seed);
+    return reply.code(r.code).send(r.payload);
+  });
+
+  app.post('/api/books/:bookId/blueprint-suggest/batch', async (req, reply) => {
+    // FB-F5-1（DEC-2026-1125-03）：批量蓝图建议——逐章串行、只落蓝图不跑正文（critic 锁边界）
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const result = await batchBlueprintSuggest(
+      {
+        db,
+        config,
+        plannerProvider: state.plannerProvider ?? createRoleProvider(config, 'planner'),
+        suggestOnce: async (chapterNo) => {
+          const r = await suggestBlueprintCore(bookId, chapterNo);
+          if (r.code !== 200) throw new Error(`chapter ${chapterNo}: http ${r.code}`);
+          return (r.payload as { blueprint: ChapterBlueprint }).blueprint;
+        },
+      },
+      { bookId },
+    );
+    reply.send(result);
+  });
+
+  async function suggestBlueprintCore(bookId: string, chapterNo: number, seed?: z.infer<typeof blueprintSuggestSchema>['seed']): Promise<{ code: number; payload: Record<string, unknown> }> {
+    const book = booksRepo.getBook(db, bookId)!; // 调用方已验存在
 
     const prevChapter = chaptersRepo.getChapter(db, bookId, chapterNo - 1);
     const prevVersion = prevChapter?.currentVersionId ? chaptersRepo.getVersion(db, prevChapter.currentVersionId) : undefined;
@@ -490,7 +516,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
         (await plannerProvider.complete(baseReq(`${assembled.user}\n\n${repairPrompt(first.errors)}\n输出必须含一行 LANDING: H（场景）形态落地格`))).text,
       );
     }
-    if (report.errors.length > 0) return reply.code(502).send({ error: 'blueprint parse failed', errors: report.errors });
+    if (report.errors.length > 0) return { code: 502, payload: { error: 'blueprint parse failed', errors: report.errors } };
     // 终态不合格绝不 500，走 warnings 降级
     if (expectsLanding && !landingOk(report)) {
       warnings.push(
@@ -515,9 +541,9 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       }
     }
     // FB-F4-2（DEC-2026-1125-03）：确定性合并 seed——手写内容服务端直保，不赌模型遵循度（空 seed 恒等）
-    report.blueprint = mergeSeedIntoBlueprint(body.seed, report.blueprint);
-    reply.send({ blueprint: report.blueprint, source: 'llm', ...(warnings.length > 0 ? { warnings } : {}) });
-  });
+    report.blueprint = mergeSeedIntoBlueprint(seed, report.blueprint);
+    return { code: 200, payload: { blueprint: report.blueprint, source: 'llm', ...(warnings.length > 0 ? { warnings } : {}) } };
+  }
 
   app.post('/api/books/:bookId/outline-suggest', async (req, reply) => {
     const { bookId } = req.params as { bookId: string };
