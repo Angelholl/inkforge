@@ -19,6 +19,7 @@ import { searchChapters } from '../db/repositories/fts';
 import { backupBookPredelete } from '../db/backup';
 import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
+import { mergeSeedIntoBlueprint } from './blueprint-merge';
 import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
@@ -510,6 +511,8 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
         report.blueprint.mustHaveBeats = [...report.blueprint.mustHaveBeats, { text, keywords: cell.keywords, grade: cell.grade }];
       }
     }
+    // FB-F4-2（DEC-2026-1125-03）：确定性合并 seed——手写内容服务端直保，不赌模型遵循度（空 seed 恒等）
+    report.blueprint = mergeSeedIntoBlueprint(body.seed, report.blueprint);
     reply.send({ blueprint: report.blueprint, source: 'llm', ...(warnings.length > 0 ? { warnings } : {}) });
   });
 
