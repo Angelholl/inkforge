@@ -123,4 +123,22 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
     expect(draft.samples.length).toBeLessThanOrEqual(6);
     expect(draft.samples.length).toBeGreaterThan(0);
   });
+
+  it('distill 自定义模板（不含量条）仍触发逐维下限重试并产出 warning（DF-5 不变量）', async () => {
+    await app.inject({ method: 'PUT', url: '/api/settings/distill-template', payload: { template: CUSTOM_TEMPLATE } });
+    captured = [];
+    const r = await app.inject({ method: 'POST', url: '/api/style-profiles/distill', payload: { name: '模板不变量测', text: SAMPLE_TEXT } });
+    expect(r.statusCode).toBe(202);
+    const job = await waitJob((r.json() as { jobId: string }).jobId);
+    expect(job.status).toBe('done');
+    // ① 首轮 prompt=自定义模板，默认指令六维清单不出场（模板整表替换 instruction）
+    expect(captured[0]).toContain(CUSTOM_TEMPLATE);
+    expect(captured[0]).not.toContain('六维：语言与描写、特色词汇、结构与节奏、情感基调、尺度、叙述方式');
+    // ② 第二次解析调用确实发生，user 段带逐维缺口反馈（模板不含「70 字」仍照常校验）
+    expect(captured.length).toBeGreaterThanOrEqual(2);
+    expect(captured[1]).toContain('低于下限70字');
+    // ③ result 透传 warning（重试后仍不足 → warnings 非空）
+    const result = job.result as { samples: string[]; warnings?: string[] } | null;
+    expect(result?.warnings?.length).toBeGreaterThan(0);
+  });
 });
