@@ -85,6 +85,20 @@ describe('blueprint-suggest 大纲卡注入与确定性叠加（DEC-2026-1120-10
     // F4-1 阶段：合法 seed 已进 handler（合并纯函数 FB-F4-2 接入后此断言随 R-F4-2 扩展）
     expect((good.json() as { blueprint: { beats: string[] } }).blueprint.beats.length).toBeGreaterThan(0);
   });
+
+  it('planner worldview 独立槽 2000 字 + 超截断 warning（R-F3-1，DEC-2026-1125-03）', async () => {
+    const longDesc = '甲'.repeat(1900) + '前段存活标' + '乙'.repeat(594) + '尾部牺牲标'; // 2504 字 > 2000 预算；存活标整体在预算内、尾标在截断线外
+    const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: '世界观槽测书', description: longDesc } });
+    expect(created.statusCode).toBe(201);
+    const newBookId = (created.json() as { id: string }).id;
+    const sug = await app.inject({ method: 'POST', url: `/api/books/${newBookId}/blueprint-suggest`, payload: { chapterNo: 1 } });
+    expect(sug.statusCode).toBe(200);
+    const req = plannerCalls[plannerCalls.length - 1];
+    // worldview=stable 槽 → assembleContext 拼 system（KV cache 前缀）；预算内标记存活、截断线外牺牲
+    expect(req.system).toContain('前段存活标');
+    expect(req.system).not.toContain('尾部牺牲标');
+    expect((sug.json() as { warnings?: string[] }).warnings).toContain('书籍简介超 2000 字，planner 世界观槽已按 head 截断');
+  });
 });
 
 describe('PUT blueprint 保存保留既有 mustHaveBeats（DEC-2026-1120-10 防洗掉）', () => {

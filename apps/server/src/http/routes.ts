@@ -448,14 +448,16 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       prevTail,
       continuityText,
     });
+    const worldviewBrief = book.description; // FB-F3-1（DEC-2026-1125-03）：世界观走 planner 独立槽，不再挤 task 里的【书籍简介】行
     const b = config.budgets.planner;
     const slots = [
       { name: 'hardRules', content: PLANNER_HARD_RULES, budgetChars: b.hardRules, stable: true, keep: 'head' as const },
       { name: 'continuity', content: continuityText, budgetChars: b.continuity, stable: false, keep: 'head' as const },
       ...(imitationBrief ? [{ name: 'imitationStructure', content: imitationBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
-      ...(plotBrief ? [{ name: 'plotReference', content: plotBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
+      ...(plotBrief ? [{ name: 'plotReference', content: plotBrief, budgetChars: 1500, stable: false, keep: 'head' as const }] : []),
       ...(spectrumBrief ? [{ name: 'spectrumReference', content: spectrumBrief, budgetChars: 1500, stable: false, keep: 'head' as const }] : []),
       ...(outlineCardBrief ? [{ name: 'outlineCard', content: outlineCardBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
+      ...(worldviewBrief ? [{ name: 'worldview', content: worldviewBrief, budgetChars: 2000, stable: true, keep: 'head' as const }] : []),
       { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'head' as const },
       { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },
     ];
@@ -479,6 +481,8 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const landingOk = (r: ParsedBlueprint): boolean =>
       r.landingRaw !== null && parseLandingCell(r.landingRaw) !== null && parseLandingCell(r.landingRaw)!.keywords.length > 0;
     const warnings: string[] = [];
+    // FB-F3-1（DEC-2026-1125-03）：worldview 独立槽超预算的可观测——拍板数 2000，截断必须可见
+    if ((book.description?.length ?? 0) > 2000) warnings.push('书籍简介超 2000 字，planner 世界观槽已按 head 截断');
 
     const first = parseBlueprint((await plannerProvider.complete(baseReq(assembled.user))).text);
     let report = first;

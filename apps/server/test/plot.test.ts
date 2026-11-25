@@ -141,6 +141,20 @@ describe('剧情蒸馏 HTTP 层', () => {
     expect(plannerReq.user).toContain('开篇以失踪信物立钩子。');
   });
 
+  it('plotReference 预算 1500，超 600 尾部存活（R-F3-2，DEC-2026-1125-03）', async () => {
+    const longLine = '剧情线甲：' + '长'.repeat(880) + '尾部存活标';
+    const saved = await app.inject({ method: 'POST', url: '/api/plot-profiles', payload: { draft: { name: '长剧情', sourcePath: 'inline:f3test', sourceHash: 'b'.repeat(64), structure: [longLine] } } });
+    expect(saved.statusCode).toBe(201);
+    const pid = (saved.json() as { id: string }).id;
+    const bound = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/plot`, payload: { profileId: pid } });
+    expect(bound.statusCode).toBe(200);
+    const sug = await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 1 } });
+    expect(sug.statusCode).toBe(200);
+    const req = plannerCalls[plannerCalls.length - 1];
+    expect(req.user).toContain('【剧情参考】');
+    expect(req.user).toContain('尾部存活标'); // 旧预算 600 head 截断丢该标记=红；1500 存活=绿
+  });
+
   it('解绑（profileId=null）与未知档案 404', async () => {
     const listed = await app.inject({ method: 'GET', url: '/api/plot-profiles' });
     expect((listed.json() as Array<{ id: string }>)[0].id).toBeTruthy();
