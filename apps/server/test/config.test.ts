@@ -35,6 +35,7 @@ describe('loadConfig', () => {
       characters: 8000,
       styleRules: 1000,
       styleDims: 1600,
+      freqTerms: 600, // DEC-2026-1125-03①
       blueprint: 1000,
       continuity: 2500,
       prevTail: 1500,
@@ -47,6 +48,7 @@ describe('loadConfig', () => {
       characters: 0,
       styleRules: 0,
       styleDims: 0,
+      freqTerms: 0, // DEC-2026-1125-03①：低配档关闭
       blueprint: 500,
       continuity: 1000,
       prevTail: 800,
@@ -59,6 +61,7 @@ describe('loadConfig', () => {
       hardRules: 500,
       styleRules: 400,
       styleDims: 1600, // DEC-2026-1122-03①：targeted 补画像与样本槽，预算对齐 draft
+      freqTerms: 600, // DEC-2026-1125-03①
       fewShot: 2500,
       original: 6000,
       findings: 800,

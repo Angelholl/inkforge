@@ -26,6 +26,13 @@ export function renderStyleBlock(rulesText: string, samples: StyleSample[], budg
   return full.length <= budgetChars ? full : full.slice(0, budgetChars);
 }
 
+/** 高频词常注块（DEC-2026-1125-03①）：独立渲染不并入 renderStyleBlock；空数组返回空串；超预算 head 截断。 */
+export function renderFreqTermsBlock(freqTerms: StyleTermDto[], budgetChars = 600): string {
+  if (freqTerms.length === 0) return '';
+  const full = `【高频词】\n${freqTerms.map((t) => `${t.term}：${t.note}`).join('\n')}`;
+  return full.length <= budgetChars ? full : full.slice(0, budgetChars);
+}
+
 /** 六轴语义句映射表（B1 钉死，写手禁改写；值 <40 取 low、>60 取 high、40-60 视为中性不注入）。 */
 export const AXIS_GUIDES: Record<StyleAxis, { low: string; high: string }> = {
   叙述温度: {

@@ -25,6 +25,7 @@ export interface RewriteSlotsInput {
   worldview?: string;
   styleRules?: string;
   styleDims?: string;
+  freqTerms?: string;
   blueprint?: string;
   continuity?: string;
   prevTail?: string;
@@ -41,6 +42,7 @@ export function buildRewriteSlots(input: RewriteSlotsInput, budgets: AppConfig['
         worldview: input.worldview ?? '',
         styleRules: input.styleRules,
         styleDims: input.styleDims,
+        freqTerms: input.freqTerms,
         blueprint: input.blueprint ?? '',
         continuity: input.continuity ?? '',
         prevTail: input.prevTail ?? '',
@@ -64,6 +66,10 @@ export function buildRewriteSlots(input: RewriteSlotsInput, budgets: AppConfig['
   }
   if (input.styleDims && input.styleDims.length > 0) {
     slots.push({ name: 'styleDims', content: input.styleDims, budgetChars: budgets.styleDims, stable: true, keep: 'head' });
+  }
+  // freqTerms 常注槽（DEC-2026-1125-03①）：有值即插，不受 fewShot 开关门控
+  if (input.freqTerms && input.freqTerms.length > 0) {
+    slots.push({ name: 'freqTerms', content: input.freqTerms, budgetChars: budgets.freqTerms, stable: true, keep: 'head' });
   }
   if (input.fewShot) {
     slots.push({ name: 'fewShot', content: input.fewShot, budgetChars: budgets.fewShot, stable: false, keep: 'head' });

@@ -20,6 +20,7 @@ interface DraftBudgets {
   characters: number;
   styleRules: number;
   styleDims: number;
+  freqTerms: number; // DEC-2026-1125-03①：高频词常注槽（draft/rewrite 600、8k 档 0）
   blueprint: number;
   continuity: number;
   prevTail: number;
@@ -38,6 +39,7 @@ interface RewriteBudgets {
   hardRules: number;
   styleRules: number;
   styleDims: number;
+  freqTerms: number; // DEC-2026-1125-03①
   fewShot: number;
   original: number;
   findings: number;
@@ -106,6 +108,7 @@ const BUDGETS_DRAFT: DraftBudgets = {
   characters: 8000,
   styleRules: 1000,
   styleDims: 1600,
+  freqTerms: 600, // DEC-2026-1125-03①
   blueprint: 1000,
   continuity: 2500,
   prevTail: 1500,
@@ -119,6 +122,7 @@ const BUDGETS_DRAFT_8K: DraftBudgets = {
   characters: 0,
   styleRules: 0,
   styleDims: 0,
+  freqTerms: 0, // DEC-2026-1125-03①：低配档与 fewShot 同族关闭（预算 0=槽内容被截空）
   blueprint: 500,
   continuity: 1000,
   prevTail: 800,
@@ -132,6 +136,7 @@ const BUDGETS_REWRITE: RewriteBudgets = {
   hardRules: 500,
   styleRules: 400,
   styleDims: 1600, // DEC-2026-1122-03①：targeted 补画像与样本槽，预算对齐 draft（:106/:110）
+  freqTerms: 600, // DEC-2026-1125-03①
   fewShot: 2500,
   original: 6000,
   findings: 800,
