@@ -58,7 +58,7 @@ function useActiveSection(enabled: boolean): string {
   return active;
 }
 import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_DIMENSIONS } from '@inkforge/shared';
-import type { BlueprintSuggestBody, CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
+import type { BlueprintSuggestBody, CharacterDto, CharacterInstantiateDraftDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
 
 /**
  * 融合比例归一（DEC-2026-1117-05，客户端归一后提交、服务端只校验）：
@@ -496,6 +496,32 @@ export default function BookDetailPage() {
     }
   };
 
+  const [instBusy, setInstBusy] = useState(false); // FB-F2-3（DEC-2026-1125-03）：实例化人物卡——未绑定=禁用+指引，不静默隐藏
+  const [instDraft, setInstDraft] = useState<CharacterInstantiateDraftDto | null>(null);
+  const openInstantiate = async () => {
+    if (!book?.spectrumProfileId) return;
+    setInstBusy(true);
+    try {
+      setInstDraft(await api.instantiateCharacters(bookId));
+    } catch (e) {
+      setMsg(`实例化失败：${apiErrorText(e)}`);
+    } finally {
+      setInstBusy(false);
+    }
+  };
+  const saveInstantiateDraft = async () => {
+    if (!instDraft) return;
+    for (const c of instDraft.cards) {
+      try {
+        await api.createCharacter(bookId, { name: c.name, baseSetting: c.baseSetting }); // 逐张走既有端点，409 语义不动（计划红线）
+      } catch (e) {
+        setMsg(`保存「${c.name}」失败：${apiErrorText(e)}`);
+      }
+    }
+    setInstDraft(null);
+    void refetchCharacters();
+  };
+
   const startContinue = async () => {
     setMsg('');
     setQueuedRunId('');
@@ -921,7 +947,45 @@ export default function BookDetailPage() {
             <Button variant="secondary" size="sm" onClick={() => void addCard()}>
               添加人物
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={instBusy}
+              disabled={!book?.spectrumProfileId}
+              aria-describedby={!book?.spectrumProfileId ? 'instantiate-hint' : undefined}
+              onClick={() => void openInstantiate()}
+            >
+              实例化人物卡
+            </Button>
+            {!book?.spectrumProfileId && (
+              <span id="instantiate-hint" className="text-xs text-faint">请先在「光谱档案」页绑定档案</span>
+            )}
           </div>
+          {instDraft && (
+            <div className="mt-3 border-t border-line pt-2">
+              {instDraft.warnings.length > 0 && (
+                <ul role="alert" className="mb-2 text-xs text-muted">
+                  {instDraft.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              )}
+              {instDraft.cards.map((c, i) => (
+                <div key={i} className="mb-2 flex items-start gap-2">
+                  <input className={textareaBase} aria-label={`实例化姓名${i + 1}`} value={c.name} onChange={(e) => setInstDraft({ ...instDraft, cards: instDraft.cards.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
+                  <textarea className={textareaBase} rows={2} aria-label={`实例化设定${i + 1}`} value={c.baseSetting} onChange={(e) => setInstDraft({ ...instDraft, cards: instDraft.cards.map((x, j) => (j === i ? { ...x, baseSetting: e.target.value } : x)) })} />
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Button variant="primary" size="sm" onClick={() => void saveInstantiateDraft()}>
+                  确认入库
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setInstDraft(null)}>
+                  取消
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

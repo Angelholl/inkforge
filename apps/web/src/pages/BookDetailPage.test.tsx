@@ -472,11 +472,29 @@ describe('BookDetailPage', () => {
       </QueryClientProvider>,
     );
     const btn = await screen.findByRole('button', { name: '一键批量蓝图建议' });
-    // 数据加载前按钮天然禁用（book=undefined→计数 0），断言须等查询落定——同文件既有「同步断言捕中间帧」惯例
+    // 数据加载前按钮天然禁用（book=undefined→计数 0），断言须等查询落定——同文件既有「世界观」门等查询完成
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false)); // 夹具第一章 blueprint=null → 待生成 ≥1
     fireEvent.click(btn);
     await waitFor(() => expect(screen.getByText(/已生成/)).toBeTruthy());
   });
+
+  it('未绑定光谱→实例化人物卡按钮禁用+指引不静默隐藏（R-F2-4）', async () => {
+    installFetchStub(); // 夹具书 spectrumProfileId=null
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect((screen.getByLabelText('世界观') as HTMLTextAreaElement).value).toBe('旧世界观'));
+    const btn = screen.getByRole('button', { name: '实例化人物卡' });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/请先在「光谱档案」页绑定档案/)).toBeTruthy();
+  });
+
 
   it('切到「分级制每2章重」→ PUT /meta body 钉 landingMandate:{mode:\'cadence\',heavyEveryN:2}', async () => {
     installFetchStub();

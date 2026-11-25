@@ -16,6 +16,8 @@ export interface BookDto {
   styleBinding?: StyleBindingDto | null;
   styleSnapshotJson?: string | null;
   imitationProfileId?: string | null;
+  /** 光谱档案绑定（FB-F2-3 web 类型补齐：服务端 toBook 早已回传，此前 web 面缺失） */
+  spectrumProfileId?: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入 */
   styleFewshotOn: boolean;
   /** 书级落地策略（DEC-2026-1122-01）：GET 由服务端 parseLandingMandate 解析，不外泄原始 JSON 串 */

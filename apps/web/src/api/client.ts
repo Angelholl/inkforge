@@ -39,6 +39,7 @@ import type {
   StyleProfileCreateBody,
   BookMetaPutBody,
   CharacterDto,
+  CharacterInstantiateDraftDto,
   CreateCharacterBody,
   UpdateCharacterBody,
   SettingsQualityDto,
@@ -136,6 +137,8 @@ export const api = {
   // FB-F5-2（DEC-2026-1125-03）：批量蓝图建议——逐章串行、只落蓝图不跑正文
   batchBlueprintSuggest: (bookId: string) =>
     req<{ generated: number; failed: number; items: Array<{ chapterNo: number; ok: boolean; error?: string }> }>(`/api/books/${bookId}/blueprint-suggest/batch`, { method: 'POST' }),
+  // FB-F2-3（DEC-2026-1125-03）：光谱实例化人物卡——返回草稿供审阅，保存仍走 createCharacter
+  instantiateCharacters: (bookId: string) => req<CharacterInstantiateDraftDto>(`/api/books/${bookId}/characters/instantiate`, { method: 'POST', body: JSON.stringify({}) }),
   suggestOutline: (bookId: string, body: OutlineSuggestBody) =>
     req<OutlineSuggestResult>(`/api/books/${bookId}/outline-suggest`, {
       method: 'POST',
