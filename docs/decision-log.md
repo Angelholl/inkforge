@@ -668,3 +668,16 @@
 **执行安排：** 计划真值=`docs/plans/2026-11-24-style-dims-merge.md`（code-planner 产出+主模型自审五查）。四卡**串行**（通道 opencode/hy4-flash-free 限时窗内、非禁入型）：DM-1 shared 六维表+别名纯函数+三口接线+全仓钉值随迁（14 测试文件只随迁不删例）；DM-2 蒸馏模板六维化+parseAnalysis 报错文案「现行六维」；DM-3 张力落点 `foldDimName` 折算（旧八维名 + 视角/人称/POV/pov/视点→叙述方式；`维度=描写密度`/`维度=叙述视角` 仍 none）；DM-4 web 六组展示+legacySplits 两处灰字提示+「七维」标签修正（既有屏显 bug：`StyleProfilesSection.tsx:349` 实为八维标七维，DEC-2026-1122-03 加维时漏改，顺本批统一改「六维」）。禁改红线：merge.ts 六轴(:225-260)/样本席位(:307-353)/逐维判定回落(:186-223) 本体、inject.ts、fingerprint.ts、apply.ts、books.ts setBookStyleBinding 双写、`apps/server/data/**` 一切真实数据。基线起点=TL-4 收口数 781，只增不减。GUI 归 owner 真实测试，v0.2.5 发版等实测放行。
 
 **执行留痕（2026-11-25 凌晨收口）：** 四卡 hy4 通道全部验收合入：DM-1=`a281f9b`（执行者按纪律停 F4 卡外红，主审直修 `fusion-gate.test.ts` 两行钉随迁后代提交）、DM-2=`ffb3e95`、DM-3=`0362ef8`、DM-4=`6ef6471`。测试终账 **799**（781→789→793→796→799 只增不减，每环主审亲跑）；`apps/server/data/**` 全程零 diff=「存量不重写」红线实证。planner 冲击清单两处勘误入档（pipeline/polish 路径笔误；fusion-gate.test 误标「不动」实需随迁），执行者两处正确适配（E2 异值夹具、polish 按实际文件）均记计划完成记录。GUI 归 owner 实测（六组下拉/分裂灰字/六维标签/旧书首过门重弹观察/旧维名 PUT 400），随 TL 批点位一次做完；v0.2.5 发版等实测放行。
+
+## DEC-2026-1125-01 [主模型直做·owner 选项确认] 蒸馏六维统一单维字数下限机制（DF 批，2026-11-25）
+
+**背景：** owner dev 实测：仙家档案重蒸 V3（今日 09:26）不如 V2（11-23）详细，两者同源于阿美大源文（hash 8dade…）、均以 v1 为 base 重蒸。定量：dims 总字数 V2=434（均值 ~54/维）vs V3=261（均值 ~43.5）；合并维「语言与描写」V3=42 vs V2 两段合计 115，「结构与节奏」48 vs 100；连恒等映射三维也同步缩水 15-20%。同日两次 run 波动小（08:24 run 总 293），系统性缩水非采样噪声；terms/freqTerms 反而更满（7→9、3→8）。根因=六维指令对 DIM 行无单维量目标（「每维一行」被执行成单行粒度；RULES/TERMS/FREQTERMS 均有数量目标唯独 DIM 没有）；`app_meta` 无自定义模板（仅 quality_score_threshold），「旧八维模板残留致 DIM 整批丢弃」假设排除；nudgeWeights/张力三选/splits 不在蒸馏调用链。已入库档案无编辑端点、重蒸不注入旧内容（base_profile_id 仅记账）。
+
+**裁决（owner 选项确认）：**
+1. 三层强制逻辑认可：指令显式量条 → 解析端逐维校验不达门槛带反馈自动重试一次 → 仍不达草稿标 warning 人工补；证据词数量不进硬校验、只留指令建议措辞。
+2. 合并维**不**要求双倍内容（owner：「再要求不低于旧维=白合并」）——采**六维统一单维字数下限 = 70 字/维**。
+3. 仙家 V3 数据不动：只修机制管未来蒸馏，不做重蒸验收。
+
+**执行安排：** 计划真值=code-planner 产出 `docs/plans/2026-11-25-dims-floor.md`（卡面 `docs/design/card-2026-11-25-df-planner.md`，通道 opencode/hy4-flash-free 限时窗 DEC-2026-11-18-01 内、非禁入型，dispatch_guard --check exit 0）。计划回账交 owner 审后再派执行卡。测试基线起点=最近存证全量 804，只增不减；回归测试最少三点位（校验触发重试/反馈内容/warning 透传）+边界例，先红后绿。若计划含 web 显示改动，GUI 真实测试延批次收口由 owner 一次做（11-24 令）。
+
+**审批注记（2026-11-25）：** 计划回账主审验收通过，owner 选项批准照计划六卡串行（DF-1→DF-6），首卡 DF-1 派 opencode/hy4-flash-free。
