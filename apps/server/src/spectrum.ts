@@ -69,7 +69,7 @@ export async function analyzeSpectrum(
     timeoutMs: 900000,
     meta: { step: 'summarize' as const },
   });
-  // 抽样：sampleReferenceText 8×2000（与剧情蒸馏同一口径，≈1.6 万字/次）
+  // 抽样：sampleReferenceText 16×2000（≈3.2 万字/次；剧情蒸馏口径为 8×2000，DEC-2026-1125-02）
   const segments = sampleReferenceText(source, { segmentChars: 2000, maxSegments: 16 });
   const prompt = `${SPECTRUM_INSTRUCTION}\n${segments.join('\n----\n')}\n【抽样片段结束】`;
 
