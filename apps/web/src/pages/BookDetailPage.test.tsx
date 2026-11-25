@@ -1,4 +1,4 @@
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -492,7 +492,7 @@ describe('BookDetailPage', () => {
     await waitFor(() => expect((screen.getByLabelText('世界观') as HTMLTextAreaElement).value).toBe('旧世界观'));
     const btn = screen.getByRole('button', { name: '实例化人物卡' });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/请先在「光谱档案」页绑定档案/)).toBeTruthy();
+    expect(screen.getByText(/请先在上方绑定人物光谱档案/)).toBeTruthy();
   });
 
 
@@ -777,6 +777,98 @@ describe('BookDetailPage', () => {
     });
     expect(JSON.parse(String(revivePut.init?.body))).toEqual({ offlineFromChapter: null });
     await waitFor(() => expect(screen.getByLabelText('下线章号-张三')).toBeTruthy());
+  });
+
+  /** BR-2 双绑定条专用桩：列表端点返档案，PUT 回写绑定态供 refetch 回显。 */
+  function installProfileBindStub(opts: { plotProfileId?: string | null; spectrumProfileId?: string | null } = {}) {
+    let plotBound = opts.plotProfileId ?? null;
+    let spectrumBound = opts.spectrumProfileId ?? null;
+    const plotProfiles = [{ id: 'pp1', name: '剧情甲', sourcePath: 'x', structure: [], createdAt: '2026-11-13T08:00:00Z' }];
+    const spectrumProfiles = [{ id: 'sp1', name: '光谱乙', sourcePath: 'x', structure: [], createdAt: '2026-11-13T08:00:00Z' }];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/api/books/b1/plot') && init?.method === 'PUT') {
+          plotBound = (JSON.parse(String(init.body)) as { profileId: string | null }).profileId;
+          return jsonResponse({ ok: true, plotProfileId: plotBound });
+        }
+        if (u.endsWith('/api/books/b1/spectrum') && init?.method === 'PUT') {
+          spectrumBound = (JSON.parse(String(init.body)) as { profileId: string | null }).profileId;
+          return jsonResponse({ ok: true, spectrumProfileId: spectrumBound });
+        }
+        if (u.endsWith('/api/plot-profiles')) return jsonResponse(plotProfiles);
+        if (u.endsWith('/api/spectrum-profiles')) return jsonResponse(spectrumProfiles);
+        if (u.endsWith('/api/books/b1/characters')) return jsonResponse([]);
+        if (u.includes('/api/books/b1')) return jsonResponse({ ...book, plotProfileId: plotBound, spectrumProfileId: spectrumBound });
+        return jsonResponse({});
+      }),
+    );
+  }
+
+  const renderBindPage = (): void => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  };
+
+  it('BR：剧情绑定条——选择档案保存 → PUT /api/books/b1/plot {profileId}，消息+当前绑定回显', async () => {
+    installProfileBindStub();
+    renderBindPage();
+    const sel = (await screen.findByLabelText('剧情档案绑定')) as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(sel.options).some((o) => o.value === 'pp1')).toBe(true));
+    fireEvent.change(sel, { target: { value: 'pp1' } });
+    fireEvent.click(within(sel.parentElement!).getByText('保存绑定'));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/plot') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: 'pp1' });
+    expect(await screen.findByText(/剧情档案已绑定/)).toBeTruthy();
+    expect(await screen.findByText('当前绑定：剧情甲')).toBeTruthy();
+  });
+
+  it('BR：光谱绑定条——保存 → PUT /api/books/b1/spectrum {profileId}，人物卡分区顶部可见', async () => {
+    installProfileBindStub();
+    renderBindPage();
+    const sel = (await screen.findByLabelText('人物光谱档案绑定')) as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(sel.options).some((o) => o.value === 'sp1')).toBe(true));
+    const sec = document.getElementById('sec-characters')!;
+    expect(sec.contains(sel)).toBe(true);
+    expect(sel.compareDocumentPosition(sec.querySelector('ul')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(sel, { target: { value: 'sp1' } });
+    fireEvent.click(within(sel.parentElement!).getByText('保存绑定'));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/spectrum') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: 'sp1' });
+    expect(await screen.findByText(/人物光谱档案已绑定/)).toBeTruthy();
+  });
+
+  it('BR：绑定条解绑 → PUT {profileId:null}；已绑书回显当前档案名', async () => {
+    installProfileBindStub({ plotProfileId: 'pp1' });
+    renderBindPage();
+    const sel = (await screen.findByLabelText('剧情档案绑定')) as HTMLSelectElement;
+    expect(await screen.findByText('当前绑定：剧情甲')).toBeTruthy();
+    fireEvent.change(sel, { target: { value: '' } });
+    fireEvent.click(within(sel.parentElement!).getByText('解绑'));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/plot') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: null });
+    expect(await screen.findByText(/剧情档案已解绑/)).toBeTruthy();
   });
 });
 

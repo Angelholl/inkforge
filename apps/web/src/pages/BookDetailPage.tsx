@@ -8,6 +8,7 @@ import FusionGateDialog from '../components/FusionGateDialog';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
+import ProfileBindBar from '../components/ProfileBindBar';
 import { Badge, Button, Chip } from '../components/ui';
 import { CardHeader } from '../components/Section';
 import { checkboxBase, inputNarrow, selectBase, textareaBase } from '../components/Field';
@@ -346,6 +347,8 @@ export default function BookDetailPage() {
   const { bookId = '' } = useParams();
   const { data: book, refetch } = useQuery({ queryKey: ['book', bookId], queryFn: () => api.getBook(bookId), refetchInterval: 4000 });
   const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
+  const { data: plotProfiles } = useQuery({ queryKey: ['plot-profiles'], queryFn: api.listPlotProfiles, refetchInterval: 5000 });
+  const { data: spectrumProfiles } = useQuery({ queryKey: ['spectrum-profiles'], queryFn: api.listSpectrumProfiles, refetchInterval: 5000 });
   const { data: characters, refetch: refetchCharacters } = useQuery({
     queryKey: ['characters', bookId],
     queryFn: () => api.listCharacters(bookId),
@@ -557,6 +560,26 @@ export default function BookDetailPage() {
       void refetch();
     } catch (e) {
       setMsg(`绑定失败：${(e as Error).message}`);
+    }
+  };
+
+  const bindPlotProfile = async (profileId: string | null): Promise<void> => {
+    try {
+      await api.bindPlot(bookId, profileId);
+      setMsg(profileId === null ? '剧情档案已解绑' : '剧情档案已绑定；AI 建议蓝图时将注入该剧情参考');
+      void refetch();
+    } catch (e) {
+      setMsg(`剧情档案绑定失败：${apiErrorText(e)}`);
+    }
+  };
+
+  const bindSpectrumProfile = async (profileId: string | null): Promise<void> => {
+    try {
+      await api.bindSpectrum(bookId, profileId);
+      setMsg(profileId === null ? '人物光谱档案已解绑' : '人物光谱档案已绑定；AI 建议蓝图时将注入该人物光谱参考');
+      void refetch();
+    } catch (e) {
+      setMsg(`人物光谱档案绑定失败：${apiErrorText(e)}`);
     }
   };
 
@@ -823,6 +846,12 @@ export default function BookDetailPage() {
             value={outlineText}
             onChange={(e) => setOutlineText(e.target.value)}
           />
+          <ProfileBindBar
+            label="剧情档案"
+            profiles={Array.isArray(plotProfiles) ? plotProfiles : []}
+            boundId={book?.plotProfileId ?? null}
+            onBind={(id) => void bindPlotProfile(id)}
+          />
           <div>
             <Button variant="primary" onClick={() => void saveMeta()}>
               保存设定
@@ -842,6 +871,12 @@ export default function BookDetailPage() {
       <section id="sec-characters" className="scroll-mt-16 rounded-card border border-line bg-surface">
         <CardHeader title="人物卡" />
         <div className="p-4">
+          <ProfileBindBar
+            label="人物光谱档案"
+            profiles={Array.isArray(spectrumProfiles) ? spectrumProfiles : []}
+            boundId={book?.spectrumProfileId ?? null}
+            onBind={(id) => void bindSpectrumProfile(id)}
+          />
           <ul className="space-y-2">
             {(characters ?? []).map((c) => (
               <li key={c.id} className="rounded-ctl border border-line px-3 py-2 text-sm">
@@ -958,7 +993,7 @@ export default function BookDetailPage() {
               实例化人物卡
             </Button>
             {!book?.spectrumProfileId && (
-              <span id="instantiate-hint" className="text-xs text-faint">请先在「光谱档案」页绑定档案</span>
+              <span id="instantiate-hint" className="text-xs text-faint">请先在上方绑定人物光谱档案</span>
             )}
           </div>
           {instDraft && (
