@@ -407,6 +407,32 @@ describe('BookDetailPage', () => {
     await waitFor(() => expect(sel.value).toBe('cadence-2'));
   });
 
+  it('基于已有草稿扩展把 textarea JSON 作 seed，默认按钮不传 seed（R-F4-3，DEC-2026-1125-03）', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const bpArea = (await screen.findByPlaceholderText(/蓝图 JSON/)) as HTMLTextAreaElement;
+    fireEvent.change(bpArea, { target: { value: '{"goal":"","beats":["手写节拍甲"]}' } });
+    fireEvent.click(screen.getByRole('button', { name: '基于已有草稿扩展' }));
+    await waitFor(() => {
+      const post = calls.filter((c) => c.url.includes('/blueprint-suggest')).at(-1)!;
+      expect(JSON.parse(String(post.init?.body)).seed).toEqual({ goal: '', beats: ['手写节拍甲'] });
+    });
+    // 默认「AI 建议蓝图」不传 seed（保持现状行为）
+    fireEvent.click(screen.getByRole('button', { name: 'AI 建议蓝图' }));
+    await waitFor(() => {
+      const post = calls.filter((c) => c.url.includes('/blueprint-suggest')).at(-1)!;
+      expect(JSON.parse(String(post.init?.body)).seed).toBeUndefined();
+    });
+  });
+
   it('切到「分级制每2章重」→ PUT /meta body 钉 landingMandate:{mode:\'cadence\',heavyEveryN:2}', async () => {
     installFetchStub();
     render(

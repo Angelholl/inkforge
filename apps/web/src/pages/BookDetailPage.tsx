@@ -58,7 +58,7 @@ function useActiveSection(enabled: boolean): string {
   return active;
 }
 import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_DIMENSIONS } from '@inkforge/shared';
-import type { CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
+import type { BlueprintSuggestBody, CharacterDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
 
 /**
  * 融合比例归一（DEC-2026-1117-05，客户端归一后提交、服务端只校验）：
@@ -457,11 +457,21 @@ export default function BookDetailPage() {
     }
   };
 
-  const suggest = async () => {
+  const suggest = async (opts?: { useSeed?: boolean }) => {
     setMsg('');
+    let body: BlueprintSuggestBody = { chapterNo };
+    if (opts?.useSeed) {
+      // FB-F4-3（DEC-2026-1125-03）：把当前草稿 JSON 作扩展种子传给服务端确定性合并；解析失败就地提示不发请求
+      try {
+        body = { chapterNo, seed: JSON.parse(blueprintText) as NonNullable<BlueprintSuggestBody['seed']> };
+      } catch {
+        setMsg('当前蓝图草稿不是合法 JSON，无法作为扩展种子');
+        return;
+      }
+    }
     setSuggesting(true);
     try {
-      const r = await api.suggestBlueprint(bookId, { chapterNo });
+      const r = await api.suggestBlueprint(bookId, body);
       setBlueprintText(JSON.stringify(r.blueprint, null, 2));
       setMsg(`已填入第 ${chapterNo} 章蓝图建议，可编辑后点「保存蓝图」`);
     } catch (e) {
@@ -1023,6 +1033,9 @@ export default function BookDetailPage() {
             </label>
             <Button variant="secondary" loading={suggesting} onClick={() => void suggest()}>
               AI 建议蓝图
+            </Button>
+            <Button variant="secondary" loading={suggesting} onClick={() => void suggest({ useSeed: true })}>
+              基于已有草稿扩展
             </Button>
             <Button variant="primary" onClick={saveBlueprint}>
               保存蓝图
