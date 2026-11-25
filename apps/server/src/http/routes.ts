@@ -453,7 +453,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       { name: 'continuity', content: continuityText, budgetChars: b.continuity, stable: false, keep: 'head' as const },
       ...(imitationBrief ? [{ name: 'imitationStructure', content: imitationBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       ...(plotBrief ? [{ name: 'plotReference', content: plotBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
-      ...(spectrumBrief ? [{ name: 'spectrumReference', content: spectrumBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
+      ...(spectrumBrief ? [{ name: 'spectrumReference', content: spectrumBrief, budgetChars: 1500, stable: false, keep: 'head' as const }] : []),
       ...(outlineCardBrief ? [{ name: 'outlineCard', content: outlineCardBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'head' as const },
       { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },

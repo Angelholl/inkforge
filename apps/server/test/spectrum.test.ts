@@ -214,6 +214,31 @@ describe('人物光谱 HTTP 层', () => {
     expect(at17.statusCode).toBe(400);
   });
 
+  it('planner 注入：spectrumReference 预算 1500 字（超 600 的尾部存活）', async () => {
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/spectrum-profiles',
+      payload: {
+        draft: {
+          name: '长光谱',
+          sourcePath: 'inline:abcd1234',
+          sourceHash: 'a'.repeat(64),
+          structure: ['甲'.repeat(700) + '尾标甲'],
+        },
+      },
+    });
+    expect(saved.statusCode).toBe(201);
+    const pid = (saved.json() as { id: string }).id;
+
+    const bound = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/spectrum`, payload: { profileId: pid } });
+    expect(bound.statusCode).toBe(200);
+
+    const sug = await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 1 } });
+    expect(sug.statusCode).toBe(200);
+    const req = plannerCalls[plannerCalls.length - 1];
+    expect(req.user).toContain('尾标甲');
+  });
+
   it('解绑（profileId=null）后 planner 组装不含【人物光谱参考】', async () => {
     const un = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/spectrum`, payload: { profileId: null } });
     expect(un.statusCode).toBe(200);
