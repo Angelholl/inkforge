@@ -71,6 +71,15 @@ describe('SpectrumProfilesSection（DEC-2026-1120-09）', () => {
     expect(calls.some((c) => c.init?.method === 'DELETE')).toBe(false);
   });
 
+  it('SP批文案随迁（DEC-2026-1125-02）：说明与占位符均写 3-16 条，与服务端钳制一致', async () => {
+    vi.stubGlobal('fetch', stubFetch());
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('光谱甲')).toBeTruthy());
+    expect(screen.getByText(/3-16 条/).textContent).toContain('蒸馏匿名化人物原型');
+    expect(screen.getByPlaceholderText(/3-16 条/)).toBeTruthy();
+  });
+
   it('删除升 L2：确认发 DELETE /api/spectrum-profiles/sp1 且行消失', async () => {
     vi.stubGlobal('fetch', stubFetch());
     renderSection();

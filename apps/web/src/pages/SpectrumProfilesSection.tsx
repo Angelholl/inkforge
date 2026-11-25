@@ -17,7 +17,7 @@ export default function SpectrumProfilesSection() {
       labels={{
         title: '人物光谱蒸馏（人物光谱档案）',
         description:
-          '从参考正文蒸馏匿名化人物原型（3-8 条，ROLE 行协议，自动防真名泄漏）；绑定书后 AI 建议蓝图时注入【人物光谱参考】。drafter 不注入参考正文（防抄用红线）。',
+          '从参考正文蒸馏匿名化人物原型（3-16 条，ROLE 行协议，自动防真名泄漏；DEC-2026-1125-02）；绑定书后 AI 建议蓝图时注入【人物光谱参考】。drafter 不注入参考正文（防抄用红线）。',
         testid: 'spectrum-profiles',
         listTitle: '人物光谱档案列表',
         emptyTitle: '还没有人物光谱档案',
@@ -25,7 +25,7 @@ export default function SpectrumProfilesSection() {
         formTitle: '蒸馏新档案',
         namePlaceholder: '人物光谱档案名称',
         nameAriaLabel: '人物光谱档案名称',
-        textPlaceholder: '粘贴参考作品正文（去空白后需 ≥200 字；服务端按 ROLE 行协议蒸馏匿名化人物原型 3-8 条）',
+        textPlaceholder: '粘贴参考作品正文（去空白后需 ≥200 字；服务端按 ROLE 行协议蒸馏匿名化人物原型 3-16 条，抽样 16 段×2000）',
         textAriaLabel: '人物光谱蒸馏样本',
         analyzeButton: '人物光谱蒸馏',
         emptyNameMsg: '请先填写人物光谱档案名称',
