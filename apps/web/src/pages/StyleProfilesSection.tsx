@@ -71,6 +71,7 @@ export default function StyleProfilesSection() {
               setDraft({
                 analysis: job.result.analysis,
                 samples: job.result.samples,
+                warnings: job.result.warnings ?? [],
                 name: draftName,
                 sourceText: job.result.sourceText ?? fallbackText,
               });
@@ -466,6 +467,11 @@ export default function StyleProfilesSection() {
           draft && (
             <div className="mt-2 space-y-3 rounded-card border border-line bg-bg p-3">
               <h3 className="text-sm font-semibold">草稿预览编辑（未入库）</h3>
+              {draft.warnings.length > 0 && (
+                <div role="alert" className="rounded-card border border-line bg-bg p-2 text-xs text-muted">
+                  单维字数不足（草稿未达标，请编辑补厚后再确认入库）：{draft.warnings.join('；')}
+                </div>
+              )}
               <div>
                 <div className="text-sm font-medium">六维</div>
                 {STYLE_DIMENSIONS.map((dim) => (
@@ -546,6 +552,8 @@ export default function StyleProfilesSection() {
 interface DistillDraftState {
   analysis: StyleAnalysisDto;
   samples: string[];
+  /** DF-6：重试后仍不达标的单维提示（仅草稿层展示，不入库）；缺省兼容旧 job */
+  warnings: string[];
   /** 确认入库用名称：新蒸=表单名，重蒸=档案名 */
   name: string;
   /** 确认入库用原文：重蒸靠 job result.sourceText 回灌（表单里没有），同 hash 才能算 version+1 */

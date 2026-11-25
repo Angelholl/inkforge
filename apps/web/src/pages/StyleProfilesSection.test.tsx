@@ -67,7 +67,7 @@ function fetchFor(url: string, init?: RequestInit): Response {
         progress: done ? 100 : 30,
         stage: done || status === 'failed' ? '' : 'analyzing',
         error: status === 'failed' ? JOB_ERROR : null,
-        result: done ? { ...DRAFT, sourceText: 'x'.repeat(200) } : null,
+        result: done ? { ...DRAFT, sourceText: 'x'.repeat(200), warnings: jobWarnings } : null,
       }),
       { status: 200 },
     );
@@ -151,6 +151,8 @@ let deleteOverride: { status: number; body: unknown } | null = null;
 let detailFail = false;
 // B5 蒸馏 job 轮询桩：'done'（首查即成，现有蒸馏路径用例的默认）| 'failed' | 'running-then-done'（首查 running、次查起 done）
 let jobStub: 'done' | 'failed' | 'running-then-done' = 'done';
+// DF-6：job done 的 result.warnings 桩（默认空；各用例首行自行设置）
+let jobWarnings: string[] = [];
 let jobPollCount = 0;
 const JOB_ERROR = '文风分析失败：输出缺少 DIM/AXIS/RULES 行';
 
@@ -158,6 +160,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   jobStub = 'done';
+  jobWarnings = [];
   jobPollCount = 0;
   detailFail = false;
 });
@@ -464,6 +467,49 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(await screen.findByText('蒸馏完成（草稿未入库），可编辑后点「确认入库」', {}, { timeout: 4000 })).toBeTruthy();
     expect(screen.getByLabelText('维度-结构与节奏')).toBeTruthy();
     expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/style-profiles/jobs/')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('蒸馏草稿 warning：预览区顶部 role=alert 显示钉死文案（DF-6）', async () => {
+    distilled = false;
+    jobWarnings = ['维度语言与描写仅42字，低于下限70字', '维度情感基调仅0字，低于下限70字'];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '警示测' } });
+    fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
+    fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
+
+    await screen.findByRole('alert');
+    const alertText = screen.getByRole('alert').textContent ?? '';
+    expect(alertText).toContain('单维字数不足（草稿未达标，请编辑补厚后再确认入库）：');
+    expect(alertText).toContain('维度语言与描写仅42字，低于下限70字');
+    expect(alertText).toContain('维度情感基调仅0字，低于下限70字');
+
+    // 红线：warnings 仅草稿层展示，不随确认入库 POST 落库
+    fireEvent.click(screen.getByRole('button', { name: '确认入库' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/style-profiles', expect.anything()));
+    const createCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).endsWith('/api/style-profiles') && (c[1] as RequestInit).method === 'POST',
+    );
+    const body = JSON.parse(String((createCall![1] as RequestInit).body));
+    expect(body).not.toHaveProperty('warnings');
+  });
+
+  it('达标草稿（无 warning）预览区不出现 role=alert（DF-6）', async () => {
+    distilled = false;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init));
+    vi.stubGlobal('fetch', fetchMock);
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('档案名称'), { target: { value: '达标测' } });
+    fireEvent.change(screen.getByPlaceholderText(/粘贴风格样本/), { target: { value: 'x'.repeat(200) } });
+    fireEvent.click(screen.getByRole('button', { name: '蒸馏' }));
+
+    expect(await screen.findByLabelText('维度-结构与节奏')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('蒸馏后台化：job failed → 显性暴露失败原因，停留表单态可重试', async () => {
