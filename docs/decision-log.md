@@ -596,6 +596,12 @@
 
 **终账补记（2026-11-23 晚，发版完成）：** 0.2.3 已经 CI 正式发布——tag `v0.2.3`→commit `1bc6d8c`，run `45177116267` 25 步全绿，Release id 455399069（latest），安装包 65,535,047 B sha256=`171d73e3…` 三方对拍闭环（CI 本 run 本地==服务端 digest==本机整下重哈希）。调试五轮三红三修（Build web 步 `568db43`/checkout depth0 `e1c5853`/剥星号 `1bc6d8c`，根因与形态全文入存证+计划 F1-F6）；critic H1 已闭环（ARP round=2 非空洞实证）。**发版形态就此定版：0.2.4 起发版=push tag，验收放行与 GUI 真实测试仍在 owner，本地链降为参考/兜底。** 全文存证=docs/release/0.2.3-release.md（含 owner 六点实测点位与挂账五项）。
 
+## DEC-2026-1120-06 [OWNER·补录] 高频词总结展示线（2026-11-20，补录于 2026-11-25）
+
+**背景：** 蒸馏输出增设 FREQTERMS 行协议（每行「词组：说明」），合并上限 `FREQ_TERMS_MAX=10`（merge.ts:27），前端展示；当时明示**仅展示不注入**（尚无消费方），注入隔离被写成硬约束。提交 646beb3，基线 389+131；卡面 docs/design/card-2026-1120-freq-terms.md。
+
+**补录说明：** 本条为销账补录（代码注释 `merge.ts:27`、提交信息与前批卡面长期引用本 ID 而日志无档，沿 1120-07/09 先例），细节以 [[freq-terms-batch-state]] 批次账为准。**状态更新（DEC-2026-1125-03①）：**「仅展示」的注入隔离条款被显式推翻——高频词改走独立常注槽；展示面与 FREQ_TERMS_MAX=10 仍有效。
+
 ## DEC-2026-1120-07 [OWNER·补录] 建档直选蒸馏档案（2026-11-20，补录于 2026-11-24）
 
 **背景：** owner 装机实测反馈（真实测试二反馈②）：建档时希望能直接选用已蒸档案，不必建完书再跑详情页。主模型亲执已推 `87ae074`。
@@ -692,3 +698,17 @@
 3. planner 注入预算 `spectrumReference` **600 → 1500 字**（够放 16 行×~90 字）；脱敏重蒸机制保留，成本上升已知晓接受。
 
 **执行安排：** 计划真值=code-planner 产出 `docs/plans/2026-11-25-spectrum-capacity.md`（改动面小、单卡量级，无重大架构决策故不另派 critic）。通道=opencode/hy4-flash-free（限时窗至 2026-12-02 内、非禁入型）。测试基线起点=DF 批终账 815，只增不减；钉值随迁点位：schema max、slice 截断例、prompt 条数文案断言、注入预算断言。存量已入库光谱档案不重蒸不迁移。GUI 归 owner 真实测试延批次收口一次做（11-24 令）。
+
+**执行留痕（2026-11-25 批次收口）：** 三卡全过验收：SP-P-1=`03b3562`（hy4，diff 逐行审四钉值全中）、主审直修注释=`0658fd7`（:72 过时「8×2000」同步——本轮调研曾被此句误导）、SP-P-2=`fdf5ba8`（hy4，守 grep 确认 plot :226/:248 未动）、SP-P-3=`ad74070`（hy4，:456 唯一 1500、其余三槽 600 字面量不动）。主审亲跑验证链终账=**818**（server 610+web 196+shared 12，基线 815→816→817→818 只增不减）；typecheck/lint 全绿。卡面/计划归档=`0186c7a`。GUI 无变化（纯服务端钉值），owner 实测点位=零。
+
+## DEC-2026-1125-03 [owner 选项确认·decision-critic 评议] 四反馈批：高频词强化+接线 / 蓝图 seed 扩展 / planner 接线补洞 / 批量蓝图 / 光谱→人物卡（FB 批，2026-11-25）
+
+**背景：** owner 四条反馈——①高频词蒸馏能力依旧较弱；②小说续写应以光谱档案为根基用 AI 生成人物卡；③世界观与剧情大纲同样无法利用来续写；④蓝图应支持先手写部分情景/剧情再由 AI 扩展补充。事实真值=`docs/design/research-2026-11-25-four-feedbacks.md`（code-reader 调研，锚点抽查全命中）；decision-critic 四档「有条件支持」无 HIGH_RISK，评议全文随批归档。
+
+**裁决（owner 选项确认逐项）：**
+1. **F1 高频词**：指令强化（指令加显式量条=每行说明 ≥30 字+须含语境/功能、纳入 DF 同款「缺口带反馈重试一次+warning 透传」；**保留「无则省略本行」逃生门——硬下限只对「写了但不足」触发，样本真无高频词不得被重试强造**）＋注入接线=**独立常注槽（与 styleRules/styleDims 同族，不受 fewShot 开关门控）**——主模型/critic 原荐 A（随 fewShot 块与 terms 同等待遇），owner 终裁 B。FREQ_TERMS_MAX=10 不动；DF-5 自定义模板下限不变量测试随迁到 FREQTERMS。显式推翻 DEC-2026-1120-06 注入隔离条款（该条补录已随批入日志）。
+2. **F4 蓝图 seed 扩展**：blueprint-suggest 输入 schema 增可选 seed 字段+前端「基于已有草稿扩展」按钮；保用户手写=**服务端确定性合并**（critic 实质修正、owner 采纳：seed.beats 原样置前、模型补充 beats 按 trim 全等去重追加、goal 非空以 seed 为准、mustHaveBeats 沿现 PUT 并集）；畸形 seed→400/忽略+warning 禁 500；`BookDetailPage.test.tsx:103` mock 随迁；expectsLanding 判定保持现状写进卡面。
+3. **F3 planner 接线补洞**：blueprint-suggest 给 worldview 独立槽（预算 ~2000 字=拍板数，附「超预算截断」warning 可观测）+`plotReference` 600→1500 对齐 spectrum；排 SP-P-3 之后合入（同撞 routes.ts 槽区，已满足）；`blueprint-suggest.test.ts:45,72-75` task 槽断言随迁；renderBlueprintTask 移除【书籍简介】行的签名变化随迁全部调用方。**已知边界（critic 链条真相，写进决策）**：planner 槽须经「每章手动点 AI 建议→PUT 保存」生效——挂机续写不会自动吃档案。
+4. **F5 批量蓝图建议**（owner 裁并入本批、接受容量挤压）：续写书对全部无蓝图章节一键批量生成，逐章串行队列（现状=`POST /api/runs` 对 blueprint-less 章直接 400）。
+5. **F2 光谱→AI 实例化人物卡**（排最后=弹性阀）：行协议禁 JSON；解析产物 `{name, baseSetting}`，**baseSetting 须为 JSON 对象字符串**（renderCharacterCards 消费形态）；重名在草稿层标 warning（批内互撞+与既有卡撞名），保存撞 UNIQUE/409 前人已在审；单次 ≤8 张分批；张数>spectrum 行数行为钉死（同原型多卡）；未绑定书=按钮禁用+指引不静默隐藏；characters 槽 8000 超限行为带断言。
+6. **执行序**：SP 批已收口 → **F1→F4→F3→F5→F2**；计划真值=code-planner 产出 `docs/plans/2026-11-25-four-feedbacks-batch.md`（本批五 feature 合并一计划）；通道=opencode/hy4-flash-free 串行、同工作树 ≤1 卡；测试基线起点=818 只增不减。GUI 归 owner 真实测试延批次收口一次做（11-24 令）。
