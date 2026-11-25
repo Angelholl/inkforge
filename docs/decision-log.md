@@ -681,3 +681,14 @@
 **执行安排：** 计划真值=code-planner 产出 `docs/plans/2026-11-25-dims-floor.md`（卡面 `docs/design/card-2026-11-25-df-planner.md`，通道 opencode/hy4-flash-free 限时窗 DEC-2026-11-18-01 内、非禁入型，dispatch_guard --check exit 0）。计划回账交 owner 审后再派执行卡。测试基线起点=最近存证全量 804，只增不减；回归测试最少三点位（校验触发重试/反馈内容/warning 透传）+边界例，先红后绿。若计划含 web 显示改动，GUI 真实测试延批次收口由 owner 一次做（11-24 令）。
 
 **审批注记（2026-11-25）：** 计划回账主审验收通过，owner 选项批准照计划六卡串行（DF-1→DF-6），首卡 DF-1 派 opencode/hy4-flash-free。
+
+## DEC-2026-1125-02 [owner 拍板] 人物光谱蒸馏容量放宽：3-8 → 3-16 条 + 抽样/注入预算联动（SP 批，2026-11-25）
+
+**背景：** owner 实测《少年阿磊》设定集导入（42 人物卡）后光谱蒸馏只出 8 原型。code-reader 调研定性：非丢数据——输入本来就不是人物卡，而是原文均匀抽样（8 段×2000 字≈1.6 万字，`style/sample.ts` 与剧情蒸馏共用），prompt 明文「ROLE 行 3-8 条」+ `spectrum.ts:79-81` slice(0,8) 硬截断 + `schemas.ts:267` max(8)，聚类匿名是 DEC-2026-1120-09 有意设计；planner 注入槽仅 600 字（drafter 不注入红线不变）。owner 判断多人群像书承载不足，拍板放宽。
+
+**裁决（owner 选项确认两问：方向=放宽上限+扩预算；参数=A 温和版）：**
+1. ROLE 条数上限 **8 → 16**（三处同步：prompt「3-16 条」、`spectrum.ts` slice、save schema max(16)）；下限 3 条与「不足 3 条判失败」语义不动。
+2. 抽样预算 **maxSegments 8 → 16**（segmentChars 2000 不变，≈3.2 万字/次）——只改 spectrum.ts 调用点入参，`sampleReferenceText` 默认值与他线共用口径不动。
+3. planner 注入预算 `spectrumReference` **600 → 1500 字**（够放 16 行×~90 字）；脱敏重蒸机制保留，成本上升已知晓接受。
+
+**执行安排：** 计划真值=code-planner 产出 `docs/plans/2026-11-25-spectrum-capacity.md`（改动面小、单卡量级，无重大架构决策故不另派 critic）。通道=opencode/hy4-flash-free（限时窗至 2026-12-02 内、非禁入型）。测试基线起点=DF 批终账 815，只增不减；钉值随迁点位：schema max、slice 截断例、prompt 条数文案断言、注入预算断言。存量已入库光谱档案不重蒸不迁移。GUI 归 owner 真实测试延批次收口一次做（11-24 令）。
