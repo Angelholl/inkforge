@@ -192,6 +192,28 @@ describe('人物光谱 HTTP 层', () => {
     expect(plannerReq.user).toContain('男角色A：表面忠厚实则狡诈，行事以家族存续为最高动机。');
   });
 
+  it('spectrumSaveSchema 边界：16 条 201 / 17 条 400', async () => {
+    const post = (n: number) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/spectrum-profiles',
+        payload: {
+          draft: {
+            name: '边界',
+            sourcePath: 'inline:abcd1234',
+            sourceHash: 'a'.repeat(64),
+            structure: Array.from({ length: n }, (_, i) => `男角色${i}：特性${i}。`),
+          },
+        },
+      });
+
+    const at16 = await post(16);
+    expect(at16.statusCode).toBe(201);
+
+    const at17 = await post(17);
+    expect(at17.statusCode).toBe(400);
+  });
+
   it('解绑（profileId=null）后 planner 组装不含【人物光谱参考】', async () => {
     const un = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/spectrum`, payload: { profileId: null } });
     expect(un.statusCode).toBe(200);

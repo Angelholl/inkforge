@@ -253,7 +253,7 @@ export const plotBindSchema = z.object({
   profileId: z.string().min(1).nullable(),
 });
 
-// 人物光谱蒸馏（DEC-2026-1120-09）：ROLE 行协议草稿（匿名化人物原型 3-8 条），沿 plot schema 同构
+// 人物光谱蒸馏（DEC-2026-1120-09）：ROLE 行协议草稿（匿名化人物原型 3-16 条），沿 plot schema 同构
 export const spectrumAnalyzeSchema = z.object({
   name: z.string().min(1),
   text: z.string().min(1),
@@ -264,7 +264,7 @@ export const spectrumSaveSchema = z.object({
     name: z.string().min(1),
     sourcePath: z.string().min(1),
     sourceHash: z.string().min(8),
-    structure: z.array(z.string().min(1)).min(1).max(8),
+    structure: z.array(z.string().min(1)).min(1).max(16),
   }),
 });
 
