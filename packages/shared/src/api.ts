@@ -602,6 +602,12 @@ export interface SpectrumProfileDto {
   createdAt: string;
 }
 
+/** 实例化人物卡草稿（FB-F2-1，DEC-2026-1125-03）：行协议产物 {name, baseSetting}，baseSetting=JSON 对象字符串；重名/截断 warning 在草稿层标注不落库。 */
+export interface CharacterInstantiateDraftDto {
+  cards: Array<{ name: string; baseSetting: string }>;
+  warnings: string[];
+}
+
 export interface SpectrumSaveBody {
   draft: SpectrumDraftDto;
 }

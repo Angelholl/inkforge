@@ -32,6 +32,9 @@ export const updateCharacterSchema = z.object({
   baseSetting: z.string().optional(),
 });
 
+// FB-F2-1（DEC-2026-1125-03）：光谱档案→AI 实例化人物卡入参；上限 8=单次批量钉死值，与解析端截断一致
+export const characterInstantiateSchema = z.object({ maxCards: z.number().int().min(1).max(8).default(8) });
+
 export const blueprintSchema = z.object({
   title: z.string().min(1),
   blueprint: z.object({
