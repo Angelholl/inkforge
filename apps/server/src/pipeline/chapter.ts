@@ -21,7 +21,7 @@ import { readScoreThreshold } from '../settings';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
 import { getLatestProfile, type StyleSample } from '../style/distill';
-import { renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
+import { renderFreqTermsBlock, renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
 import { loadStyleBundle, mergeStyleProfiles, type MergedStyleProfile } from '../style/merge';
 import { computeStyleMetrics, type StyleMetrics } from '../style/metrics';
 import { runSummarizeStep } from './summarize';
@@ -191,6 +191,7 @@ export async function runChapterPipeline(
     // dims/axes/rules/terms/samples 全部走合并形态（与现单档案同形流入既有槽）
     let styleRulesText = '';
     let styleTerms: StyleTermDto[] = [];
+    let styleFreqTermsText = ''; // DEC-2026-1125-03①：高频词常注槽文本（不受 fewShot 开关门控）
     let styleDims: Record<StyleDimension, string> | undefined;
     let styleAxes: Record<StyleAxis, number> | undefined;
     let styleSamples: StyleSample[] = [];
@@ -198,6 +199,7 @@ export async function runChapterPipeline(
     if (merged) {
       styleRulesText = merged.rulesText;
       styleTerms = merged.terms;
+      styleFreqTermsText = renderFreqTermsBlock(merged.freqTerms, config.budgets.draft.freqTerms);
       styleDims = merged.dims;
       // merged.axes 为 Partial 形态（merge 第 4 步 P 空不写入）；renderStyleDimsBlock 内部逐轴 typeof 守卫，Partial 安全
       styleAxes = merged.axes as Record<StyleAxis, number>;
@@ -233,6 +235,7 @@ export async function runChapterPipeline(
             characters: charactersText || undefined,
             styleDims: styleDimsText || undefined,
             styleRules: styleRulesText || undefined,
+            freqTerms: styleFreqTermsText || undefined,
             blueprint: blueprintText(blueprint),
             continuity: continuityText,
             prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
@@ -342,6 +345,7 @@ export async function runChapterPipeline(
                 hardRules,
                 styleRules: styleRulesText || undefined,
                 styleDims: styleDimsText || undefined,
+                freqTerms: styleFreqTermsText || undefined,
                 fewShot: fewShotBlock,
               },
               config.budgets.rewrite,
@@ -360,6 +364,7 @@ export async function runChapterPipeline(
                 prevTail: prevTexts.length > 0 ? prevTexts[0] : '',
                 styleRules: styleRulesText || undefined,
                 styleDims: styleDimsText || undefined,
+                freqTerms: styleFreqTermsText || undefined,
                 fewShot: fewShotBlock,
                 draftBudgets: config.budgets.draft,
               },
