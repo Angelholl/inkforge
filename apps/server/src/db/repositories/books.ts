@@ -202,13 +202,26 @@ export function getBookStyleBinding(db: Database, bookId: string): StyleBinding 
   };
 }
 
-/** 反查绑定某档案的书（主镜像 UNION 关联表，UNION 自动去重）。 */
-export function listBooksBoundToProfile(db: Database, profileId: string): Array<{ id: string; title: string }> {
-  return db
-    .prepare(
-      'SELECT id, title FROM books WHERE style_profile_id = ? UNION SELECT b.id, b.title FROM book_style_profiles r JOIN books b ON b.id = r.book_id WHERE r.profile_id = ? ORDER BY title',
-    )
-    .all(profileId, profileId) as Array<{ id: string; title: string }>;
+/** 只读徽标反查：该档案当前绑在哪本书。style=0010 关联表引用真相（含辅档命中）；plot/spectrum=books 镜像列固定字面量映射（无用户输入拼接）。 */
+export function listBooksBoundToProfile(
+  db: Database,
+  kind: 'style' | 'plot' | 'spectrum',
+  profileId: string,
+): Array<{ id: string; title: string }> {
+  if (kind === 'style') {
+    // 0010 关联表=引用真相（含辅档命中）
+    return db
+      .prepare(
+        'SELECT DISTINCT b.id, b.title FROM books b JOIN book_style_profiles m ON m.book_id = b.id WHERE m.profile_id = ? ORDER BY b.created_at DESC',
+      )
+      .all(profileId) as Array<{ id: string; title: string }>;
+  }
+  // plot/spectrum=books 镜像列固定字面量映射（无用户输入拼接）
+  const column = kind === 'plot' ? 'plot_profile_id' : 'spectrum_profile_id';
+  return db.prepare(`SELECT id, title FROM books WHERE ${column} = ? ORDER BY created_at DESC`).all(profileId) as Array<{
+    id: string;
+    title: string;
+  }>;
 }
 
 /** 仿写档案绑定/解绑（profileId=null 解绑；存在性守卫由路由层做 404）。 */

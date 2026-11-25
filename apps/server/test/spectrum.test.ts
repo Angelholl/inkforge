@@ -255,6 +255,42 @@ describe('人物光谱 HTTP 层', () => {
     const listed = await app.inject({ method: 'GET', url: '/api/spectrum-profiles' });
     expect((listed.json() as Array<{ id: string }>)[0].id).toBeTruthy();
   });
+
+  it('BR：GET /api/spectrum-profiles 逐条带 boundBooks（绑定书反查）', async () => {
+    const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: '光谱绑定反查书' } });
+    expect(created.statusCode).toBe(201);
+    const boundBookId = (created.json() as { id: string }).id;
+
+    const unboundSaved = await app.inject({
+      method: 'POST',
+      url: '/api/spectrum-profiles',
+      payload: {
+        draft: { name: '光谱未绑', sourcePath: 'inline:br1-unbound', sourceHash: 'c'.repeat(64), structure: ['男角色A：未绑'] },
+      },
+    });
+    expect(unboundSaved.statusCode).toBe(201);
+    const unboundId = (unboundSaved.json() as { id: string }).id;
+
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/spectrum-profiles',
+      payload: {
+        draft: { name: '光谱已绑', sourcePath: 'inline:br1-bound', sourceHash: 'd'.repeat(64), structure: ['男角色A：已绑'] },
+      },
+    });
+    expect(saved.statusCode).toBe(201);
+    const pid = (saved.json() as { id: string }).id;
+
+    const bound = await app.inject({ method: 'PUT', url: `/api/books/${boundBookId}/spectrum`, payload: { profileId: pid } });
+    expect(bound.statusCode).toBe(200);
+
+    const listed = (await app.inject({ method: 'GET', url: '/api/spectrum-profiles' })).json() as Array<{
+      id: string;
+      boundBooks?: Array<{ id: string; title: string }>;
+    }>;
+    expect(listed.find((p) => p.id === pid)!.boundBooks).toEqual([{ id: boundBookId, title: '光谱绑定反查书' }]);
+    expect(listed.find((p) => p.id === unboundId)!.boundBooks).toEqual([]);
+  });
 });
 
 describe('drafter 红线（恒不注入光谱槽）', () => {

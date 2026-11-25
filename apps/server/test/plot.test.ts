@@ -166,4 +166,37 @@ describe('剧情蒸馏 HTTP 层', () => {
     const delUnknown = await app.inject({ method: 'DELETE', url: '/api/plot-profiles/nope' });
     expect(delUnknown.statusCode).toBe(404);
   });
+
+  it('BR：GET /api/plot-profiles 逐条带 boundBooks（绑定书反查）', async () => {
+    const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: '剧情绑定反查书' } });
+    expect(created.statusCode).toBe(201);
+    const boundBookId = (created.json() as { id: string }).id;
+
+    // 一个未绑档案 + 一个被绑档案，按 id 精确断言（created_at 同毫秒并列不依赖列表序）
+    const unboundSaved = await app.inject({
+      method: 'POST',
+      url: '/api/plot-profiles',
+      payload: { draft: { name: '剧情未绑', sourcePath: 'inline:br1-unbound', sourceHash: 'c'.repeat(64), structure: ['未绑结构'] } },
+    });
+    expect(unboundSaved.statusCode).toBe(201);
+    const unboundId = (unboundSaved.json() as { id: string }).id;
+
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/plot-profiles',
+      payload: { draft: { name: '剧情已绑', sourcePath: 'inline:br1-bound', sourceHash: 'd'.repeat(64), structure: ['已绑结构'] } },
+    });
+    expect(saved.statusCode).toBe(201);
+    const pid = (saved.json() as { id: string }).id;
+
+    const bound = await app.inject({ method: 'PUT', url: `/api/books/${boundBookId}/plot`, payload: { profileId: pid } });
+    expect(bound.statusCode).toBe(200);
+
+    const listed = (await app.inject({ method: 'GET', url: '/api/plot-profiles' })).json() as Array<{
+      id: string;
+      boundBooks?: Array<{ id: string; title: string }>;
+    }>;
+    expect(listed.find((p) => p.id === pid)!.boundBooks).toEqual([{ id: boundBookId, title: '剧情绑定反查书' }]);
+    expect(listed.find((p) => p.id === unboundId)!.boundBooks).toEqual([]);
+  });
 });

@@ -18,6 +18,8 @@ export interface BookDto {
   imitationProfileId?: string | null;
   /** 光谱档案绑定（FB-F2-3 web 类型补齐：服务端 toBook 早已回传，此前 web 面缺失） */
   spectrumProfileId?: string | null;
+  /** 剧情档案绑定（web 类型补齐：服务端 toBook 早已回传，此前 web 面缺失） */
+  plotProfileId?: string | null;
   /** 文风示例注入开关（B4 裁决④）：仅控注入 */
   styleFewshotOn: boolean;
   /** 书级落地策略（DEC-2026-1122-01）：GET 由服务端 parseLandingMandate 解析，不外泄原始 JSON 串 */
@@ -343,6 +345,7 @@ export interface StyleProfileDto {
   createdAt: string;
   metrics: Record<string, number | string>;
   sourcePath: string;
+  boundBooks?: Array<{ id: string; title: string }>;
 }
 
 export interface DistillStyleBody {
@@ -576,6 +579,7 @@ export interface PlotProfileDto {
   sourcePath: string;
   structure: string[];
   createdAt: string;
+  boundBooks?: Array<{ id: string; title: string }>;
 }
 
 export interface PlotSaveBody {
@@ -602,6 +606,7 @@ export interface SpectrumProfileDto {
   sourceHash: string;
   structure: string[];
   createdAt: string;
+  boundBooks?: Array<{ id: string; title: string }>;
 }
 
 /** 实例化人物卡草稿（FB-F2-1，DEC-2026-1125-03）：行协议产物 {name, baseSetting}，baseSetting=JSON 对象字符串；重名/截断 warning 在草稿层标注不落库。 */

@@ -927,6 +927,7 @@ ${repairPrompt(first.errors)}`))).text,
       createdAt: r.created_at,
       metrics: JSON.parse(r.metrics_json) as Record<string, number | string>,
       sourcePath: r.source_path,
+      boundBooks: booksRepo.listBooksBoundToProfile(db, 'style', r.id),
     }));
   });
 
@@ -978,7 +979,7 @@ ${repairPrompt(first.errors)}`))).text,
   app.delete('/api/style-profiles/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!db.prepare('SELECT id FROM style_profiles WHERE id = ?').get(id)) return reply.code(404).send({ error: 'not found' });
-    const bound = booksRepo.listBooksBoundToProfile(db, id); // 主镜像 UNION 关联表并查（覆盖辅档案被绑场景）
+    const bound = booksRepo.listBooksBoundToProfile(db, 'style', id); // 关联表反查（含辅档案被绑场景）
     if (bound.length > 0) {
       return reply.code(409).send({ error: '该风格档案已被书绑定，请先解绑再删除', books: bound });
     }
@@ -1153,7 +1154,9 @@ ${repairPrompt(first.errors)}`))).text,
     reply.code(201).send(saved);
   });
 
-  app.get('/api/plot-profiles', async () => plotRepo.listPlotProfiles(db));
+  app.get('/api/plot-profiles', async () =>
+    plotRepo.listPlotProfiles(db).map((p) => ({ ...p, boundBooks: booksRepo.listBooksBoundToProfile(db, 'plot', p.id) })),
+  );
 
   app.delete('/api/plot-profiles/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -1192,7 +1195,9 @@ ${repairPrompt(first.errors)}`))).text,
     reply.code(201).send(saved);
   });
 
-  app.get('/api/spectrum-profiles', async () => spectrumRepo.listSpectrumProfiles(db));
+  app.get('/api/spectrum-profiles', async () =>
+    spectrumRepo.listSpectrumProfiles(db).map((p) => ({ ...p, boundBooks: booksRepo.listBooksBoundToProfile(db, 'spectrum', p.id) })),
+  );
 
   app.delete('/api/spectrum-profiles/:id', async (req, reply) => {
     const { id } = req.params as { id: string };

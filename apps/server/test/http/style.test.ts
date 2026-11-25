@@ -654,4 +654,30 @@ describe('档案删除与逐书文风示例开关（B4 裁决②④，DEC-2026-1
       expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
     }
   });
+
+  it('BR：GET /api/style-profiles 带 boundBooks（关联表反查，主辅都命中）', async () => {
+    const p1 = await newProfile('反查主档');
+    const p2 = await newProfile('反查辅档');
+    const book = await newBook('反查书');
+    const bind = await app.inject({
+      method: 'PUT',
+      url: `/api/books/${book.id}/style`,
+      payload: { primaryProfileId: p1, auxProfileIds: [p2] },
+    });
+    expect(bind.statusCode).toBe(200);
+
+    const listed = (await app.inject({ method: 'GET', url: '/api/style-profiles' })).json() as Array<{
+      id: string;
+      boundBooks?: Array<{ id: string; title: string }>;
+    }>;
+    const expected = [{ id: book.id, title: book.title }];
+    expect(listed.find((p) => p.id === p1)!.boundBooks).toEqual(expected);
+    expect(listed.find((p) => p.id === p2)!.boundBooks).toEqual(expected); // 辅档命中=关联表反查语义钉死
+
+    // 清理：解绑 + 删两档案，不留脏引用
+    await app.inject({ method: 'PUT', url: `/api/books/${book.id}/style`, payload: { profileId: null } });
+    for (const pid of [p1, p2]) {
+      expect((await app.inject({ method: 'DELETE', url: `/api/style-profiles/${pid}` })).statusCode).toBe(200);
+    }
+  });
 });
