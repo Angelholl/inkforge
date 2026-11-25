@@ -8,6 +8,7 @@ import { createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
 import { failStaleDistillJobs } from '../../src/style/distill-job';
 import type { DistillJobDto, DistillStyleDraftDto } from '@inkforge/shared';
+import type { LlmProvider } from '../../src/llm/types';
 
 let dir: string;
 let db: Database;
@@ -193,4 +194,60 @@ describe('蒸馏后台化与同源重蒸（B5，DEC-2026-1116-01 反馈⑤）', 
     ]);
     expect(rows.filter((r) => r.id !== 'j-done').every((r) => r.error === 'server restarted')).toBe(true);
   });
+
+  it('warning 透传：短维草稿两次解析均不足 → done/error=null 且 result.warnings 带钉死文案（DF-4）', async () => {
+    // 自建 fixture：每次调用都返回同一份有效短文本响应（非单次即尽的队列）
+    const SHORT_ANALYSIS = `DIM: 语言与描写: 短对答为主。\nAXIS: 叙述温度: 72\nRULES: 平均句长 10-20 字。`;
+    const shortSummarizer: LlmProvider = {
+      complete: async () => ({
+        text: SHORT_ANALYSIS,
+        usage: { promptTokens: 12, completionTokens: 12 },
+        finishReason: 'stop',
+      }),
+    };
+    const config = loadConfig({
+      STRATA_BASE_URL: 'http://127.0.0.1:47831/v1',
+      STRATA_API_KEY: 'strata',
+      STRATA_MODEL: 'iq3_xxs',
+      INKFORGE_DATA_DIR: dir,
+    });
+    const localApp = await buildApp({
+      config,
+      provider: createMockProvider({ draft: { text: '样章。' }, qc: { text: '' }, summarize: { text: '摘要。' } }),
+      summarizerProvider: shortSummarizer,
+      db,
+      inlineQueue: true,
+    });
+    try {
+      const r = await localApp.inject({
+        method: 'POST',
+        url: '/api/style-profiles/distill',
+        payload: { name: '告警体', text: SAMPLE_TEXT },
+      });
+      expect(r.statusCode).toBe(202);
+      const { jobId } = r.json() as { jobId: string };
+      const deadline = Date.now() + 30000;
+      let job: DistillJobDto;
+      for (;;) {
+        const poll = await localApp.inject({ method: 'GET', url: `/api/style-profiles/jobs/${jobId}` });
+        expect(poll.statusCode).toBe(200);
+        job = poll.json() as DistillJobDto;
+        if (job.status === 'done' || job.status === 'failed') break;
+        if (Date.now() > deadline) throw new Error(`job 未收敛：${JSON.stringify(job)}`);
+        await new Promise((res) => setTimeout(res, 20));
+      }
+      expect(job.status).toBe('done');
+      expect(job.error).toBeNull();
+      expect((job.result as DistillStyleDraftDto).warnings).toEqual([
+        '维度语言与描写仅6字，低于下限70字',
+        '维度特色词汇仅0字，低于下限70字',
+        '维度结构与节奏仅0字，低于下限70字',
+        '维度情感基调仅0字，低于下限70字',
+        '维度尺度仅0字，低于下限70字',
+        '维度叙述方式仅0字，低于下限70字',
+      ]);
+    } finally {
+      await localApp.close();
+    }
+  }, 60000);
 });

@@ -388,6 +388,8 @@ export interface DistillStyleDraftDto {
   evaluation: SelfEvalItemDto[];
   /** 后台 job 才带：整篇原文一并留档，重蒸后的草稿才能走同一条「确认入库」（前端手里没有整篇原文） */
   sourceText?: string;
+  /** DF-4：重试后仍不达 70 字下限的单维告警，仅草稿层透传给前端提示，不入库 */
+  warnings?: string[];
 }
 
 export interface StyleProfileCreateBody {

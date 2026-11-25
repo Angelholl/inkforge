@@ -89,7 +89,7 @@ export async function runDistillJob(
     setJob(deps.db, jobId, { status: 'running', progress: 20, stage: 'sampling' });
     const { fewShot, heldOut } = pickFewShotAndHeldOut(input.text, { count: input.maxSegments });
     setJob(deps.db, jobId, { progress: 30, stage: 'analyzing' });
-    const { analysis, evaluation } = await analyzeStyle(
+    const { analysis, evaluation, warnings } = await analyzeStyle(
       { provider: deps.provider },
       {
         sourceText: input.text,
@@ -106,7 +106,7 @@ export async function runDistillJob(
       status: 'done',
       progress: 100,
       stage: 'done',
-      resultJson: { analysis, samples: fewShot, evaluation, sourceText: input.text },
+      resultJson: { analysis, samples: fewShot, evaluation, sourceText: input.text, warnings },
     });
   } catch (e) {
     setJob(deps.db, jobId, { status: 'failed', error: (e as Error).message });
