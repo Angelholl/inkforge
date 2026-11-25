@@ -107,6 +107,8 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
     expect(captured[0]).toContain('对话腔'); // DM-2 语言与描写定向要求
     expect(captured[0]).toContain('尺度维=直白度与性描写尺度的画像'); // DEC-2026-1122-03④ 露骨用词证据要求
     expect(captured[0]).toContain('六轴：叙述温度、语言密度、叙述者姿态、节奏、幽默、情绪表达');
+    expect(captured[0]).toContain('每维不少于 70 字');
+    expect(captured[0]).toContain('证据词仅作建议');
   });
 
   it('distill 接参数：temperature/maxSegments 合法值通过（maxSegments 收敛采样）', async () => {
