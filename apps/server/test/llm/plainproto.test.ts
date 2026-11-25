@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAnalysis, parseBlueprint, parseFindings, parseOutlineTree, parseSummary } from '../../src/llm/plainproto';
+import { STYLE_DIM_MIN_CHARS, parseAnalysis, parseBlueprint, parseFindings, parseOutlineTree, parseSummary } from '../../src/llm/plainproto';
 
 const SAMPLE = `OVERALL: 7
 ---
@@ -320,5 +320,50 @@ DIM: 叙述方式: 己`);
       叙述方式: '己',
     });
     expect(r.errors).toEqual([]);
+  });
+});
+
+describe('parseAnalysis 逐维字数下限 dimShortfalls（DF-2）', () => {
+  it('① 空维文本 → dimShortfalls 含 {dim:情感基调,chars:0}', () => {
+    const r = parseAnalysis('DIM: 情感基调: ');
+    expect(r.dimShortfalls).toContainEqual({ dim: '情感基调', chars: 0 });
+  });
+
+  it('② 纯空白值 trim 后 chars=0；串内空白照计 1', () => {
+    const blank = parseAnalysis('DIM: 特色词汇: \t  ');
+    expect(blank.dimShortfalls).toContainEqual({ dim: '特色词汇', chars: 0 });
+    const inner = parseAnalysis('DIM: 特色词汇: 甲 乙\t丙');
+    expect(inner.dimShortfalls).toContainEqual({ dim: '特色词汇', chars: 5 });
+  });
+
+  it('③ 旧名行丢弃→补空 → dimShortfalls 含 {dim:语言与描写,chars:0} 且 errors 两类信息并存', () => {
+    const r = parseAnalysis('DIM: 对话: 甲');
+    expect(r.dimShortfalls).toContainEqual({ dim: '语言与描写', chars: 0 });
+    expect(r.errors.some((e) => e.includes('未知维度: 对话'))).toBe(true);
+    expect(r.errors.some((e) => e.includes('现行六维'))).toBe(true);
+  });
+
+  it('④ 六名齐行一带 42 字其余 80 字 → dimShortfalls 恰一条 chars=42', () => {
+    const full = '字'.repeat(80);
+    const r = parseAnalysis(`DIM: 语言与描写: ${full}
+DIM: 特色词汇: ${full}
+DIM: 结构与节奏: ${'字'.repeat(42)}
+DIM: 情感基调: ${full}
+DIM: 尺度: ${full}
+DIM: 叙述方式: ${full}`);
+    expect(r.dimShortfalls).toEqual([{ dim: '结构与节奏', chars: 42 }]);
+  });
+
+  it('⑤ 边界：69 字触发缺口 chars=69 / 70 字放行 dimShortfalls 为空', () => {
+    const under = parseAnalysis(`DIM: 情感基调: ${'字'.repeat(STYLE_DIM_MIN_CHARS - 1)}`);
+    expect(under.dimShortfalls).toContainEqual({ dim: '情感基调', chars: STYLE_DIM_MIN_CHARS - 1 });
+    const full = '字'.repeat(STYLE_DIM_MIN_CHARS);
+    const at = parseAnalysis(`DIM: 语言与描写: ${full}
+DIM: 特色词汇: ${full}
+DIM: 结构与节奏: ${full}
+DIM: 情感基调: ${full}
+DIM: 尺度: ${full}
+DIM: 叙述方式: ${full}`);
+    expect(at.dimShortfalls).toEqual([]);
   });
 });

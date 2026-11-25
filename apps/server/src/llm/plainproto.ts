@@ -344,6 +344,15 @@ export interface ParsedAnalysis {
   terms: StyleTermDto[];
   freqTerms: StyleTermDto[];
   errors: string[];
+  dimShortfalls: Array<{ dim: string; chars: number }>;
+}
+
+/** 六维统一单维字数下限（DF-2）：合并维不双倍、不分组待遇。 */
+export const STYLE_DIM_MIN_CHARS = 70;
+
+/** trim 后按 Unicode 码点计字符数：CJK/ASCII/标点/串内空白各计 1，空串或纯空白=0。 */
+function countDimChars(s: string): number {
+  return Array.from(s.trim()).length;
 }
 
 /** 蒸馏分析解析：DIM: <维度>: <文本> / AXIS: <轴名>: <0-100> / RULES: <规则> / TERMS: <术语>: <用法说明> / FREQTERMS: <词组>: <总结说明> / NAMES: <人名报备行，不入库>。
@@ -422,8 +431,13 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
     }
   }
   for (const d of STYLE_DIMENSIONS) if (dims[d] === undefined) dims[d] = '';
+  const dimShortfalls: Array<{ dim: string; chars: number }> = [];
+  for (const d of STYLE_DIMENSIONS) {
+    const chars = countDimChars(dims[d]);
+    if (chars < STYLE_DIM_MIN_CHARS) dimShortfalls.push({ dim: d, chars });
+  }
   for (const a of STYLE_AXES) if (axes[a] === undefined) axes[a] = 0;
-  return { dims, axes, rules, terms, freqTerms, errors };
+  return { dims, axes, rules, terms, freqTerms, errors, dimShortfalls };
 }
 
 // ── 蒸馏自评（SCORE:/REASON: 行协议，held-out 检验）──
