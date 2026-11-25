@@ -21,7 +21,8 @@ import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
 import { mergeSeedIntoBlueprint } from './blueprint-merge';
 import { batchBlueprintSuggest } from './blueprint-batch';
-import { blueprintSchema, bookMetaPutSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, characterInstantiateSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { instantiateCharacters } from './character-instantiate';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
 import { analyzeSpectrum } from '../spectrum';
@@ -163,6 +164,19 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       return reply.code(409).send({ error: '人物卡重名' });
     }
     reply.code(201).send(booksRepo.createCharacter(db, bookId, body));
+  });
+
+  app.post('/api/books/:bookId/characters/instantiate', async (req, reply) => {
+    // FB-F2-2（DEC-2026-1125-03）：光谱档案→AI 实例化人物卡——返回草稿供审阅，保存仍走既有 POST /characters（409 语义不动）
+    const { bookId } = req.params as { bookId: string };
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const body = parseBody(reply, characterInstantiateSchema, req.body ?? {});
+    if (!body) return;
+    const book0 = booksRepo.getBook(db, bookId)!; // 上方已验存在
+    if (!book0.spectrumProfileId) return reply.code(400).send({ error: '未绑定人物光谱档案' });
+    // planner 注入缝沿 plot/spectrum 测试先例（缺省 createRoleProvider 指向真实地址会挂死）
+    const provider = state.plannerProvider ?? createRoleProvider(config, 'planner');
+    reply.send(await instantiateCharacters({ db, provider }, { bookId, maxCards: body.maxCards }));
   });
 
   app.put('/api/books/:bookId/characters/:characterId', async (req, reply) => {
