@@ -481,6 +481,21 @@ export default function BookDetailPage() {
     }
   };
 
+  const [batchBusy, setBatchBusy] = useState(false); // FB-F5-2（DEC-2026-1125-03）：批量蓝图建议进行中
+  const pendingBlueprintCount = book?.chapters.filter((c) => !c.blueprint).length ?? 0;
+  const batchBlueprint = async () => {
+    setBatchBusy(true);
+    try {
+      const r = await api.batchBlueprintSuggest(bookId);
+      setMsg(`批量蓝图建议：已生成 ${r.generated} / ${r.generated + r.failed} 章${r.failed > 0 ? `（失败 ${r.failed}）` : ''}`);
+      void refetch();
+    } catch (e) {
+      setMsg(`批量蓝图建议失败：${apiErrorText(e)}`);
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const startContinue = async () => {
     setMsg('');
     setQueuedRunId('');
@@ -1036,6 +1051,15 @@ export default function BookDetailPage() {
             </Button>
             <Button variant="secondary" loading={suggesting} onClick={() => void suggest({ useSeed: true })}>
               基于已有草稿扩展
+            </Button>
+            <Button
+              variant="secondary"
+              loading={batchBusy}
+              disabled={pendingBlueprintCount === 0}
+              title={pendingBlueprintCount === 0 ? '当前书没有待生成蓝图的章节' : undefined}
+              onClick={() => void batchBlueprint()}
+            >
+              一键批量蓝图建议
             </Button>
             <Button variant="primary" onClick={saveBlueprint}>
               保存蓝图

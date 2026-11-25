@@ -133,6 +133,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  // FB-F5-2（DEC-2026-1125-03）：批量蓝图建议——逐章串行、只落蓝图不跑正文
+  batchBlueprintSuggest: (bookId: string) =>
+    req<{ generated: number; failed: number; items: Array<{ chapterNo: number; ok: boolean; error?: string }> }>(`/api/books/${bookId}/blueprint-suggest/batch`, { method: 'POST' }),
   suggestOutline: (bookId: string, body: OutlineSuggestBody) =>
     req<OutlineSuggestResult>(`/api/books/${bookId}/outline-suggest`, {
       method: 'POST',

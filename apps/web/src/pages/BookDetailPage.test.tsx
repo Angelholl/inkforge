@@ -100,6 +100,7 @@ function installFetchStub() {
         characters[idx] = { ...characters[idx], ...patch } as (typeof characters)[number];
         return jsonResponse(characters[idx]);
       }
+      if (u.endsWith('/blueprint-suggest/batch') && init?.method === 'POST') return jsonResponse({ generated: 1, failed: 0, items: [{ chapterNo: 1, ok: true }] }); // R-F5-3
       if (u.includes('/blueprint-suggest')) {
         return jsonResponse({ blueprint: { goal: '建议目标：入城遇阻', beats: ['守卫盘查'], mustHaveBeats: [], bannedTopics: [] }, source: 'llm' });
       }
@@ -431,6 +432,50 @@ describe('BookDetailPage', () => {
       const post = calls.filter((c) => c.url.includes('/blueprint-suggest')).at(-1)!;
       expect(JSON.parse(String(post.init?.body)).seed).toBeUndefined();
     });
+  });
+
+  it('一键批量蓝图建议：无待生成章节时禁用+title（R-F5-3）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL) => {
+        const u = String(url);
+        if (u.includes('/characters')) return jsonResponse([]); // 人物卡查询须先于 books/b1 分支，否则被吞成对象炸 .map
+        if (u.includes('/api/books/b1')) return jsonResponse({ ...book, chapters: [{ ...book.chapters[0], blueprint: { goal: 'x', beats: [], mustHaveBeats: [], bannedTopics: [] } }] });
+        return jsonResponse([]);
+      }),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const btn = await screen.findByRole('button', { name: '一键批量蓝图建议' });
+    // 先等数据落定（本章全有蓝图→计数 0），禁用态断言才不空转——用本文件既有「世界观」门等查询完成
+    await waitFor(() => expect((screen.getByLabelText('世界观') as HTMLTextAreaElement).value).toBe('旧世界观'));
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(btn.getAttribute('title')).toBe('当前书没有待生成蓝图的章节');
+  });
+
+  it('一键批量蓝图建议：点击后进度文案含「已生成」并刷新列表（R-F5-3）', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const btn = await screen.findByRole('button', { name: '一键批量蓝图建议' });
+    // 数据加载前按钮天然禁用（book=undefined→计数 0），断言须等查询落定——同文件既有「同步断言捕中间帧」惯例
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false)); // 夹具第一章 blueprint=null → 待生成 ≥1
+    fireEvent.click(btn);
+    await waitFor(() => expect(screen.getByText(/已生成/)).toBeTruthy());
   });
 
   it('切到「分级制每2章重」→ PUT /meta body 钉 landingMandate:{mode:\'cadence\',heavyEveryN:2}', async () => {
