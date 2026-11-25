@@ -43,7 +43,8 @@ beforeAll(async () => {
   app = await buildApp({
     config,
     provider: createMockProvider({ draft: { text: 'x' }, qc: { text: '' }, summarize: { text: 'y' } }),
-    summarizerProvider: createMockProvider({ summarize: { sequence: [{ text: ANALYSIS_TEXT }, { text: SELF_EVAL_TEXT }] } }),
+    // DF-3：ANALYSIS_TEXT 短文本触发逐维缺口反馈重试一次，队列补一份同文供第二次解析；自评取第三份，断言语义不变
+    summarizerProvider: createMockProvider({ summarize: { sequence: [{ text: ANALYSIS_TEXT }, { text: ANALYSIS_TEXT }, { text: SELF_EVAL_TEXT }] } }),
     db,
     inlineQueue: true,
   });

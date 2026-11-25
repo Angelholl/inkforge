@@ -144,12 +144,59 @@ describe('analyzeStyle + saveStyleProfile', () => {
     // 缺省 → pickFewShotAndHeldOut few-shot（非空且非显式串）
     const id2 = await distillStyleProfile({ db, provider: capturing }, { name: '缺省样', sourceText: '正文乙'.repeat(300) });
     expect(id2).toBeTruthy();
-    expect(captured[1]).not.toContain('显式样本A');
-    expect(captured[1].length).toBeGreaterThan(100);
+    // 首次蒸馏触发逐维缺口重试 → 第二次蒸馏首轮调用下标由 [1] 后移至 [2]（语义不变，仅随迁）
+    expect(captured[2]).not.toContain('显式样本A');
+    expect(captured[2].length).toBeGreaterThan(100);
     // 空源抛错
     await expect(distillStyleProfile({ db, provider: capturing }, { name: '空', sourceText: '  \n  ' })).rejects.toThrow(
       /样本为空，禁止蒸馏/,
     );
+  });
+});
+
+describe('analyzeStyle 单维缺口反馈重试与 warning（DF-3）', () => {
+  const OK_DIM = '字'.repeat(70);
+  const SHORT_DIM = '语言描写短评'.repeat(7); // 42 字
+  const sixDims = (shortFirst: boolean) =>
+    [
+      `DIM: 语言与描写: ${shortFirst ? SHORT_DIM : OK_DIM}`,
+      ...['特色词汇', '结构与节奏', '情感基调', '尺度', '叙述方式'].map((d) => `DIM: ${d}: ${OK_DIM}`),
+      'RULES: 平均句长 10-20 字。',
+    ].join('\n');
+  const ONE_SHORT = sixDims(true);
+  const ALL_OK = sixDims(false);
+  const providerFor = (texts: string[], seen: string[], steps: string[]): LlmProvider => ({
+    complete: async (req) => {
+      seen.push(req.user);
+      steps.push(req.meta.step);
+      const text = texts.length > 1 ? texts.shift()! : texts[0];
+      return { text, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: 'stop' };
+    },
+  });
+
+  it('单维不足触发一次重试：解析类 complete 调用数=2、最终达标 warnings=[]', async () => {
+    const seen: string[] = [];
+    const steps: string[] = [];
+    const { warnings } = await analyzeStyle(
+      { provider: providerFor([ONE_SHORT, ALL_OK], seen, steps) },
+      { sourceText: '正文样本'.repeat(200), samples: ['样本一'] },
+    );
+    expect(steps.filter((s) => s === 'summarize')).toHaveLength(2);
+    expect(warnings).toEqual([]);
+    // 反馈文案进第二次调用
+    expect(seen[1]).toContain('【单维字数不足，需重写】');
+    expect(seen[1]).toContain('维度语言与描写仅42字，低于下限70字，请重写该维');
+  });
+
+  it('重试后仍不足：不抛错、warnings 取最终解析缺口、调用数仍=2', async () => {
+    const seen: string[] = [];
+    const steps: string[] = [];
+    const { warnings } = await analyzeStyle(
+      { provider: providerFor([ONE_SHORT], seen, steps) },
+      { sourceText: '正文样本'.repeat(200), samples: ['样本一'] },
+    );
+    expect(steps.filter((s) => s === 'summarize')).toHaveLength(2);
+    expect(warnings).toEqual(['维度语言与描写仅42字，低于下限70字']);
   });
 });
 

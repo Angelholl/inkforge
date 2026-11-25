@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { StyleAnalysisDto } from '@inkforge/shared';
 import type { Database } from '../db/open';
 import type { LlmProvider } from '../llm/types';
-import { parseAnalysis, parseSelfEval } from '../llm/plainproto';
+import { parseAnalysis, parseSelfEval, STYLE_DIM_MIN_CHARS } from '../llm/plainproto';
 import { computeStyleMetrics } from './metrics';
 import type { StyleSample } from './distill';
 
@@ -37,12 +37,12 @@ REASON: <一句理由>
 不要输出 JSON、markdown 代码块或任何解释。
 【文风档案开始】`;
 
-/** 结构化分析：单次 LLM 调用 → parseAnalysis（缺行容错）；输出完全为空（七维全空且无规则）→ 一次修复重试 → 仍空抛错。
- *  heldOut 非空时追加第二次调用（自评）：SCORE(1-5 钳制)/REASON 解析，缺行 evaluation=[]。 */
+/** 结构化分析：LLM 调用 → parseAnalysis（缺行容错）；输出全空 ∨ 有单维字数缺口 → 带反馈修复重试一次 → 仍空抛错、仍有缺口产出 warnings。
+ *  heldOut 非空时追加自评调用（SCORE(1-5 钳制)/REASON 解析，缺行 evaluation=[]），不计入重试上限。 */
 export async function analyzeStyle(
   deps: { provider: LlmProvider },
   input: { sourceText: string; samples: string[]; heldOut?: string[]; instruction?: string; temperature?: number; freqBlock?: string },
-): Promise<{ analysis: StyleAnalysisDto; evaluation: SelfEvalItem[] }> {
+): Promise<{ analysis: StyleAnalysisDto; evaluation: SelfEvalItem[]; warnings: string[] }> {
   const instruction = input.instruction?.trim() ? input.instruction : ANALYSIS_INSTRUCTION;
   const baseReq = (user: string) => ({
     system: '你是文风分析师。',
@@ -59,13 +59,18 @@ export async function analyzeStyle(
     Object.values(a.dims).every((v) => v === '') && a.rules.length === 0;
   const first = parseAnalysis((await deps.provider.complete(baseReq(user))).text);
   let analysis: StyleAnalysisDto = { dims: first.dims as StyleAnalysisDto['dims'], axes: first.axes as StyleAnalysisDto['axes'], rules: first.rules, terms: first.terms, freqTerms: first.freqTerms };
-  if (isEmpty(analysis)) {
-    const second = parseAnalysis(
-      (await deps.provider.complete(baseReq(`${user}\n\n【解析失败重试】上一轮输出缺少 DIM/AXIS/RULES 标记，请严格按【输出格式】重新输出。`))).text,
-    );
+  // DF-3：「全空」∨「有单维字数缺口」→ 带反馈重试一次（上限 1，自评调用不计入）
+  let shortfalls = first.dimShortfalls;
+  if (isEmpty(analysis) || shortfalls.length > 0) {
+    const feedback = isEmpty(analysis)
+      ? '【解析失败重试】上一轮输出缺少 DIM/AXIS/RULES 标记，请严格按【输出格式】重新输出。'
+      : `【单维字数不足，需重写】${shortfalls.map((s) => `维度${s.dim}仅${s.chars}字，低于下限${STYLE_DIM_MIN_CHARS}字，请重写该维`).join('；')}`;
+    const second = parseAnalysis((await deps.provider.complete(baseReq(`${user}\n\n${feedback}`))).text);
     analysis = { dims: second.dims as StyleAnalysisDto['dims'], axes: second.axes as StyleAnalysisDto['axes'], rules: second.rules, terms: second.terms, freqTerms: second.freqTerms };
+    shortfalls = second.dimShortfalls;
     if (isEmpty(analysis)) throw new Error('文风分析失败：输出缺少 DIM/AXIS/RULES 行');
   }
+  const warnings = shortfalls.map((s) => `维度${s.dim}仅${s.chars}字，低于下限${STYLE_DIM_MIN_CHARS}字`);
 
   // 自评（held-out 2 段；缺行/未传 → evaluation=[]）
   let evaluation: SelfEvalItem[] = [];
@@ -82,7 +87,7 @@ export async function analyzeStyle(
     const evalRes = parseSelfEval((await deps.provider.complete(baseReq(evalUser))).text);
     evaluation = evalRes.evaluation;
   }
-  return { analysis, evaluation };
+  return { analysis, evaluation, warnings };
 }
 
 /** 结构化档案落库：rules_json = { rulesText, dims, axes }（rulesText 键保留供 chapter.ts 注入端）；
