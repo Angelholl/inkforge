@@ -11,7 +11,8 @@ import type { LlmProvider } from '../../src/llm/types';
 const SAMPLE_TEXT = '山风掠过松林，少年抬头望向远方。他说：“路还长。”夜色深沉，灯火摇曳。'.repeat(20);
 const ANALYSIS_TEXT = `DIM: 节奏: 短句为主。
 AXIS: 叙述温度: 60
-RULES: 平均句长 10-20 字。`;
+RULES: 平均句长 10-20 字。
+FREQTERMS: 抬眸: 短说明`;
 const CUSTOM_TEMPLATE = '你是武侠文风专家。侧重兵器描写与江湖气，输出 DIM/AXIS/RULES 行。';
 
 let dir: string;
@@ -137,6 +138,8 @@ describe('蒸馏模板（app_meta.distill_template）', () => {
     // ② 第二次解析调用确实发生，user 段带逐维缺口反馈（模板不含「70 字」仍照常校验）
     expect(captured.length).toBeGreaterThanOrEqual(2);
     expect(captured[1]).toContain('低于下限70字');
+    // R-F1-3 随迁（DEC-2026-1125-03）：自定义模板不含高频词量条，缺口反馈仍照常触发
+    expect(captured[1]).toContain('低于下限30字');
     // ③ result 透传 warning（重试后仍不足 → warnings 非空）
     const result = job.result as { samples: string[]; warnings?: string[] } | null;
     expect(result?.warnings?.length).toBeGreaterThan(0);

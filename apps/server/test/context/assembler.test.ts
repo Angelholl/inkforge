@@ -8,6 +8,7 @@ const BUDGETS = {
   characters: 800,
   styleRules: 1000,
   styleDims: 600,
+  freqTerms: 600,
   blueprint: 1000,
   continuity: 2500,
   prevTail: 1500,
@@ -120,5 +121,23 @@ describe('槽序与 profile', () => {
     expect(a.user).not.toContain(dimsText);
     expect(a.system.indexOf('【人物卡】张三')).toBeLessThan(a.system.indexOf(dimsText));
     expect(a.system.indexOf(dimsText)).toBeLessThan(a.system.indexOf('风格规则文本'));
+  });
+
+  it('R-F1-5 draftSlots 含 stable freqTerms 槽紧随 styleRules，fewShot 关闭仍装配（DEC-2026-1125-03①）', () => {
+    const slots = draftSlots({ ...INPUT, styleRules: '风格规则文本', freqTerms: '【高频词】\n抬眸：测试语境说明' }, BUDGETS);
+    expect(slots.map((s) => s.name)).toEqual([
+      'hardRules',
+      'worldview',
+      'styleRules',
+      'freqTerms',
+      'blueprint',
+      'continuity',
+      'prevTail',
+      'task',
+    ]);
+    const ft = slots.find((s) => s.name === 'freqTerms')!;
+    expect(ft.stable).toBe(true);
+    expect(ft.keep).toBe('head');
+    expect(ft.budgetChars).toBe(600);
   });
 });

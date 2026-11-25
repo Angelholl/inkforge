@@ -61,7 +61,7 @@ export function assembleContext(slots: ContextSlot[], totalBudgetChars: number):
   };
 }
 
-/** draft 槽序（钉死）：stable=hardRules/worldview/(characters)/(styleDims)/styleRules；volatile=blueprint/continuity/prevTail(tail)/fewShot/task。 */
+/** draft 槽序（钉死）：stable=hardRules/worldview/(characters)/(styleDims)/styleRules/(freqTerms)；volatile=blueprint/continuity/prevTail(tail)/fewShot/task。 */
 export function draftSlots(
   input: {
     hardRules: string;
@@ -69,6 +69,7 @@ export function draftSlots(
     characters?: string;
     styleRules?: string;
     styleDims?: string;
+    freqTerms?: string;
     blueprint: string;
     continuity: string;
     prevTail: string;
@@ -89,6 +90,10 @@ export function draftSlots(
   }
   if (input.styleRules && input.styleRules.length > 0) {
     slots.push({ name: 'styleRules', content: input.styleRules, budgetChars: budgets.styleRules, stable: true, keep: 'head' });
+  }
+  // freqTerms 常注槽（DEC-2026-1125-03①）：不受 fewShot 开关门控，有值即插 stable
+  if (input.freqTerms && input.freqTerms.length > 0) {
+    slots.push({ name: 'freqTerms', content: input.freqTerms, budgetChars: budgets.freqTerms, stable: true, keep: 'head' });
   }
   slots.push(
     { name: 'blueprint', content: input.blueprint, budgetChars: budgets.blueprint, stable: false, keep: 'head' },

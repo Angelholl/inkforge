@@ -265,4 +265,20 @@ FREQTERMS: 沉默: 高频收尾用语，承担留白`;
       { term: '沉默', note: '高频收尾用语，承担留白' },
     ]);
   });
+
+  it('高频词缺口带反馈重试一次并透传 warning（R-F1-2，DEC-2026-1125-03）', async () => {
+    const text = `${ANALYSIS_TEXT}
+FREQTERMS: 抬眸: 短说明`;
+    const capturedReq: string[] = [];
+    const capturing: LlmProvider = {
+      complete: async (req) => {
+        capturedReq.push(req.user);
+        return { text, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: 'stop' };
+      },
+    };
+    const r = await analyzeStyle({ provider: capturing }, { sourceText: '抬眸沉默'.repeat(100), samples: ['样本一'] });
+    expect(capturedReq.length).toBe(2); // 恰一次重试，第三次不被调用
+    expect(capturedReq[1]).toContain('低于下限30字');
+    expect(r.warnings.some((w) => w.includes('高频词'))).toBe(true);
+  });
 });

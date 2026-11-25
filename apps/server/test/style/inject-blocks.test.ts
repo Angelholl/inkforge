@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { AXIS_GUIDES, renderStyleBlock, renderStyleDimsBlock } from '../../src/style/inject';
+import { AXIS_GUIDES, renderFreqTermsBlock, renderStyleBlock, renderStyleDimsBlock } from '../../src/style/inject';
 import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAxis, type StyleDimension } from '@inkforge/shared';
 import type { StyleSample } from '../../src/style/distill';
+import { buildRewriteSlots } from '../../src/pipeline/rewrite';
+import { loadConfig } from '../../src/config';
+
+const cfg = loadConfig({ STRATA_BASE_URL: 'http://x', STRATA_API_KEY: 'k', STRATA_MODEL: 'm' });
 
 const emptyDims = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, ''])) as Record<StyleDimension, string>;
 const fullDims = Object.fromEntries(STYLE_DIMENSIONS.map((d) => [d, `${d}的画像描述`])) as Record<StyleDimension, string>;
@@ -48,11 +52,12 @@ describe('renderStyleBlock 空规则头修', () => {
     expect(renderStyleBlock('', samples)).toContain('【范例片段】');
   });
 
-  it('注入隔离（DEC-2026-1120-06）：renderStyleBlock 不输出 freqTerms 高频词内容', () => {
-    const block = renderStyleBlock('规则一', samples, 100000, [{ term: '青云剑诀', note: '核心功法' }]);
-    expect(block).not.toContain('FREQTERMS');
-    expect(block).not.toContain('freqTerms');
-    expect(block).not.toContain('高频词');
+  it('R-F1-4 注入隔离修正（DEC-2026-1125-03① 推翻 DEC-2026-1120-06 旧钉）：renderStyleBlock 仍不出高频词，常注由 renderFreqTermsBlock 独立承担', () => {
+    const terms = [{ term: '青云剑诀', note: '核心功法' }];
+    expect(renderStyleBlock('', samples, 1200, terms)).not.toContain('高频词');
+    expect(renderFreqTermsBlock(terms, 600)).toContain('【高频词】');
+    expect(renderFreqTermsBlock(terms, 600)).toContain('青云剑诀：核心功法');
+    expect(renderFreqTermsBlock([], 600)).toBe('');
   });
 
   it('块序（DEC-2026-1120-10）：范例片段在前、术语表在后且截 5 条', () => {
@@ -61,6 +66,20 @@ describe('renderStyleBlock 空规则头修', () => {
     expect(block.indexOf('【范例片段】')).toBeLessThan(block.indexOf('【术语表】'));
     expect(block).toContain('术语4：注4');
     expect(block).not.toContain('术语5：注5'); // slice(0,5)
-    expect(block).not.toContain('高频词'); // 注入隔离不受影响（DEC-2026-1120-06 沿用）
+    expect(block).not.toContain('高频词'); // renderStyleBlock 仍不出高频词（常注走独立槽，DEC-2026-1125-03①）
+  });
+});
+
+describe('buildRewriteSlots freqTerms 常注槽（FB-F1-3，DEC-2026-1125-03①）', () => {
+  it('R-F1-7 targeted 传 freqTerms → stable 槽插在硬规则后（无 styleRules/styleDims 时紧随 hardRules），预算 600', () => {
+    const slots = buildRewriteSlots(
+      { original: '原稿正文', findings: [], factBaselineText: '', mode: 'targeted', taskInstruction: '仅修复所列问题', hardRules: '硬规则', freqTerms: '【高频词】\n抬眸：测试语境说明' },
+      cfg.budgets.rewrite,
+    );
+    expect(slots.map((s) => s.name)).toEqual(['hardRules', 'freqTerms', 'original', 'findings', 'factBaseline', 'task']);
+    const ft = slots.find((s) => s.name === 'freqTerms')!;
+    expect(ft.stable).toBe(true);
+    expect(ft.keep).toBe('head');
+    expect(ft.budgetChars).toBe(600);
   });
 });

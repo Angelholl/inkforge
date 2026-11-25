@@ -433,6 +433,38 @@ COMMENT: 节奏拖沓，需压缩。`;
     expect(contDraft.user).toContain('前文腔调优先，文风档案作质感参照。');
   }, 60000);
 
+  it('FB-F1-4 fewShot 关闭时 freqTerms 常注槽仍进 draft system（DEC-2026-1125-03①）', async () => {
+    const bid = createBook(db, { title: '高频词常注测试书', description: '常注槽接线测试设定。' }).id;
+    db.prepare(
+      "INSERT INTO chapters(id, book_id, chapter_no, title, blueprint_json, target_chars, created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      'ft-ch',
+      bid,
+      1,
+      '第1章',
+      JSON.stringify({ goal: '高频词常注测试', beats: [], mustHaveBeats: [], bannedTopics: [] }),
+      500,
+      new Date().toISOString(),
+    );
+    const bundle = buildStyleBundle({
+      primaryProfileId: 'ft-main',
+      auxProfileIds: [],
+      dimsSource: {},
+      profiles: {
+        'ft-main': { version: 1, metricsJson: '{}', rulesText: '', dims: {}, axes: {}, terms: [], freqTerms: [{ term: '抬眸', note: '测试高频词说明' }], samples: [] },
+      } satisfies Record<string, StyleProfileContent>,
+    });
+    setBookStyleBinding(db, bid, { primaryProfileId: 'ft-main', auxProfileIds: [], dimsSource: {}, weights: {} }, JSON.stringify(bundle));
+    // styleFewshotOn 未开（默认关）→ fewShot 块不装配；常注槽不受门控，有值即进 system
+    const runId = runFor(bid);
+    const cap = capturing(createDefaultMockProvider());
+    const outcome = await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId: bid, chapterNo: 1 });
+    expect(outcome.status).toBe('done');
+    const draft = cap.calls.find((c) => c.step === 'draft')!;
+    expect(draft.system).toContain('【高频词】');
+    expect(draft.system).toContain('抬眸：测试高频词说明');
+  }, 60000);
+
   it('不采用哨兵：特色词汇=__none__ → draft prompt 不含该维画像行，其余维照常（DEC-2026-1124-04）', async () => {
     const bid = createBook(db, { title: '不采用哨兵测试书', description: '混合档案注入测试设定。' }).id;
     db.prepare(

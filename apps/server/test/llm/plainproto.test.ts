@@ -211,6 +211,13 @@ RULES: 平均句长 10-20 字。`);
     expect(parseAnalysis('FREQTERMS: : 说明').freqTerms).toEqual([]);
     expect(parseAnalysis('FREQTERMS: : 说明').errors.some((e) => e.includes('高频词为空'))).toBe(true);
   });
+
+  it('FREQTERMS 说明<30 字入 freqShortfalls；无 FREQTERMS 行不产生缺口（R-F1-1，DEC-2026-1125-03）', () => {
+    const p2 = parseAnalysis(`DIM: 语言与描写: ${'详'.repeat(80)}。
+FREQTERMS: 抬眸: 短说明`);
+    expect(p2.freqShortfalls).toEqual([{ term: '抬眸', chars: 3 }]);
+    expect(parseAnalysis('RULES: x').freqShortfalls).toHaveLength(0);
+  });
 });
 
 describe('parseBlueprint LANDING 行（DEC-2026-1122-01）', () => {
