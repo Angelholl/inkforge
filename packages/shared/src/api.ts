@@ -216,6 +216,12 @@ export interface BlueprintPutBody {
 
 export interface BlueprintSuggestBody {
   chapterNo: number;
+  seed?: {
+    goal?: string;
+    beats?: string[];
+    mustHaveBeats?: Array<{ text: string; keywords?: string[]; grade?: 'H' | 'L' }>;
+    bannedTopics?: string[];
+  };
 }
 
 export interface OutlineSuggestBody {

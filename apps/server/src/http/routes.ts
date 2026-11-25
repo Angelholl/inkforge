@@ -59,7 +59,7 @@ const settingsPutSchema = z.object({
   // mock 开关已彻底删除（owner 拍板）：mock 只认 INKFORGE_MOCK 环境变量（开发/测试用）
 });
 
-const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive() });
+const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive(), seed: z.object({ goal: z.string().optional(), beats: z.array(z.string()).optional(), mustHaveBeats: z.array(z.object({ text: z.string(), keywords: z.array(z.string()).optional(), grade: z.enum(['H', 'L']).optional() })).optional(), bannedTopics: z.array(z.string()).optional() }).optional() });
 const outlineSuggestSchema = z.object({ chapterCount: z.number().int().min(1).max(50) });
 
 /** 按章号取命中卡：树遍历序（卷→阶段→卡 seq）首个 chapterFrom/To 非空且覆盖该章的卡；区间重叠首卡胜（与 apply 同语义）。 */

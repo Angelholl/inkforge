@@ -76,6 +76,15 @@ describe('blueprint-suggest 大纲卡注入与确定性叠加（DEC-2026-1120-10
     expect(req.user).toContain('【连续性摘要】（无）');
     expect(req.user).toContain('【书籍简介】介介介');
   });
+
+  it('seed schema：畸形 seed→400，合法 seed 透传不炸（FB-F4-1，DEC-2026-1125-03）', async () => {
+    const bad = await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 1, seed: { beats: 'x' } } });
+    expect(bad.statusCode).toBe(400);
+    const good = await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 1, seed: { goal: '', beats: ['手写节拍甲'], mustHaveBeats: [{ text: '手写硬要求乙', keywords: ['甲'] }] } } });
+    expect(good.statusCode).toBe(200);
+    // F4-1 阶段：合法 seed 已进 handler（合并纯函数 FB-F4-2 接入后此断言随 R-F4-2 扩展）
+    expect((good.json() as { blueprint: { beats: string[] } }).blueprint.beats.length).toBeGreaterThan(0);
+  });
 });
 
 describe('PUT blueprint 保存保留既有 mustHaveBeats（DEC-2026-1120-10 防洗掉）', () => {
