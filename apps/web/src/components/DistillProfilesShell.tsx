@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 import { useQuery, type QueryKey } from '@tanstack/react-query';
 import { Button } from './ui';
 import { inputBase, selectBase, textareaBase } from './Field';
@@ -141,6 +141,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
   api,
   labels,
 }: DistillProfilesShellProps<P, D>) {
+  const inputId = useId();
   const { data: profilesData, refetch } = useQuery({ queryKey, queryFn: listApi, refetchInterval: 5000 });
   const { data: booksData } = useQuery({ queryKey: ['books'], queryFn: api.listBooks, refetchInterval: 5000 });
   const profiles = Array.isArray(profilesData) ? profilesData : [];
@@ -324,7 +325,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
           <div>
             <input
               type="file"
-              id="distill-sample-file"
+              id={inputId}
               accept=".txt,.md"
               aria-label="导入样本文件"
               className="hidden"
@@ -341,7 +342,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
               }}
             />
             <label
-              htmlFor="distill-sample-file"
+              htmlFor={inputId}
               className="flex cursor-pointer flex-col items-center gap-1 rounded border border-dashed border-line px-3 py-6 text-sm text-muted transition-colors hover:border-line-strong hover:bg-primary-soft/40"
             >
               <span>点击选择本地 txt / md 文件（自动识别 UTF-8 / GBK 编码）</span>
