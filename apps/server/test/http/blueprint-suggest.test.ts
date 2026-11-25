@@ -72,9 +72,9 @@ describe('blueprint-suggest 大纲卡注入与确定性叠加（DEC-2026-1120-10
   it('task 预算 800：renderBlueprintTask 尾部（连续性摘要行）不再被截断', async () => {
     await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 2 } });
     const req = plannerCalls[plannerCalls.length - 1];
-    // 旧 300 预算时 task 槽 head 截断会把尾部两行切掉；800 预算下尾行存活
+    // R-F3-3 随迁（DEC-2026-1125-03）：task 不再含【书籍简介】行，世界观走独立槽；协议尾部行存活=本用例主断言
     expect(req.user).toContain('【连续性摘要】（无）');
-    expect(req.user).toContain('【书籍简介】介介介');
+    expect(req.user).not.toContain('【书籍简介】');
   });
 
   it('seed schema：畸形 seed→400，合法 seed 透传不炸（FB-F4-1，DEC-2026-1125-03）', async () => {

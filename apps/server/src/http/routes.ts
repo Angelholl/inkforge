@@ -444,7 +444,6 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const taskText = renderBlueprintTask({
       chapterNo,
       bookTitle: book.title,
-      bookDescription: book.description,
       prevTail,
       continuityText,
     });

@@ -160,7 +160,6 @@ function tailExcerpt(text: string, n: number): string {
 export function renderBlueprintTask(args: {
   chapterNo: number;
   bookTitle: string;
-  bookDescription: string;
   prevTail: string;
   continuityText: string;
 }): string {
@@ -172,7 +171,6 @@ export function renderBlueprintTask(args: {
     `HOOK: 结尾钩子一句`,
     `LANDING: 本章落地格，形态为 H（场景）或 L（场景），场景写具体人物事件`,
     `不要输出 JSON、markdown 代码块或任何解释；不要复述前文情节；每行前缀必须为 GOAL:/BEATS 条目/HOOK:/LANDING: 之一`,
-    `【书籍简介】${args.bookDescription || '（无）'}`,
     `【上一章末尾摘录】${tailExcerpt(args.prevTail, 30) || '（无）'}`,
     `【连续性摘要】${headExcerpt(args.continuityText, 30) || '（无）'}`,
   ].join('\n');
