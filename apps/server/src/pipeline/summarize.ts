@@ -5,6 +5,7 @@ import type { Database } from '../db/open';
 import type { AppConfig } from '../config';
 import type { LlmProvider } from '../llm/types';
 import type { RunEvent } from '@inkforge/shared';
+import { collapseWhitespace, BRACKET_TAG_RE } from '@inkforge/shared';
 import { upsertChapterSummary, upsertCharacterState, getContinuitySnapshot, resolveForeshadowing, listForeshadowings } from '../db/repositories/continuity';
 import { listCharacters } from '../db/repositories/books';
 
@@ -19,11 +20,6 @@ export class SummarizeParseError extends Error {
   constructor(public errors: string[]) {
     super(`summarize 解析失败: ${errors.join('; ')}`);
   }
-}
-
-/** THREADS 归一化：trim + 压缩空白。 */
-function normalizeThread(s: string): string {
-  return s.replace(/\s+/g, ' ').trim();
 }
 
 /** LLM 生成 + 解析，零写库。 */
@@ -92,12 +88,12 @@ export function commitSummarize(
 
     // ③ THREADS：与全书同名伏笔比对（D2 含已回收），命中 [planted] 不重复埋
     const open = listForeshadowings(db, bookId);
-    const openByDesc = new Map(open.map((f) => [normalizeThread(f.description), f]));
+    const openByDesc = new Map(open.map((f) => [collapseWhitespace(f.description), f]));
     for (const raw of payload.openThreads) {
-      const tagMatch = /^\[(planted|advanced|resolved)\]\s*(.+)$/.exec(raw);
+      const tagMatch = BRACKET_TAG_RE.exec(raw);
       if (!tagMatch) continue;
       const [, tag, desc] = tagMatch;
-      const descNorm = normalizeThread(desc);
+      const descNorm = collapseWhitespace(desc);
       const hit = openByDesc.get(descNorm);
       if (hit && (tag === 'resolved' || tag === 'advanced')) {
         resolveForeshadowing(db, hit.id, chapterNo, tag);
