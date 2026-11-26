@@ -14,7 +14,7 @@ export type ChapterKind = (typeof CHAPTER_KINDS)[number];
 
 export type RunStatus = 'queued' | 'running' | 'paused' | 'cancelled' | 'done' | 'failed';
 
-export type StepName = 'draft' | 'qc' | 'rewrite' | 'summarize' | 'finalize';
+export type StepName = 'draft' | 'qc' | 'rewrite' | 'summarize' | 'finalize' | 'refine';
 
 export type StepStatus = 'queued' | 'inflight' | 'done' | 'failed' | 'skipped';
 

@@ -698,3 +698,16 @@ export interface SettingsImportApplyResult {
     foreshadowings: number;
   };
 }
+
+export interface SummaryThreadChoice { text: string; include: boolean }
+export interface SummaryStateChoice { name: string; stateJson: string; include: boolean }
+export interface SummaryGenerateResultDto {
+  baseVersionId: string; summary: string; beats: string[];
+  openThreads: string[]; characterDeltas: Array<{ name: string; stateJson: string }>;
+}
+export interface SummaryCommitBody {
+  baseVersionId: string; summary: string; beats: string[];
+  threads: SummaryThreadChoice[]; states: SummaryStateChoice[];
+}
+export interface SettingsImportRefineBody { content: string }
+export interface SettingsImportRefineResult { description: string; truncated: boolean }
