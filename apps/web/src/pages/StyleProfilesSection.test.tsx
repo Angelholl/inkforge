@@ -48,7 +48,8 @@ function fetchFor(url: string, init?: RequestInit): Response {
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   }
   if (url.endsWith('/api/style-profiles') && (!init?.method || init.method === 'GET')) {
-    const all = distilled ? [PROFILE, PROFILE2] : [PROFILE];
+    const bound = listWithBoundBooks ? { boundBooks: [{ id: 'b1', title: '样本之书' }] } : {};
+    const all = (distilled ? [PROFILE, PROFILE2] : [PROFILE]).map((p) => ({ ...p, ...bound }));
     return new Response(JSON.stringify(all.filter((p) => !deletedIds.includes(p.id))), { status: 200 });
   }
   if (url.endsWith('/api/style-profiles/distill')) {
@@ -144,6 +145,8 @@ function fetchFor(url: string, init?: RequestInit): Response {
 }
 
 let distilled = false;
+// BR-4：列表桩带 boundBooks 供徽标只读用例（各用例首行自行置位）
+let listWithBoundBooks = false;
 // 档案删除桩状态（各用例首行自行重置，沿 distilled 的既有习惯）
 let deletedIds: string[] = [];
 let deleteOverride: { status: number; body: unknown } | null = null;
@@ -163,6 +166,7 @@ afterEach(() => {
   jobWarnings = [];
   jobPollCount = 0;
   detailFail = false;
+  listWithBoundBooks = false;
 });
 
 function setInput(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -612,6 +616,20 @@ describe('StyleProfilesSection 三态确认门', () => {
     expect(await screen.findByText('无法删除，已被绑定：样本之书')).toBeTruthy();
     expect(screen.getByText('测试档案')).toBeTruthy(); // 拒删：档案行仍在
     deleteOverride = null;
+  });
+
+  it('BR：风格卡徽标显示已绑定书；蒸馏页风格分区无任何绑定入口（D3 守护）', async () => {
+    distilled = false;
+    deletedIds = [];
+    listWithBoundBooks = true;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => fetchFor(url, init)));
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('测试档案')).toBeTruthy());
+    expect(screen.getByText(/已绑定：《样本之书》/)).toBeTruthy();
+    const section = screen.getByText('风格档案').closest('section')!;
+    expect(within(section).queryByLabelText(/绑定书-/)).toBeNull();
+    expect(within(section).queryByRole('button', { name: '保存绑定' })).toBeNull();
   });
 });
 

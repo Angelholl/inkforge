@@ -289,6 +289,7 @@ export default function StyleProfilesSection() {
                 v{p.version} · {new Date(p.createdAt).toLocaleString()} · 句长中位数 {p.metrics.medianSentenceLen ?? '—'}
                 {typeof p.metrics.selfScore === 'number' ? ` · 自评 ${p.metrics.selfScore}/5` : ''}
               </span>
+              {p.boundBooks && p.boundBooks.length > 0 && (<span className="text-xs text-primary-strong">已绑定：{p.boundBooks.map((b) => `《${b.title}》`).join('')}</span>)}
               <Button
                 variant="quiet"
                 tone="primary"
