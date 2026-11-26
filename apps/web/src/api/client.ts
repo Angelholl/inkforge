@@ -55,6 +55,10 @@ import type {
   FusionTensionDto,
   FusionGateConfirmBody,
   FusionGateConfirmResult,
+  SummaryGenerateResultDto,
+  SummaryCommitBody,
+  SettingsImportRefineBody,
+  SettingsImportRefineResult,
 } from '@inkforge/shared';
 
 export function resolveApiBase(isDev: boolean): string {
@@ -266,8 +270,12 @@ export const api = {
     req<{ ok: boolean }>(`/api/style-profiles/${id}`, { method: 'DELETE', body: '{}' }),
   setBookFewshot: (bookId: string, on: boolean) =>
     req<{ ok: boolean; styleFewshotOn: boolean }>(`/api/books/${bookId}/style-fewshot`, { method: 'PUT', body: JSON.stringify({ on }) }),
-  summarizeChapter: (bookId: string, chapterNo: number) =>
-    req<{ ok: boolean }>(`/api/books/${bookId}/chapters/${chapterNo}/summarize`, { method: 'POST', body: '{}' }),
+  summarizeGenerate: (bookId: string, chapterNo: number, signal?: AbortSignal) =>
+    req<SummaryGenerateResultDto>(`/api/books/${bookId}/chapters/${chapterNo}/summarize`, { method: 'POST', body: '{}', signal }),
+  summarizeCommit: (bookId: string, chapterNo: number, body: SummaryCommitBody) =>
+    req<{ ok: true }>(`/api/books/${bookId}/chapters/${chapterNo}/summarize/commit`, { method: 'POST', body: JSON.stringify(body) }),
+  refineDescription: (body: SettingsImportRefineBody, signal?: AbortSignal) =>
+    req<SettingsImportRefineResult>('/api/settings-import/refine', { method: 'POST', body: JSON.stringify(body), signal }),
   // body 支持多选形态（primaryProfileId/auxProfileIds/dimsSource）与 legacy {profileId}；服务端对保存的绑定归零 fewshot 开关
   bindStyle: (bookId: string, body: StyleBindBody) =>
     req<{ ok: boolean; styleProfileId: string }>(`/api/books/${bookId}/style`, { method: 'PUT', body: JSON.stringify(body) }),

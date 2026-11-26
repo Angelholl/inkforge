@@ -708,11 +708,18 @@ export default function BookDetailPage() {
 
   const summarize = async (chapterNo: number) => {
     try {
-      await api.summarizeChapter(bookId, chapterNo);
+      const generated = await api.summarizeGenerate(bookId, chapterNo);
+      await api.summarizeCommit(bookId, chapterNo, {
+        baseVersionId: generated.baseVersionId,
+        summary: generated.summary,
+        beats: generated.beats,
+        threads: generated.openThreads.map((text) => ({ text, include: true })),
+        states: generated.characterDeltas.map((d) => ({ name: d.name, stateJson: d.stateJson, include: true })),
+      });
       setMsg(`第${chapterNo}章摘要已生成`);
       void refetch();
     } catch (e) {
-      setMsg(`摘要失败：${(e as Error).message}`);
+      setMsg(`摘要失败：${apiErrorText(e)}`);
     }
   };
 
