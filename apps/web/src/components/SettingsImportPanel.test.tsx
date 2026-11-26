@@ -271,7 +271,6 @@ describe('SettingsImportPanel', () => {
   it('精炼在途按钮 aria-busy 不可点、失败文案呈现（延迟 mock）', async () => {
     // 分块 provider 场景钉值：40475 字输入 + 65536 窗（小窗走 map-reduce）→ 4 map + 1 reduce = 5 次调用，各带延迟
     const RAW_CHARS = 40475;
-    const CONTEXT_WINDOW = 65536;
     const MAP_CHUNK_MAX_CHARS = 10666;
     const TOTAL_CALLS = Math.ceil(RAW_CHARS / MAP_CHUNK_MAX_CHARS) + 1;
     const RAW = 'x'.repeat(RAW_CHARS);
