@@ -752,3 +752,35 @@
 **拍板（owner 亲决）：** 仿写档案分区并入本批统一口径——四类档案（风格/剧情/光谱/仿写）全部「列表归蒸馏页、绑定归书页」。书页风格档案区（sec-style）加「仿写档案」绑定条（复用 ProfileBindBar，走既有 PUT `/api/books/:bookId/imitation`，后端零改动）；蒸馏页仿写卡删绑定下拉/按钮保列表管理+只读徽标（GET `/api/imitation-profiles` 附 boundBooks，反查复用 DEC-2026-1126-02 通道扩 imitation kind，镜像列 books.imitation_profile_id/迁移 0005、无新迁移）；融合门重绑指引文案同步改指书页（原指引指向蒸馏页绑定框，随本批摘除失实）。
 
 **落实：** 计划 BR-7a（server 反查）+BR-7b（web 双端）；原计划 §2.4.5 仿写零触碰条款作废。执行留痕批次收口补记。
+
+## DEC-2026-1126-06 [OWNER] 长章输出预算自适应，上限 512000（2026-11-26）
+
+**背景：** 《阿美》第 7 章续写事故：三次生成 completionTokens 全部正好顶格 8192（config.ts:163/174 local/cloud 硬编码），中文约 3.3 token/字 → 单次输出天花板 ≈2500 字，6000 字目标在 token 层结构性不可达，正文停在半截拟声词。AskUserQuestion 呈报拍板。
+
+**拍板（owner 亲决）：** 自适应输出预算——按目标字数×比率＋余量估算，上限调整为 512000。实现细则（主模型定）：不做运行期 /models 探测，clamp 用 config contextWindow 静态值（现实用量永不触顶；iq3_s 实际 n_ctx=393216 vs 硬编码 524288 差异留注释痕）；比率 4.0 token/字、余量 2048、prompt 预留 4096、floor 1024。
+
+**落实：** 计划真值=docs/plans/2026-11-26-output-budget-stitch.md T1。执行留痕批次收口补记。
+
+## DEC-2026-1126-07 [OWNER] finishReason 落库＋顶格续写拼接回路（2026-11-26）
+
+**背景：** 同轮呈报。finishReason 已在 provider 层采集（anthropic.ts:75/:109-128）但全 src 零消费，截断静默入库、rewrite 轮对不可能达成的目标空转两轮。
+
+**拍板（owner 亲决）：** 续写拼接回路——检测到顶格（finishReason=length）从断点续写再合并，而非整篇 rewrite；finishReason 落库优先 JSON 字段通道（params_json/run_steps.output_json），避免新迁移。
+
+**落实：** 计划 T2（stitch.ts＋mock.ts finishReason 覆盖字段＋回路接线）。执行留痕批次收口补记。
+
+## DEC-2026-1126-08 [OWNER] characters 槽护栏入开发批次；本书数据补齐归 owner UI（2026-11-26）
+
+**背景：** 同轮呈报。事故中注入的 6 张人物卡全是设定集群像原型且第 1–6 章正文零出现，真正的主角/阿美/阿泰无卡——draft 把偷情双方写成赵启帆+马春桃、卡片细节原样入文；ch2–6 无摘要致 continuity 槽空转。owner 反问「是因为数据缺失导致的？」，主模型分症状答清（重复/矛盾/视角摇摆=注入污染＋小模型能力；中断/字数=纯代码）。
+
+**拍板（owner 亲决）：** 加管线护栏入开发批次——characters 槽只注入本章蓝图涉及人物；补卡/批跑 summarize 属 owner UI 操作。缺卡检测不做中文人名抽取，复用 L1「人物一致」blocker 通道（事故中已抓到）。
+
+**落实：** 计划 T3（roster.ts＋零命中全量保险丝＋warning 落 run_steps.output_json）；T4=owner 实测点位。执行留痕批次收口补记。
+
+## DEC-2026-1126-09 [OWNER] 主生成模型切 iq3_s（Qwen3.8-Flash-Next），长篇不用 IQ3_XXS 小档（2026-11-26）
+
+**背景：** 同轮呈报。IQ3_XXS 极限量化档 CJK 长篇典型句式回环；owner 已自行把 ~/.inkforge/config.json STRATA_MODEL 改为 iq3_s，实测在线 n_ctx=393216。
+
+**拍板（owner 亲决）：** 换更大档跑长篇；小档只留短测试题。非代码任务，本批执行方式＝主模型亲执（三卡互锁 chapter.ts 天然串行＋hy4 首张计划卡 CHAIN_EXHAUSTED 事故按令兜底）。
+
+**落实：** 批次收口验收点位=owner 补数据后重跑第 7 章（字数落带、结尾自然、人名零渗入、finishReason/stitchSegments 读数正常）。执行留痕批次收口补记。
