@@ -28,6 +28,12 @@ describe('mock provider 路由与非流式', () => {
     const r = await p.complete(baseReq({ meta: { step: 'draft' } }));
     expect(r.usage.completionTokens).toBe(5);
   });
+
+  it('finishReason 缺省仍为 end_turn（DEC-2026-1126-07）', async () => {
+    const p = createMockProvider({ qc: { text: 'OVERALL: 9' } });
+    const r = await p.complete(baseReq());
+    expect(r.finishReason).toBe('end_turn');
+  });
 });
 
 describe('mock provider 流式/失败/中止/序列/textFn', () => {

@@ -1,11 +1,14 @@
 import type { StepName } from '@inkforge/shared';
 import { ProviderError, type CompletionRequest, type CompletionResult, type LlmProvider } from './types';
 
+/** 文本行为可选 finishReason 覆盖；缺省仍报 end_turn（DEC-2026-1126-07）。 */
+type MockTextBehavior = { finishReason?: string };
+
 type MockStepBehavior =
-  | { text: string }
-  | { textFn: (meta: CompletionRequest['meta']) => string }
-  | { text: string; chunks: number; chunkDelayMs: number }
-  | { textFn: (meta: CompletionRequest['meta']) => string; chunks: number; chunkDelayMs: number }
+  | ({ text: string } & MockTextBehavior)
+  | ({ textFn: (meta: CompletionRequest['meta']) => string } & MockTextBehavior)
+  | ({ text: string; chunks: number; chunkDelayMs: number } & MockTextBehavior)
+  | ({ textFn: (meta: CompletionRequest['meta']) => string; chunks: number; chunkDelayMs: number } & MockTextBehavior)
   | { error: 'timeout' | 'http_500'; afterMs: number }
   | { sequence: MockStepBehavior[] }
   | { repeat: MockStepBehavior };
@@ -154,7 +157,7 @@ export function createMockProvider(script: MockScript): LlmProvider {
       }
     }
     if (req.signal?.aborted) throw makeAbort();
-    return { text, usage: { promptTokens: 0, completionTokens: text.length }, finishReason: 'end_turn' };
+    return { text, usage: { promptTokens: 0, completionTokens: text.length }, finishReason: behavior.finishReason ?? 'end_turn' };
   }
   return {
     async complete(req: CompletionRequest): Promise<CompletionResult> {

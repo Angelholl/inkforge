@@ -10,9 +10,9 @@ import * as runsRepo from '../db/repositories/runs';
 import type { RunStep } from '../db/repositories/runs';
 import { assembleContext, draftSlots } from '../context/assembler';
 import type { AppConfig } from '../config';
-import type { LlmProvider } from '../llm/types';
+import type { CompletionResult, LlmProvider } from '../llm/types';
 import { hashPrompt } from '../llm/hash';
-import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite, renderTaskSummaryBlock } from '../prompts/render';
+import { renderCharacterCards, renderDraft, renderHardRules, renderRewrite, renderStitchContinuation, renderTaskSummaryBlock } from '../prompts/render';
 import { loadCliches, loadLandingWords, runL0Checks } from '../quality/l0';
 import { resolveLandingWordsPath } from '../quality/landing-words';
 import { runL1Qc } from '../quality/l1';
@@ -21,6 +21,7 @@ import { readScoreThreshold } from '../settings';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
 import { estimateOutputBudget, sumSlotBudget } from './budget';
+import { stitchSegments } from './stitch';
 import { getLatestProfile, type StyleSample } from '../style/distill';
 import { renderFreqTermsBlock, renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
 import { loadStyleBundle, mergeStyleProfiles, type MergedStyleProfile } from '../style/merge';
@@ -68,6 +69,25 @@ function makeAbort(): Error {
 
 function blueprintText(bp: ChapterBlueprint): string {
   return JSON.stringify(bp);
+}
+
+/** 顶格续写回路（DEC-2026-1126-07）：首调 finishReason==='length' 时，以已写全文＋续写指令追加调用，
+ * 最多追加 3 段；自然收尾即停。finishReason 记首调值（触发判定的那一次），段数记实际拼接段数。 */
+async function runStitchLoop(
+  first: CompletionResult,
+  continueWith: (writtenSoFar: string) => Promise<CompletionResult>,
+  maxExtraSegments = 3,
+): Promise<{ text: string; finishReason: string; segments: number }> {
+  let result = first;
+  let text = first.text;
+  let segments = 1;
+  const finishReason = first.finishReason;
+  while (result.finishReason === 'length' && segments <= maxExtraSegments) {
+    result = await continueWith(text);
+    text = stitchSegments([text, result.text]);
+    segments++;
+  }
+  return { text, finishReason, segments };
 }
 
 /** 单章管线：draft → qc → (rewrite → qc)×n → finalize（summarize 由 T20 插入）。
@@ -247,32 +267,39 @@ export async function runChapterPipeline(
         ),
         totalBudget,
       );
-      const draftRes = await roleProvider('drafter').complete({
-        system: draftAssembled.system,
-        user: draftAssembled.user,
-        temperature: 0.9,
-        topP: 0.9,
-        maxOutputTokens: estimateOutputBudget(targetChars, sumSlotBudget({ ...config.budgets.draft }), config.providers.local),
-        timeoutMs: config.timeouts.draft,
-        meta: { step: 'draft', chapterNo: args.chapterNo },
-        signal,
-        onDelta: (t) => {
-          emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'draft', text: t, ts: now() });
-          deps.onPartial?.(t);
-          draftFlusher.push(t);
-        },
-      }).finally(() => draftFlusher.flush());
+      const draftComplete = (user: string) =>
+        roleProvider('drafter').complete({
+          system: draftAssembled.system,
+          user,
+          temperature: 0.9,
+          topP: 0.9,
+          maxOutputTokens: estimateOutputBudget(targetChars, sumSlotBudget({ ...config.budgets.draft }), config.providers.local),
+          timeoutMs: config.timeouts.draft,
+          meta: { step: 'draft', chapterNo: args.chapterNo },
+          signal,
+          onDelta: (t) => {
+            emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'draft', text: t, ts: now() });
+            deps.onPartial?.(t);
+            draftFlusher.push(t);
+          },
+        }).finally(() => draftFlusher.flush());
+      const draftFirst = await draftComplete(draftAssembled.user);
+      const draftStitched = await runStitchLoop(draftFirst, (written) => draftComplete(renderStitchContinuation(written)));
+      const draftStitchJson = draftStitched.segments > 1 ? { stitchSegments: draftStitched.segments } : {};
       const draftVersion = chaptersRepo.appendChapterVersion(db, {
         chapterId: chapter.id,
         kind: 'draft',
-        content: draftRes.text,
+        content: draftStitched.text,
         runId: args.runId,
         promptHash: hashPrompt(draftAssembled.system, draftAssembled.user),
         model,
-        params: { usage: draftRes.usage, provider: roleLabel('drafter') },
+        params: { usage: draftFirst.usage, provider: roleLabel('drafter'), finishReason: draftStitched.finishReason, ...draftStitchJson },
         styleSampleIds,
       });
-      finishStep('draft', 1, { outputVersionId: draftVersion.id, outputJson: { usage: draftRes.usage, provider: roleLabel('drafter') } });
+      finishStep('draft', 1, {
+        outputVersionId: draftVersion.id,
+        outputJson: { usage: draftFirst.usage, provider: roleLabel('drafter'), finishReason: draftStitched.finishReason, ...draftStitchJson },
+      });
       draftFlusher.discard();
       currentVersion = { id: draftVersion.id, content: draftVersion.content };
     }
@@ -372,32 +399,39 @@ export async function runChapterPipeline(
               config.budgets.rewrite,
             );
       const rwAssembled = assembleContext(rwSlots, totalBudget);
-      const rwRes = await roleProvider('rewriter').complete({
-        system: rwAssembled.system,
-        user: rwAssembled.user,
-        temperature: 0.7,
-        topP: 0.9,
-        maxOutputTokens: estimateOutputBudget(targetChars, sumSlotBudget({ ...config.budgets.rewrite }), config.providers.local),
-        timeoutMs: config.timeouts.rewrite,
-        meta: { step: 'rewrite', chapterNo: args.chapterNo, round: rounds },
-        signal,
-        onDelta: (t) => {
-          emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'rewrite', text: t, ts: now() });
-          deps.onPartial?.(t);
-          rwFlusher.push(t);
-        },
-      }).finally(() => rwFlusher.flush());
+      const rewriteComplete = (user: string) =>
+        roleProvider('rewriter').complete({
+          system: rwAssembled.system,
+          user,
+          temperature: 0.7,
+          topP: 0.9,
+          maxOutputTokens: estimateOutputBudget(targetChars, sumSlotBudget({ ...config.budgets.rewrite }), config.providers.local),
+          timeoutMs: config.timeouts.rewrite,
+          meta: { step: 'rewrite', chapterNo: args.chapterNo, round: rounds },
+          signal,
+          onDelta: (t) => {
+            emit({ type: 'step.delta', runId: args.runId, chapterNo: args.chapterNo, step: 'rewrite', text: t, ts: now() });
+            deps.onPartial?.(t);
+            rwFlusher.push(t);
+          },
+        }).finally(() => rwFlusher.flush());
+      const rwFirst = await rewriteComplete(rwAssembled.user);
+      const rwStitched = await runStitchLoop(rwFirst, (written) => rewriteComplete(renderStitchContinuation(written)));
+      const rwStitchJson = rwStitched.segments > 1 ? { stitchSegments: rwStitched.segments } : {};
       const revised = chaptersRepo.appendChapterVersion(db, {
         chapterId: chapter.id,
         kind: 'revised',
-        content: rwRes.text,
+        content: rwStitched.text,
         runId: args.runId,
         promptHash: hashPrompt(rwAssembled.system, rwAssembled.user),
         model,
         parentVersionId: currentVersion.id,
-        params: { usage: rwRes.usage, round: rounds, provider: roleLabel('rewriter') },
+        params: { usage: rwFirst.usage, round: rounds, provider: roleLabel('rewriter'), finishReason: rwStitched.finishReason, ...rwStitchJson },
       });
-      finishStep('rewrite', rwAttempt, { outputVersionId: revised.id, outputJson: { usage: rwRes.usage, round: rounds, provider: roleLabel('rewriter') } });
+      finishStep('rewrite', rwAttempt, {
+        outputVersionId: revised.id,
+        outputJson: { usage: rwFirst.usage, round: rounds, provider: roleLabel('rewriter'), finishReason: rwStitched.finishReason, ...rwStitchJson },
+      });
       rwFlusher.discard();
       currentVersion = { id: revised.id, content: revised.content };
       prevOverall = l1.overall;

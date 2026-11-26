@@ -186,6 +186,32 @@ COMMENT: 恒定 blocker`;
     expect(vA).toBe(vB);
     expect(vA).toBeTruthy();
   }, 30000);
+
+  it('场景六 draft 顶格续写：length 触发接缝拼接，两次调用/两段/JSON 标记落库', async () => {
+    const runId = freshRun(1);
+    const overlap = '接缝重叠标记';
+    const seg1 = '【章1段1】' + '甲'.repeat(244) + overlap;
+    const seg2 = overlap + '乙'.repeat(244);
+    const cap = capturing(createMockProvider({
+      draft: { sequence: [{ text: seg1, finishReason: 'length' }, { text: seg2, finishReason: 'end_turn' }] },
+      qc: { text: 'OVERALL: 9' },
+      summarize: { text: 'SUMMARY: 续写完成。\nBEATS:\n- 完成\nTHREADS:\nSTATE:' },
+    }));
+    await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId, chapterNo: 1 });
+    const draftCalls = cap.calls.filter((c) => c.step === 'draft');
+    expect(draftCalls).toHaveLength(2);
+    expect(draftCalls[1].user).toContain('禁止重复已写内容');
+    expect(draftCalls[1].user).toContain(seg1);
+    const draftStep = listSteps(db, runId).find((s) => s.step === 'draft')!;
+    const v = db.prepare('SELECT content, params_json FROM chapter_versions WHERE id = ?').get(draftStep.outputVersionId!) as { content: string; params_json: string };
+    expect(v.content).toBe(seg1 + seg2.slice(overlap.length));
+    const params = JSON.parse(v.params_json) as { finishReason?: string; stitchSegments?: number };
+    expect(params.finishReason).toBe('length');
+    expect(params.stitchSegments).toBe(2);
+    const out = draftStep.outputJson as { finishReason?: string; stitchSegments?: number };
+    expect(out.finishReason).toBe('length');
+    expect(out.stitchSegments).toBe(2);
+  }, 30000);
 });
 
 function versionsByKind(chapterId: string, kind: string): { content: string } {

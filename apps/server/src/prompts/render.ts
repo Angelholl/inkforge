@@ -88,6 +88,16 @@ export function renderRewrite(input: { findings: Finding[]; taskInstruction: str
   ].join('\n');
 }
 
+/** 顶格续写指令（DEC-2026-1126-07）：断点直续、禁重复、禁总结，已写全文随指令一并回灌。 */
+export function renderStitchContinuation(writtenSoFar: string): string {
+  return [
+    '从断点直接续写正文，禁止重复已写内容、禁止总结。',
+    '【已写正文】',
+    writtenSoFar,
+    '【从断点继续】',
+  ].join('\n');
+}
+
 /** 显性词池贪心预算（D-C，DEC-2026-1122-03②）：词池作用=可执行词清单非全量字典，不得挤压任务协议（task 槽 800）。 */
 export const LANDING_POOL_BUDGET_CHARS = 300;
 
