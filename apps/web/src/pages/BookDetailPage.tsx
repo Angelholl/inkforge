@@ -462,21 +462,24 @@ export default function BookDetailPage() {
 
   const suggest = async (opts?: { useSeed?: boolean }) => {
     setMsg('');
+    const raw = blueprintText.trim();
     let body: BlueprintSuggestBody = { chapterNo };
+    let proseMode = false;
     if (opts?.useSeed) {
-      // FB-F4-3（DEC-2026-1125-03）：把当前草稿 JSON 作扩展种子传给服务端确定性合并；解析失败就地提示不发请求
+      if (raw === '') { setMsg('蓝图草稿为空：请先填写蓝图 JSON 或章节草稿文字'); return; }
+      // FB-F4-3（DEC-2026-1125-03）：JSON 草稿作 seed 走服务端确定性合并；非 JSON 散文草稿改走 draftText 由 planner 扩写（BR-6 / D4）
       try {
-        body = { chapterNo, seed: JSON.parse(blueprintText) as NonNullable<BlueprintSuggestBody['seed']> };
+        body = { chapterNo, seed: JSON.parse(raw) as NonNullable<BlueprintSuggestBody['seed']> };
       } catch {
-        setMsg('当前蓝图草稿不是合法 JSON，无法作为扩展种子');
-        return;
+        body = { chapterNo, draftText: blueprintText };
+        proseMode = true;
       }
     }
     setSuggesting(true);
     try {
       const r = await api.suggestBlueprint(bookId, body);
       setBlueprintText(JSON.stringify(r.blueprint, null, 2));
-      setMsg(`已填入第 ${chapterNo} 章蓝图建议，可编辑后点「保存蓝图」`);
+      setMsg(proseMode ? `已按散文草稿扩写为第 ${chapterNo} 章蓝图，可编辑后点「保存蓝图」` : `已填入第 ${chapterNo} 章蓝图建议，可编辑后点「保存蓝图」`);
     } catch (e) {
       setMsg(`AI 建议失败：${apiErrorText(e)}（可直接在下方手填蓝图 JSON）`);
     } finally {

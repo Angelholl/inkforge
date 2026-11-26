@@ -434,6 +434,49 @@ describe('BookDetailPage', () => {
     });
   });
 
+  it('BR：直输中文散文点「基于已有草稿扩展」→ 发 draftText 不发 seed，回填蓝图+扩写消息', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const bpArea = (await screen.findByPlaceholderText(/蓝图 JSON/)) as HTMLTextAreaElement;
+    fireEvent.change(bpArea, { target: { value: '主角夜探旧宅，发现密室与旧信' } });
+    fireEvent.click(screen.getByRole('button', { name: '基于已有草稿扩展' }));
+    await waitFor(() => {
+      const post = calls.filter((c) => c.url.includes('/blueprint-suggest')).at(-1)!;
+      const body = JSON.parse(String(post.init?.body));
+      expect(body).toEqual({ chapterNo: expect.any(Number), draftText: '主角夜探旧宅，发现密室与旧信' });
+      expect(body.seed).toBeUndefined();
+    });
+    await waitFor(() => expect((screen.getByPlaceholderText(/蓝图 JSON/) as HTMLTextAreaElement).value).toContain('建议目标'));
+    expect(await screen.findByText(/已按散文草稿扩写/)).toBeTruthy();
+  });
+
+  it('BR：空草稿点扩展 → 就地提示不发请求', async () => {
+    installFetchStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const bpArea = (await screen.findByPlaceholderText(/蓝图 JSON/)) as HTMLTextAreaElement;
+    fireEvent.change(bpArea, { target: { value: '' } });
+    const before = calls.filter((c) => c.url.includes('/blueprint-suggest')).length;
+    fireEvent.click(screen.getByRole('button', { name: '基于已有草稿扩展' }));
+    expect(calls.filter((c) => c.url.includes('/blueprint-suggest')).length).toBe(before);
+    expect(screen.getByText(/蓝图草稿为空/)).toBeTruthy();
+  });
+
   it('一键批量蓝图建议：无待生成章节时禁用+title（R-F5-3）', async () => {
     vi.stubGlobal(
       'fetch',
