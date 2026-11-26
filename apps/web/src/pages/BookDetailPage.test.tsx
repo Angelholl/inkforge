@@ -913,6 +913,40 @@ describe('BookDetailPage', () => {
     expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: null });
     expect(await screen.findByText(/剧情档案已解绑/)).toBeTruthy();
   });
+
+  it('BR：仿写绑定条——选择档案保存 → PUT /api/books/b1/imitation {profileId}，消息+当前绑定回显', async () => {
+    let imitationBound: string | null = null;
+    const imitationProfiles = [{ id: 'ip1', name: '拆解甲', version: 1, sourcePath: 'x', createdAt: '2026-11-13T08:00:00Z' }];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, init });
+        if (u.endsWith('/api/books/b1/imitation') && init?.method === 'PUT') {
+          imitationBound = (JSON.parse(String(init.body)) as { profileId: string | null }).profileId;
+          return jsonResponse({ ok: true, imitationProfileId: imitationBound });
+        }
+        if (u.endsWith('/api/imitation-profiles')) return jsonResponse(imitationProfiles);
+        if (u.endsWith('/api/books/b1/characters')) return jsonResponse([]);
+        if (u.includes('/api/books/b1')) return jsonResponse({ ...book, imitationProfileId: imitationBound });
+        return jsonResponse({});
+      }),
+    );
+    renderBindPage();
+    const sel = (await screen.findByLabelText('仿写档案绑定')) as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(sel.options).some((o) => o.value === 'ip1')).toBe(true));
+    expect(within(sel.parentElement!).getByText('未绑定')).toBeTruthy();
+    fireEvent.change(sel, { target: { value: 'ip1' } });
+    fireEvent.click(within(sel.parentElement!).getByText('保存绑定'));
+    const put = await waitFor(() => {
+      const c = calls.find((c) => c.url.endsWith('/api/books/b1/imitation') && c.init?.method === 'PUT');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    expect(JSON.parse(String(put.init?.body))).toEqual({ profileId: 'ip1' });
+    expect(await screen.findByText(/仿写档案已绑定/)).toBeTruthy();
+    expect(await screen.findByText('当前绑定：拆解甲')).toBeTruthy();
+  });
 });
 
 describe('StyleBindPanel（风格多选绑定面板）', () => {

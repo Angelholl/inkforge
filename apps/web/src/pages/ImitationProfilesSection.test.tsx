@@ -9,6 +9,7 @@ const PROFILE = {
   version: 1,
   sourcePath: 'inline:abcd1234',
   createdAt: '2026-11-16T08:00:00.000Z',
+  boundBooks: [{ id: 'b1', title: '测试书' }],
 };
 
 function jsonResponse(data: unknown, status = 200) {
@@ -152,5 +153,17 @@ describe('ImitationProfilesSection（D4-T5）', () => {
     expect(label).toBeTruthy();
     expect(label.textContent).toContain('点击选择本地 txt / md 文件');
     expect(label.htmlFor).toBe('imitation-sample-file');
+  });
+
+  it('BR：蒸馏页仿写卡无绑定控件，徽标只读显示已绑定书', async () => {
+    vi.stubGlobal('fetch', stubFetch());
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText('拆解档案甲')).toBeTruthy());
+    expect(screen.queryByLabelText(/绑定书-/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '绑定' })).toBeNull();
+    const badge = screen.getByText(/已绑定：《测试书》/);
+    expect(badge.querySelector('select, button')).toBeNull();
+    expect(badge.closest('select, button')).toBeNull();
   });
 });

@@ -349,6 +349,7 @@ export default function BookDetailPage() {
   const { data: profiles } = useQuery({ queryKey: ['style-profiles'], queryFn: api.listStyleProfiles, refetchInterval: 5000 });
   const { data: plotProfiles } = useQuery({ queryKey: ['plot-profiles'], queryFn: api.listPlotProfiles, refetchInterval: 5000 });
   const { data: spectrumProfiles } = useQuery({ queryKey: ['spectrum-profiles'], queryFn: api.listSpectrumProfiles, refetchInterval: 5000 });
+  const { data: imitationProfiles } = useQuery({ queryKey: ['imitation-profiles'], queryFn: api.listImitationProfiles, refetchInterval: 5000 });
   const { data: characters, refetch: refetchCharacters } = useQuery({
     queryKey: ['characters', bookId],
     queryFn: () => api.listCharacters(bookId),
@@ -583,6 +584,16 @@ export default function BookDetailPage() {
       void refetch();
     } catch (e) {
       setMsg(`人物光谱档案绑定失败：${apiErrorText(e)}`);
+    }
+  };
+
+  const bindImitationProfile = async (profileId: string | null): Promise<void> => {
+    try {
+      await api.bindImitation(bookId, profileId);
+      setMsg(profileId === null ? '仿写档案已解绑' : '仿写档案已绑定；AI 建议蓝图时将注入该结构拆解');
+      void refetch();
+    } catch (e) {
+      setMsg(`仿写档案绑定失败：${apiErrorText(e)}`);
     }
   };
 
@@ -1066,6 +1077,14 @@ export default function BookDetailPage() {
               </p>
             </div>
           )}
+          <div className="mt-2 border-t border-line pt-2">
+            <ProfileBindBar
+              label="仿写档案"
+              profiles={Array.isArray(imitationProfiles) ? imitationProfiles : []}
+              boundId={book?.imitationProfileId ?? null}
+              onBind={(id) => void bindImitationProfile(id)}
+            />
+          </div>
         </div>
       </section>
 

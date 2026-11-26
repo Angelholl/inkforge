@@ -415,7 +415,7 @@ export default function FusionGateDialog({ report, tension, analyzing, busy, err
               );
             })}
           </ul>
-          <p className="mt-2 text-xs text-muted">选「不作为参考」= 永久解除这本书与该档案的绑定，之后每次生成都不再参考它；要重新绑定，请到「蒸馏」页里对应档案的绑定框。</p>
+          <p className="mt-2 text-xs text-muted">选「不作为参考」= 永久解除这本书与该档案的绑定，之后每次生成都不再参考它；要重新绑定，请到书详情页对应分区的绑定条（剧情／人物光谱／仿写）。</p>
         </section>
 
         {/* fewshot 只读展示，无控件 */}

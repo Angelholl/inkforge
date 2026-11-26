@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { Button } from '../components/ui';
-import { inputBase, inputNarrow, selectBase, textareaBase } from '../components/Field';
+import { inputBase, inputNarrow, textareaBase } from '../components/Field';
 import { EmptyState } from '../components/EmptyState';
 import { decodeTextFile } from './NewBookPage';
 import type { ImitationDraftDto } from '@inkforge/shared';
@@ -10,9 +10,7 @@ import type { ImitationDraftDto } from '@inkforge/shared';
 /** 拆解仿写档案分区（Pagekin 式）：analyze→预览→确认入库→列表→绑定书。draft 不入库，确认才落档案。 */
 export default function ImitationProfilesSection() {
   const { data: profilesData, refetch } = useQuery({ queryKey: ['imitation-profiles'], queryFn: api.listImitationProfiles, refetchInterval: 5000 });
-  const { data: booksData } = useQuery({ queryKey: ['books'], queryFn: api.listBooks, refetchInterval: 5000 });
   const profiles = Array.isArray(profilesData) ? profilesData : [];
-  const books = Array.isArray(booksData) ? booksData : [];
   const [name, setName] = useState('');
   const [text, setText] = useState('');
   // 章数用 string 态（对齐 StyleProfilesSection 高级项模式）：输入过程不干预，提交时钳 [1,50]、非法回退 12
@@ -20,7 +18,6 @@ export default function ImitationProfilesSection() {
   const [draft, setDraft] = useState<ImitationDraftDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const [bindBook, setBindBook] = useState<Record<string, string>>({}); // profileId → bookId 选择
   // L2 两步确认：记录待确认删除的仿写档案；取消/成功后收簇
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
@@ -80,25 +77,6 @@ export default function ImitationProfilesSection() {
     }
   };
 
-  const bind = async (profileId: string) => {
-    const bookId = bindBook[profileId];
-    if (!bookId) {
-      setMsg('请先选择要绑定的书');
-      return;
-    }
-    setBusy(true);
-    try {
-      await api.bindImitation(bookId, profileId);
-      const bookTitle = books.find((b) => b.id === bookId)?.title ?? bookId;
-      setMsg(`已绑定到《${bookTitle}》：blueprint-suggest 将注入该结构拆解`);
-      void refetch();
-    } catch (e) {
-      setMsg(`绑定失败：${(e as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <section className="mt-10">
       <h2 className="text-lg font-semibold">仿写档案（拆解仿写）</h2>
@@ -113,6 +91,9 @@ export default function ImitationProfilesSection() {
                 <span className="font-medium">{p.name}</span>
                 <span className="text-xs text-muted">v{p.version}</span>
                 <span className="min-w-0 break-all text-xs text-faint">{p.sourcePath}</span>
+                {p.boundBooks && p.boundBooks.length > 0 && (
+                  <span className="text-xs text-primary-strong">已绑定：{p.boundBooks.map((b) => `《${b.title}》`).join('')}</span>
+                )}
                 {confirmingDeleteId === p.id ? (
                   <>
                     <span className="text-danger text-xs">该拆解档案将删除，已绑定书将自动解绑，不可恢复。</span>
@@ -128,24 +109,6 @@ export default function ImitationProfilesSection() {
                     删除
                   </Button>
                 )}
-              </div>
-              <div className="mt-2 flex items-center gap-2 text-sm">
-                <select
-                  className={selectBase}
-                  aria-label={`绑定书-${p.name}`}
-                  value={bindBook[p.id] ?? ''}
-                  onChange={(e) => setBindBook({ ...bindBook, [p.id]: e.target.value })}
-                >
-                  <option value="">（选择要绑定的书）</option>
-                  {books.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.title}
-                    </option>
-                  ))}
-                </select>
-                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void bind(p.id)}>
-                  绑定
-                </Button>
               </div>
             </li>
           ))}
