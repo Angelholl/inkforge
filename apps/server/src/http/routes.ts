@@ -20,7 +20,7 @@ import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
 import { mergeSeedIntoBlueprint } from './blueprint-merge';
 import { batchBlueprintSuggest } from './blueprint-batch';
-import { blueprintSchema, bookMetaPutSchema, characterInstantiateSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, summaryCommitSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, characterInstantiateSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, settingsImportRefineSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, summaryCommitSchema, updateCharacterSchema } from './schemas';
 import { instantiateCharacters } from './character-instantiate';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
@@ -41,8 +41,9 @@ import { pickFewShotAndHeldOut } from '../style/sample';
 import type { ChapterBlueprint, DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto, SummaryCommitBody, SummaryGenerateResultDto } from '@inkforge/shared';
 import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, mergeLegacyDimTexts, parseLandingMandate } from '@inkforge/shared';
 import { commitSummarize, generateSummarize } from '../pipeline/summarize';
+import { refineDescriptionWithLlm } from '../refine';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
-import { createRoleProvider } from '../llm/factory';
+import { createRoleProvider, pickProviderForRole } from '../llm/factory';
 import { parseBlueprint, parseOutline, parseOutlineTree, type ParsedBlueprint } from '../llm/plainproto';
 import { repairPrompt } from '../quality/l1';
 import { renderBlueprintTask, renderCharacterCards, renderOutlineCardSchedule, renderOutlineCheckTask, renderOutlineTask, renderOutlineTreeBrief, renderOutlineTreeTask } from '../prompts/render';
@@ -93,6 +94,8 @@ export interface RouteState {
   /** planner 角色注入缝；缺省由 createRoleProvider(config,'planner') 构造 */
   plannerProvider?: LlmProvider;
   summarizerProvider?: LlmProvider;
+  /** refiner 角色注入缝；缺省由 createRoleProvider(config,'refiner') 构造 */
+  refinerProvider?: LlmProvider;
   bus: EventEmitter;
   runAborts: Map<string, AbortController>;
 }
@@ -385,6 +388,27 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
         foreshadowings: d.foreshadowings.length,
       },
     });
+  });
+
+  // T8（D4 设定集精炼端点）：502+errors 外部契约定死，不做 catch 降级、不写库
+  app.post('/api/settings-import/refine', async (req, reply) => {
+    const body = parseBody(reply, settingsImportRefineSchema, req.body);
+    if (!body) return;
+    // 断连即中止：与 summarize generate 同形
+    const ac = new AbortController();
+    req.raw.once('close', () => {
+      if (!reply.sent) ac.abort();
+    });
+    const provider = state.refinerProvider ?? createRoleProvider(config, 'refiner');
+    try {
+      const result = await refineDescriptionWithLlm(
+        { provider, config, providerConfig: pickProviderForRole(config, 'refiner') },
+        { raw: body.content, budgetChars: 20000, signal: ac.signal },
+      );
+      reply.send(result);
+    } catch (e) {
+      reply.code(502).send({ error: 'refine failed', reason: (e as Error).message });
+    }
   });
 
   app.get('/api/books/:bookId', async (req, reply) => {

@@ -7,6 +7,7 @@ import { buildApp } from '../../src/app';
 import { createDefaultMockProvider, createMockProvider } from '../../src/llm/mock';
 import { openDb, type Database } from '../../src/db/open';
 import type { SettingsImportDraftDto } from '@inkforge/shared';
+import type { CompletionRequest, CompletionResult, LlmProvider } from '../../src/llm/types';
 
 // 中性仿形设定集（DEC-2026-1120-04 全局约束：原 MD 不进仓库，夹具全中性占位）
 const COMPENDIUM = `# 《导入示例书》都市群像长篇 · 扩写设定集
@@ -372,5 +373,143 @@ describe('POST /api/settings-import/apply 勾选落地策略（DEC-2026-1122-01 
     const { bookId } = r.json() as { bookId: string };
     const book = (await h.app.inject({ method: 'GET', url: `/api/books/${bookId}` })).json() as { landingMandate: unknown };
     expect(book.landingMandate).toBeNull();
+  });
+});
+
+// ── T8 精炼端点（refinerProvider 注入缝 + 独立临时库，零连主库）──
+function okRefine(text: string): CompletionResult {
+  return { text, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: 'stop' };
+}
+
+function makeRefineProvider(
+  handler: (req: CompletionRequest, index: number) => CompletionResult,
+): { provider: LlmProvider; calls: CompletionRequest[] } {
+  const calls: CompletionRequest[] = [];
+  const provider: LlmProvider = {
+    async complete(req) {
+      const index = calls.length;
+      calls.push(req);
+      return handler(req, index);
+    },
+  };
+  return { provider, calls };
+}
+
+async function makeRefineApp(contextWindow: number, refinerProvider: LlmProvider): Promise<Harness> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inkforge-settings-refine-'));
+  const config = loadConfig({
+    STRATA_BASE_URL: 'http://127.0.0.1:47831/v1',
+    STRATA_API_KEY: 'strata',
+    STRATA_MODEL: 'iq3_xxs',
+    INKFORGE_DATA_DIR: dir,
+  });
+  config.providers.local.contextWindow = contextWindow;
+  const db = openDb(path.join(config.dataDir, 'inkforge.db'));
+  const app = await buildApp({
+    config,
+    provider: createDefaultMockProvider(),
+    refinerProvider,
+    db,
+  });
+  return { dir, db, app };
+}
+
+describe('POST /api/settings-import/refine', () => {
+  it('refine → 200 description ≤20000 且 mock 调用恰 1 次', async () => {
+    const { provider, calls } = makeRefineProvider(() => okRefine('摘'.repeat(30000)));
+    const h = await makeRefineApp(524288, provider);
+    try {
+      const r = await h.app.inject({
+        method: 'POST',
+        url: '/api/settings-import/refine',
+        payload: { content: '甲'.repeat(12000) },
+      });
+      expect(r.statusCode).toBe(200);
+      const body = r.json() as { description: string; truncated: boolean };
+      expect(body.description.length).toBeLessThanOrEqual(20000);
+      expect(body.truncated).toBe(true);
+      expect(calls.length).toBe(1);
+    } finally {
+      teardown(h);
+    }
+  });
+
+  it('contextWindow 小 → 502 含 reason=refine-context-too-small', async () => {
+    const { provider } = makeRefineProvider(() => okRefine('摘'.repeat(10)));
+    const h = await makeRefineApp(8192, provider);
+    try {
+      const r = await h.app.inject({
+        method: 'POST',
+        url: '/api/settings-import/refine',
+        payload: { content: '甲'.repeat(12000) },
+      });
+      expect(r.statusCode).toBe(502);
+      const body = r.json() as { error: string; reason: string };
+      expect(body.error).toBe('refine failed');
+      expect(body.reason).toBe('refine-context-too-small');
+    } finally {
+      teardown(h);
+    }
+  });
+
+  it('provider error → 502 可读 error，不降级不写库', async () => {
+    const { provider } = makeRefineProvider(() => {
+      throw new Error('boom');
+    });
+    const h = await makeRefineApp(524288, provider);
+    try {
+      const r = await h.app.inject({
+        method: 'POST',
+        url: '/api/settings-import/refine',
+        payload: { content: '甲'.repeat(12000) },
+      });
+      expect(r.statusCode).toBe(502);
+      const body = r.json() as { error: string; reason: string };
+      expect(body.error).toBe('refine failed');
+      expect(body.reason).toBe('boom');
+      const row = h.db.prepare('SELECT COUNT(*) AS n FROM books').get() as { n: number };
+      expect(row.n).toBe(0);
+    } finally {
+      teardown(h);
+    }
+  });
+
+  it('分块中途某段 mock 报错 → 502 且 reason 含 refine-map-failed: segment 3/4', async () => {
+    const { provider } = makeRefineProvider((_req, index) => {
+      if (index === 2) throw new Error('boom');
+      return okRefine('摘'.repeat(10));
+    });
+    const h = await makeRefineApp(65536, provider);
+    try {
+      const r = await h.app.inject({
+        method: 'POST',
+        url: '/api/settings-import/refine',
+        payload: { content: '甲'.repeat(40475) },
+      });
+      expect(r.statusCode).toBe(502);
+      const body = r.json() as { error: string; reason: string };
+      expect(body.error).toBe('refine failed');
+      expect(body.reason).toContain('refine-map-failed: segment 3/4');
+    } finally {
+      teardown(h);
+    }
+  });
+
+  it('分块某段空输出 → 502 且 reason 含 refine-map-empty: segment 2/4', async () => {
+    const { provider } = makeRefineProvider((_req, index) => okRefine(index === 1 ? '' : '摘'.repeat(10)));
+    const h = await makeRefineApp(65536, provider);
+    try {
+      const r = await h.app.inject({
+        method: 'POST',
+        url: '/api/settings-import/refine',
+        payload: { content: '甲'.repeat(40475) },
+      });
+      expect(r.statusCode).toBe(502);
+      const body = r.json() as { error: string; reason: string };
+      expect(body.error).toBe('refine failed');
+      expect(body.reason).toContain('refine-map-empty: segment 2/4');
+    } finally {
+      teardown(h);
+    }
   });
 });
