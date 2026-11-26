@@ -50,6 +50,7 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
   const [draft, setDraft] = useState<SettingsImportDraftDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [refining, setRefining] = useState(false);
   const [error, setError] = useState('');
   // 勾选才写 mandate（DEC-2026-1122-01 Task-04）：默认不勾；N 固定 2，自定义 N 走书籍设置
   const [mandateEnabled, setMandateEnabled] = useState(false);
@@ -84,6 +85,26 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
     } finally {
       setBusy(false);
       setApplying(false);
+    }
+  };
+
+  // 精炼只在预览草稿上改 description，其余 draft 字段原地保留；整次返回（含分块多段）前保持 busy/在途文案。
+  const refine = async () => {
+    if (!draft || busy || applying) return;
+    setError('');
+    setBusy(true);
+    setRefining(true);
+    try {
+      const result = await api.refineDescription({ content: draft.description });
+      setDraft({ ...draft, description: result.description });
+      if (result.truncated) {
+        setError('精炼输出已按预算截断，可继续编辑世界观字段后导入。');
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+      setRefining(false);
     }
   };
 
@@ -300,6 +321,14 @@ export default function SettingsImportPanel({ onApplied }: { onApplied: (a: Sett
               ))}
             </ul>
           )}
+          <Button
+            variant="secondary"
+            loading={refining}
+            disabled={busy || applying}
+            onClick={() => void refine()}
+          >
+            {refining ? '精炼中…' : 'AI 精炼'}
+          </Button>
           <Button variant="primary" disabled={busy || draft.title.trim() === ''} onClick={() => void apply()}>
             {/* 文风步=服务端同步 LLM 调用（实测 2-3 分钟级），在途须给进度文案防误判卡死（owner 2026-11-21 反馈） */}
             {applying && draft.importStyle && draft.styleSection.trim() !== ''
