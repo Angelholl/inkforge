@@ -134,7 +134,7 @@
 **背景：** 0.2 草案 v1 经 decision-critic 评议=有条件通过，[HIGH_RISK_OBJECTION]×2（HR-1 发版物证保护、HR-2 D4 收敛逻辑与 F5 实证冲突）+M1-M15。
 
 **裁决：**
-1. HR-1/HR-2 均**采纳**（主模型回应，无 [PRESSURE-OVERRIDE]）。HR-1 即时动作已执行：0.1.2 新候选（CMD 修复后重建）S码=6e3dfd4b4c64358cc6569688b47e0e5fcf152344fce7420dfcc4867957f0af9d，副本 data/artifacts/0.1.2-rc-6e3dfd4b.exe（gitignore），旧交接文档 S码 88308e14… 作废。
+1. HR-1/HR-2 均**采纳**（主模型回应，无 [PRESSURE-OVERRIDE]）。HR-1 即时动作已执行：0.1.2 新候选（CMD 修复后重建）S码=6e3dfd4b4c64358cc6569688b47e0e5fcf152344fce7420dfcc4867957f0af，副本 data/artifacts/0.1.2-rc-6e3dfd4b.exe（gitignore），旧交接文档 S码 88308e14… 作废。
 2. owner 拍板：v0.1.2 tag **仅作里程碑标记**（不承诺从 tag 复现安装包，物证以 S码+副本为准，M2 按此落）。
 3. owner 拍板：入口 A 导入章**加「可选摘要」卡**（手动触发单章 summarize，非自动）。
 4. 原 planner 修订草案为 v2：M1-M15 全落 + CLI 卡/UI token 试点卡占位（DEC-2026-1113-04 M2/M3）+ 测试增量链重算。v2 出来后主审复核必改项覆盖再呈 owner 终审拆卡。
@@ -322,11 +322,11 @@
 
 **释义与落地（修订 DEC-2026-1116-01 的效果验收门）：** agent ①不再生成盲评材料（已备的 v1/v2 材料仅在 temp 存档，不再生产、不作验收门）；②不再做自动化 GUI 黑盒目验（puppeteer 隔离栈/截图全停）；③每卡仍跑完整验证链硬序（typecheck→lint→定向→全仓→真服务冒烟→安全比基线，基线只增不减）；④提交信息 GUI 行统一写「未验证（owner 真实测试）」；⑤GUI/效果类验收权归 owner 本人。已入项目记忆 owner-real-testing-division。
 
-**执行账：** Task0–Task11A 全部落卡收口。提交链：T9B=af4388f、T10A=21b70c6、T10B=54f996f、T11A=65b0f85（卡面 d40a634/d3ac9d7/27ccef0/57ab700）；测试基线 296→319→324→329→333→338 只增不减；真服务冒烟均含跨进程持久/重启置 failed 等关键项；生产库与 backups/ 全程零接触（mtime 12:51 未变）。free 链 19 连 CHAIN_EXHAUSTED（14:00–18:41，三模型全 RATE_LIMIT，每轮候满 5 分钟未双轮转）：T9B/T10A/T11A 主审兜底亲执；T10B 执行者限流前半交付（client/shared/StyleBindSelect 三处与卡面逐字一致，主审核对采纳后续做）。未完成：Task11B（web 轮询 UI）——新会话按开工提示词执行。
+**执行账：** Task0–Task11A 全部落卡收口。提交链：T9B=af4388f、T10A=21b70c6、T10B=54f996f、T11A=65b0f85（卡面 d40a634/d3ac9d7/27ccef0/57b700）；测试基线 296→319→324→329→333→338 只增不减；真服务冒烟均含跨进程持久/重启置 failed 等关键项；生产库与 backups/ 全程零接触（mtime 12:51 未变）。free 链 19 连 CHAIN_EXHAUSTED（14:00–18:41，三模型全 RATE_LIMIT，每轮候满 5 分钟未双轮转）：T9B/T10A/T11A 主审兜底亲执；T10B 执行者限流前半交付（client/shared/StyleBindSelect 三处与卡面逐字一致，主审核对采纳后续做）。未完成：Task11B（web 轮询 UI）——新会话按开工提示词执行。
 
 **规格勘正集（执行中钉死，owner 可驳回）：** ①蒸馏 job result 附 `sourceText`（shared DistillStyleDraftDto 可选字段）——重蒸草稿须有整篇原文才能走「确认入库」，否则重蒸闭环断半路；入库侧 `ON CONFLICT(source_hash) DO NOTHING` 保证同 hash 只留一份原文。②DELETE 档案 409 文案改中文「该风格档案已被书绑定，请先解绑再删除」（仓库 409 文案惯例，计划原钉 'profile bound'）。③档案删除/绑定反查走路由内联 SQL（`styles.ts` 不存在，仓库档案投影本就内联于 routes.ts）。④每页一枚「质量轮数」select 统管本页全部生成入口（BookDetailPage 三处、NewBookPage 一处），UI 上限 3 轮。⑤迁移卡面模板固 §1.1 段：user_version 硬编码 7 处+旧库回滚块 DROP（0008 两表，style_sources 带 UNIQUE）。⑥全文 Qc 明细面板按轮 gate/l1 findings/L0 未过项渲染；质检明细仅新 run 版本携带。
 
-**执行留痕：** 打点 C-20261116-2352/2353 在先（LEDGER 追加 L-20261116-02..06 + R-none）；本条目与 65b0f85（T11A）后单独 docs 提交归档；push 未做——本地 ahead origin 约 37 提交，push 前须 code-review（≥3 文件/≥100 行规则）+ owner 点头（沿「任务结束统一 push 需 owner 命」口径）。
+**执行留痕：** 打点 C-20261116-2352/2353 在先（LEDGER 追加 L-20261116-02..06 + R-none）；本条目与 65b0f85（T11A）后单独 docs 提交归档；push 未做——本地 ahead origin 约 37 提交，push 前须 code-review（≥3 文件/≥100 行规则）+ owner 点头（沿「任务结束统一 push 需 owner 令」口径）。
 
 ## DEC-2026-1117-01 [OWNER] owner 实测七反馈修复拍板——设定统一落点/人物下线专用控件/mock 开关删除（2026-11-17）
 
@@ -588,7 +588,7 @@
 
 **背景：** 0.2.3 发版门本地已全绿（两轴 code-review 0 硬违反；演练二轮取证：首启前 4131 文件落盘清点个人面零命中、双默认表 cmp 与仓库 tracked 一致、词表生效路径=出厂默认、books=0、env=placeholder、互锁「本安装全新初始化不迁移」行在案、卸载回净后 ARP 正式装机注册无损；卸载残留 19 项系 Delete 行历史混合风格，挂账非本轮引入）。owner 问「打包与测试为何不在 GitHub 完成」；主审答：硬阻碍（模板盘符/用户名硬编码）已由 t06 宏化清除，CI 全新 runner 对「包零个人数据」是**结构性保证**（比事后清点更强），public 仓 Windows 分钟免费、GitHub 直连免代理波动、GITHUB_TOKEN 免 PAT 手工链；CI 替代不了 owner 真实测试与本机旧数据升级路径演练（CI 只能模拟净装）。1123-02 末段留痕系计划态误写为完成态（Spec 轴发现），以本条为准修正。
 
-**裁决①：** 0.2.3 等 CI 链建成再发——本地已验证包（inkforge_0.2.3_x64-setup.exe，sha=eed2a8b4c576f5ca9878b94325536d6d05fee5d74049548b7ed77a0ab35bd3f4）作废为参考件、不上载；发版物由流水线从 tag 提交重打。
+**裁决①：** 0.2.3 等 CI 链建成再发——本地已验证包（inkforge_0.2.3_x64-setup.exe，sha=eed2a8b4c576f5ca9878b94325536d6d05fee5d74049548b7ed7770aab35bd3f4）作废为参考件、不上载；发版物由流水线从 tag 提交重打。
 
 **裁决②：** 排卡建 `.github/workflows/release.yml` 全链上 CI：tag `v*.*.*` 触发→依赖安装（pnpm 缓存+rust 缓存）→版本门（tag==tauri.conf.version）→全量测试+typecheck+lint+audit --prod→build-dist→tauri build→PE Subsystem 回归→生成 NSI 静态清点（宏形态计数/迁移对/依赖覆盖/个人面零命中）→**正式包验证装演练**（/P /D 净装→落盘清点→首启 health+词表 path+books+env 取证→杀树→卸载）→artifact 存档→Release 自动上载（GITHUB_TOKEN）→digest 回读比对→公开三验；`workflow_dispatch`=验证模式不建 Release。0.2.4 起发版=push tag，验收放行与 GUI 真实测试仍在 owner。
 
@@ -658,7 +658,7 @@
 2. decision-critic 评议=**有条件支持**，一处 **[HIGH_RISK_OBJECTION]** 针对 `lever='weights'`：权重改不动文风规则文本，对"人称/生理描写"类拉扯近乎无效，"假把手比没把手更伤"，且与门内既有占比滑条逻辑重复。主模型回应=**部分采纳**：保留该把手（owner 明确要它并选定力道），但**行下灰字当场标注作用范围**（只改六轴画像与样本配比、不改文风规则文本）并给"回「调整各档案占比」滑条精调"跳转；`nudgeWeights` 收进 shared 纯函数一处实现、门内只做 ±20 快捷档，不重造滑条。critic 另四条修正**全采纳**：落点档案名**只认该书已绑集合**（未命中/同名多义/无 styleBinding 一律降 `lever='none'` 保留行）；`weights={}` 旧绑定须在 confirm 与 styleBind 两侧**放行空对象**（=legacy 按贡献维数计权、不动权重，不在用户点击时擅自把 legacy 转加权）、门内该类行禁用并说明；哨兵分支必须插在 `merge.ts:207` 回落之前，且**测试须断言到 prompt 注入文本层**（只断言落库值会漏"点了等于没点"）；`BookDetailPage` 逐维下拉必须加哨兵 option（否则 state 是哨兵而 select 回显空白=UI 欺骗）。
 3. 协议形态：`TENSION:` 行扩 6 段（末段落点：`维度=<八维名>` / `占比=<档案名>` / `门外`），解析器**段数双收**（5 段旧格式→落点缺省 `门外`；>6 段仍丢行计 invalid，保持现状语义），非法落点降 `none` 不丢行，防"模型少给一段就整批降级"。
 
-**执行安排：** 计划真值=`docs/plans/2026-11-24-tension-levers.md`（code-planner 产出→critic 评议→owner 选项确认→主审核计划采纳 planner 补钉 P-1~P-4：无绑定按 `none` 渲染/门内逐维下拉也补哨兵项/routes.ts system「五段」文案同步六段/zod v4 放行落点=superRefine 空对象分支）。四卡**串行**（同工作树 ≤1 卡）：TL-1 协议与 DTO（`tension.ts`+`shared/fusion.ts`+`routes.ts`+两测试）、TL-2 引擎哨兵（`shared/api.ts`+`merge.ts`+merge/chapter/polish 三测试）、TL-3 校验放行与设置侧回退（`schemas.ts`+`BookDetailPage.tsx`+style/fusion-gate/BookDetailPage 三测试）、TL-4 门内三选与合并落盘（`shared/fusion.ts` nudgeWeights+`FusionGateDialog.tsx`+shared/组件测试）。禁改 `apply.ts`/`fingerprint.ts`/六轴与样本席位算法/`books.ts` 双写/applied-skipped 语义。通道=opencode/hy4-flash-free（限时窗内、非禁入）。基线起点=本轮实跑（上一批终账 748，只增不减）。GUI 仍属 owner 真实测试：张力行三选补完后由 owner 复测该点位，v0.2.5 发版等实测放行。
+**执行安排：** 计划真值=`docs/plans/2026-11-24-tension-levers.md`（code-planner 产出→critic 评议→owner 选项确认→主审核计划采纳 planner 补钉 P-1~P-4：无绑定按 `none` 渲染/门内逐维下拉也补哨兵项/routes.ts system「五段」文案同步六段/zod v4 放行落点=superRefine 空对象分支）。四卡**串行**（同工作树 ≤1 卡）：TL-1 协议与 DTO（`tension.ts`+`shared/fusion.ts`+`routes.ts`+两测试）、TL-2 引擎哨兵（`shared/api.ts`+`merge.ts`+merge/chapter/polish 三测试）、TL-3 校验放行与设置侧回退（`schemas.ts`+`BookDetailPage.tsx`+style/fusion-gate/BookDetailPage 三测试）、TL-4 门内三选与合并落盘（`shared/fusion.ts` nudgeWeights+`FusionGateDialog.tsx`+shared/组件测试）。禁改 `apply.ts`/`fingerprint.ts`/六轴与样本席位算法/`books.ts` 双写/applied-skipped 语义。通道=opencode/hy4-flash-free（限时窗内、非禁入）。基线起点=TL-4 收口数 781，只增不减。GUI 仍属 owner 真实测试：张力行三选补完后由 owner 复测该点位，v0.2.5 发版等实测放行。
 ## DEC-2026-1124-05 [owner 拍板·形态主模型选] 风格维度八并六 + 存量读时别名不重写（2026-11-24）
 
 **背景：** owner 于 dev 载体实测张力三选（DEC-2026-1124-04 交付面）期间追加并维诉求：八维表（节奏/对话/描写/情感基调/尺度/写作特点/特色词汇/章节结构）过细，且门里「叙述视角与文风绑定」类冲突没有对应维旋钮——视角/人称/POV/心理距离从来不是维名，只藏在「写作特点」档案文本里。机制事实（code-planner 调研三条修正，已入计划 §2.3）：①风格维度文本实存 `style_profiles.rules_json` 的 `dims` 键（**不是** `structure_json`，后者属 imitation/plot/spectrum）；②`schemas.ts` 两处 dim 键校验是读 `STYLE_DIMENSIONS` 常量的自定义校验（非 z.enum/字面量）→ 常量翻六维后写路径自动拒旧名、校验代码零改动；③「叙述视角」全仓无字面量，仅 `tension.test.ts:63` 的 `维度=视角→none` 语义承接（DM-3 折算销账）。崩点复核：读时别名不会键错位崩（`parseStyleBundle` 不按维名迭代、`inject` 以 `??` 容缺），真风险是旧键被静默忽略致文本落空 → 读侧三口（contentFromProfileRow/parseStyleBundle/getBookStyleBinding）+档案详情口必须接线并以红例钉死。
@@ -671,7 +671,7 @@
 
 **预期现象（不当 bug 修）：** 指纹 face 含 styleBinding 整对象（归一后 dimsSource + 新增 legacySplits）→ 旧书首次过门指纹不一致门重弹一次；confirm/PUT 再冻结时自动产六维快照，旧键自然淘汰、无迁移代码。
 
-**执行安排：** 计划真值=`docs/plans/2026-11-24-style-dims-merge.md`（code-planner 产出+主模型自审五查）。四卡**串行**（通道 opencode/hy4-flash-free 限时窗内、非禁入型）：DM-1 shared 六维表+别名纯函数+三口接线+全仓钉值随迁（14 测试文件只随迁不删例）；DM-2 蒸馏模板六维化+parseAnalysis 报错文案「现行六维」；DM-3 张力落点 `foldDimName` 折算（旧八维名 + 视角/人称/POV/pov/视点→叙述方式；`维度=描写密度`/`维度=叙述视角` 仍 none）；DM-4 web 六组展示+legacySplits 两处灰字提示+「七维」标签修正（既有屏显 bug：`StyleProfilesSection.tsx:349` 实为八维标七维，DEC-2026-1122-03 加维时漏改，顺本批统一改「六维」）。禁改红线：merge.ts 六轴(:225-260)/样本席位(:307-353)/逐维判定回落(:186-223) 本体、inject.ts、fingerprint.ts、apply.ts、books.ts setBookStyleBinding 双写、`apps/server/data/**` 一切真实数据。基线起点=TL-4 收口数 781，只增不减。GUI 归 owner 真实测试，v0.2.5 发版等实测放行。
+**执行安排：** 计划真值=docs/plans/2026-11-24-style-dims-merge.md（code-planner 产出+主模型自审五查）。四卡**串行**（通道 opencode/hy4-flash-free 限时窗内、非禁入型）：DM-1 shared 六维表+别名纯函数+三口接线+全仓钉值随迁（14 测试文件只随迁不删例）；DM-2 蒸馏模板六维化+parseAnalysis 报错文案「现行六维」；DM-3 张力落点 `foldDimName` 折算（旧八维名 + 视角/人称/POV/pov/视点→叙述方式；`维度=描写密度`/`维度=叙述视角` 仍 none）；DM-4 web 六组展示+legacySplits 两处灰字提示+「七维」标签修正（既有屏显 bug：`StyleProfilesSection.tsx:349` 实为八维标七维，DEC-2026-1122-03 加维时漏改，顺本批统一改「六维」）。禁改红线：merge.ts 六轴(:225-260)/样本席位(:307-353)/逐维判定回落(:186-223) 本体、inject.ts、fingerprint.ts、apply.ts、books.ts setBookStyleBinding 双写、`apps/server/data/**` 一切真实数据。基线起点=TL-4 收口数 781，只增不减。GUI 归 owner 真实测试，v0.2.5 发版等实测放行。
 
 **执行留痕（2026-11-25 凌晨收口）：** 四卡 hy4 通道全部验收合入：DM-1=`a281f9b`（执行者按纪律停 F4 卡外红，主审直修 `fusion-gate.test.ts` 两行钉随迁后代提交）、DM-2=`ffb3e95`、DM-3=`0362ef8`、DM-4=`6ef6471`。测试终账 **799**（781→789→793→796→799 只增不减，每环主审亲跑）；`apps/server/data/**` 全程零 diff=「存量不重写」红线实证。planner 冲击清单两处勘误入档（pipeline/polish 路径笔误；fusion-gate.test 误标「不动」实需随迁），执行者两处正确适配（E2 异值夹具、polish 按实际文件）均记计划完成记录。GUI 归 owner 实测（六组下拉/分裂灰字/六维标签/旧书首过门重弹观察/旧维名 PUT 400），随 TL 批点位一次做完；v0.2.5 发版等实测放行。
 
@@ -712,3 +712,43 @@
 4. **F5 批量蓝图建议**（owner 裁并入本批、接受容量挤压）：续写书对全部无蓝图章节一键批量生成，逐章串行队列（现状=`POST /api/runs` 对 blueprint-less 章直接 400）。
 5. **F2 光谱→AI 实例化人物卡**（排最后=弹性阀）：行协议禁 JSON；解析产物 `{name, baseSetting}`，**baseSetting 须为 JSON 对象字符串**（renderCharacterCards 消费形态）；重名在草稿层标 warning（批内互撞+与既有卡撞名），保存撞 UNIQUE/409 前人已在审；单次 ≤8 张分批；张数>spectrum 行数行为钉死（同原型多卡）；未绑定书=按钮禁用+指引不静默隐藏；characters 槽 8000 超限行为带断言。
 6. **执行序**：SP 批已收口 → **F1→F4→F3→F5→F2**；计划真值=code-planner 产出 `docs/plans/2026-11-25-four-feedbacks-batch.md`（本批五 feature 合并一计划）；通道=opencode/hy4-flash-free 串行、同工作树 ≤1 卡；测试基线起点=818 只增不减。GUI 归 owner 真实测试延批次收口一次做（11-24 令）。
+
+## DEC-2026-1126-01 [OWNER] 绑定迁书页：剧情/光谱绑定条各归各区（2026-11-26）
+
+**背景：** owner 实测反馈：剧情档案、人物光谱档案的绑定不应在「蒸馏」页做，应像风格档案一样在小说书页绑定（书页已有世界观与剧情大纲卡片、人物卡分区）。主模型以 AskUserQuestion 选项形式逐项呈报（推荐项标注、每选项附后果）。
+
+**拍板（owner 亲决）：** 书页绑定控件形态=各归各区——人物卡分区顶部加「人物光谱档案」绑定条；世界观与剧情大纲分区的剧情大纲文本框旁加「剧情档案」绑定条；样式对齐现有 StyleBindPanel（select+保存绑定/解绑按钮组合）；风格面板本身不动。保存/解绑走既有 PUT `/api/books/:bookId/plot` 与 `/api/books/:bookId/spectrum`，后端绑定路由零改动。
+
+**落实：** 计划真值=docs/plans/2026-11-26-bind-relocation-prose-draft.md（BR-2；执行序先立书页入口、后摘蒸馏页入口，全程不出现绑定无入口窗口）。执行留痕批次收口补记。
+
+## DEC-2026-1126-02 [OWNER] 蒸馏页删绑定控件保列表 + 只读徽标 boundBooks（2026-11-26）
+
+**背景：** 与 DEC-2026-1126-01 同轮 AskUserQuestion 呈报。
+
+**拍板（owner 亲决）：** 蒸馏页卡保留新增/编辑/删除/指纹（structure 行/版本/查看/自评/重新蒸馏）等列表管理，去掉绑定下拉和按钮；卡片行上加只读徽标显示该档案当前绑在哪本书。server 三 list 端点（style/plot/spectrum）响应逐条附 `boundBooks: Array<{id,title}>`——plot/spectrum 走 books 镜像列反查、style 走 book_style_profiles 关联表反查（辅档命中）；仓库层返回形状不动、无新迁移。
+
+**落实：** 计划 BR-1（server 数据链 `listBooksBoundToProfile`）+BR-3/BR-4（蒸馏页共享壳瘦身与徽标）。执行留痕批次收口补记。
+
+## DEC-2026-1126-03 [OWNER] 风格蒸馏页绑定入口一并摘掉：三类统一「列表归蒸馏页、绑定归书页」（2026-11-26）
+
+**背景：** 与 DEC-2026-1126-01/02 同轮呈报。核实现状：蒸馏页风格卡今日已无绑定入口（grep 全文仅 409 删除保护文案与错误文案命中「绑定」）。
+
+**拍板（owner 亲决）：** 风格在蒸馏页的绑定入口一并摘掉——三类统一「列表归蒸馏页、绑定归书页」，绑定唯一入口=书页。现状已无入口 → 落地为守护断言（断言风格分区无绑定 select/按钮）钉死不回潮，非删除动作。
+
+**落实：** 计划 BR-4（守护断言）。执行留痕批次收口补记。
+
+## DEC-2026-1126-04 [OWNER] 蓝图直输散文：draftText→AI 扩写，合法 JSON 原路不动（2026-11-26）
+
+**背景：** owner 实测反馈：蓝图编辑卡片直输纯中文散文草稿时，点「基于已有草稿扩展」报红字「当前蓝图草稿不是合法 JSON，无法作为扩展种子」被拒；owner 裁定：对直接输入文字的用户，「直输草稿→AI 扩写」才是正确方式。主模型 AskUserQuestion 呈报。
+
+**拍板（owner 亲决）：** 非 JSON 草稿不再拒绝，作为新字段 `draftText` 发给 blueprint-suggest，由 LLM 扩写成完整蓝图 JSON 回填文本框（planner 草稿槽 budget 3000、head 截断+超限 warning）；合法 JSON 仍走现有结构化 seed 确定性合并路径（mergeSeedIntoBlueprint 语义不动）；空草稿就地提示不发请求；默认「AI 建议蓝图」按钮恒不传 seed/draftText（R-F4-3 语义钉死）；批量端点不吃 draftText。
+
+**落实：** 计划 BR-5（server）+BR-6（web）。执行留痕批次收口补记。
+
+## DEC-2026-1126-05 [OWNER] 仿写档案并入统一口径：四类「列表归蒸馏页、绑定归书页」（2026-11-26）
+
+**背景：** 本批前四项拍板后 owner 追加第五项。此前计划曾将仿写分区（ImitationProfilesSection，挂蒸馏页风格档案区下，自带绑定下拉）划为「本批零触碰、留 owner 后续批次定夺」；owner 拍板要旨中「书页绑定控件各归各区」等的「等」字覆盖仿写——仿写不再留待后续批次。主模型 AskUserQuestion 呈报。
+
+**拍板（owner 亲决）：** 仿写档案分区并入本批统一口径——四类档案（风格/剧情/光谱/仿写）全部「列表归蒸馏页、绑定归书页」。书页风格档案区（sec-style）加「仿写档案」绑定条（复用 ProfileBindBar，走既有 PUT `/api/books/:bookId/imitation`，后端零改动）；蒸馏页仿写卡删绑定下拉/按钮保列表管理+只读徽标（GET `/api/imitation-profiles` 附 boundBooks，反查复用 DEC-2026-1126-02 通道扩 imitation kind，镜像列 books.imitation_profile_id/迁移 0005、无新迁移）；融合门重绑指引文案同步改指书页（原指引指向蒸馏页绑定框，随本批摘除失实）。
+
+**落实：** 计划 BR-7a（server 反查）+BR-7b（web 双端）；原计划 §2.4.5 仿写零触碰条款作废。执行留痕批次收口补记。
