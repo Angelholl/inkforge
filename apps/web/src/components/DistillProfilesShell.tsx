@@ -1,5 +1,6 @@
 import { Fragment, useId, useState, type ReactNode } from 'react';
 import { useQuery, type QueryKey } from '@tanstack/react-query';
+import { countChars } from '@inkforge/shared';
 import { Button } from './ui';
 import { inputBase, textareaBase } from './Field';
 import { EmptyState } from './EmptyState';
@@ -149,7 +150,7 @@ export function DistillProfilesShell<P extends DistillProfileBase, D>({
       setMsg(labels.emptyNameMsg);
       return;
     }
-    const stripped = text.replace(/\s/g, '').length;
+    const stripped = countChars(text);
     if (stripped < 200) {
       setMsg(labels.shortTextMsg(stripped));
       return;

@@ -4,7 +4,7 @@ import { api, apiErrorBody, apiErrorText } from '../api/client';
 import { Button } from '../components/ui';
 import { inputBase, inputNarrow, textareaBase } from '../components/Field';
 import { ProfilesListShell } from '../components/DistillProfilesShell';
-import { STYLE_AXES, STYLE_DIMENSIONS, type StyleAnalysisDto, type StyleProfileDetailDto, type StyleProfileDto } from '@inkforge/shared';
+import { STYLE_AXES, STYLE_DIMENSIONS, countChars, type StyleAnalysisDto, type StyleProfileDetailDto, type StyleProfileDto } from '@inkforge/shared';
 import ImitationProfilesSection from './ImitationProfilesSection';
 import BookSamplePicker from './BookSamplePicker';
 import { decodeTextFile } from './NewBookPage';
@@ -108,8 +108,8 @@ export default function StyleProfilesSection() {
       setMsg('请先填写档案名称');
       return;
     }
-    if (text.replace(/\s/g, '').length < 200) {
-      setMsg(`样本正文去空白后不足 200 字（当前 ${text.replace(/\s/g, '').length} 字），请粘贴或导入更多正文`);
+    if (countChars(text) < 200) {
+      setMsg(`样本正文去空白后不足 200 字（当前 ${countChars(text)} 字），请粘贴或导入更多正文`);
       return;
     }
     setBusy(true);

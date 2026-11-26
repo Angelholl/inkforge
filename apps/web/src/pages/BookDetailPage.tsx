@@ -59,7 +59,7 @@ function useActiveSection(enabled: boolean): string {
   }, [enabled]);
   return active;
 }
-import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_DIMENSIONS } from '@inkforge/shared';
+import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_DIMENSIONS, collapseWhitespace, BRACKET_TAG_RE } from '@inkforge/shared';
 import type { BlueprintSuggestBody, CharacterDto, CharacterInstantiateDraftDto, ChapterBlueprint, ExportFormat, ForeshadowingDto, StyleBindBody, StyleProfileDto, SummaryCommitBody, SummaryGenerateResultDto } from '@inkforge/shared';
 
 /** T6 单在途槽位：generate 起步即占位（result 先空稿），完成后换成真实结果；abort 用于取消。 */
@@ -80,16 +80,16 @@ function buildSummaryAnnotations(
   foreshadowings: ForeshadowingDto[],
   characters: CharacterDto[],
 ): { threads: Record<string, string>; states: Record<string, string> } {
-  const byDesc = new Map(foreshadowings.map((f) => [f.description.replace(/\s+/g, ' ').trim(), f]));
+  const byDesc = new Map(foreshadowings.map((f) => [collapseWhitespace(f.description), f]));
   const threads: Record<string, string> = {};
   for (const raw of result.openThreads) {
-    const m = /^\[(planted|advanced|resolved)\]\s*(.+)$/.exec(raw);
+    const m = BRACKET_TAG_RE.exec(raw);
     if (!m) {
       threads[raw] = '未匹配将被忽略';
       continue;
     }
     const [, tag, desc] = m;
-    const hit = byDesc.get(desc.replace(/\s+/g, ' ').trim());
+    const hit = byDesc.get(collapseWhitespace(desc));
     if (hit && (tag === 'resolved' || tag === 'advanced')) {
       threads[raw] = `将回收：${desc}（第${hit.plantedCh}章埋）`;
     } else if (!hit && tag === 'planted') {

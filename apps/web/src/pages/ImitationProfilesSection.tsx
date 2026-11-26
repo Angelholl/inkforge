@@ -5,6 +5,7 @@ import { Button } from '../components/ui';
 import { inputBase, inputNarrow, textareaBase } from '../components/Field';
 import { EmptyState } from '../components/EmptyState';
 import { decodeTextFile } from './NewBookPage';
+import { countChars } from '@inkforge/shared';
 import type { ImitationDraftDto } from '@inkforge/shared';
 
 /** 拆解仿写档案分区（Pagekin 式）：analyze→预览→确认入库→列表+只读徽标（绑定入口在书页）。draft 不入库，确认才落档案。 */
@@ -28,7 +29,7 @@ export default function ImitationProfilesSection() {
       setMsg('请先填写仿写档案名称');
       return;
     }
-    const stripped = text.replace(/\s/g, '').length;
+    const stripped = countChars(text);
     if (stripped < 200) {
       setMsg(`参考正文去空白后不足 200 字（当前 ${stripped} 字），请粘贴或导入更多正文`);
       return;
