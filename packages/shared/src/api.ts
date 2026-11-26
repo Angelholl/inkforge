@@ -226,6 +226,8 @@ export interface BlueprintSuggestBody {
     mustHaveBeats?: Array<{ text: string; keywords?: string[]; grade?: 'H' | 'L' }>;
     bannedTopics?: string[];
   };
+  /** 蓝图散文草稿（D4）：非 JSON 纯中文草稿，由 planner 扩写为完整蓝图（与 seed 平级可选） */
+  draftText?: string;
 }
 
 export interface OutlineSuggestBody {

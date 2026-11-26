@@ -99,6 +99,29 @@ describe('blueprint-suggest 大纲卡注入与确定性叠加（DEC-2026-1120-10
     expect(req.system).not.toContain('尾部牺牲标');
     expect((sug.json() as { warnings?: string[] }).warnings).toContain('书籍简介超 2000 字，planner 世界观槽已按 head 截断');
   });
+
+  it('BR：draftText 进 schema 且注入 planner user；空串 400（D4）', async () => {
+    const prose = '主角夜探旧宅，发现密室';
+    const sug = await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 1, draftText: prose } });
+    expect(sug.statusCode).toBe(200);
+    const plannerReq = plannerCalls[plannerCalls.length - 1];
+    expect(plannerReq.user).toContain('【散文草稿】');
+    expect(plannerReq.user).toContain(prose);
+    // 空串被 zod min(1) 兜住 → 400，禁 500
+    const bad = await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 1, draftText: '' } });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it('BR：draftText 超 3000 head 截断 + warning 可观测', async () => {
+    // 3030 字 > 3000 预算；加上 65 字前缀后头标落在 2965（预算内存活）、尾标落在 3090（截断线外牺牲）
+    const longDraft = '甲'.repeat(2900) + '头部存活标' + '乙'.repeat(120) + '尾部牺牲标';
+    const sug = await app.inject({ method: 'POST', url: `/api/books/${bookId}/blueprint-suggest`, payload: { chapterNo: 1, draftText: longDraft } });
+    expect(sug.statusCode).toBe(200);
+    const plannerReq = plannerCalls[plannerCalls.length - 1];
+    expect(plannerReq.user).toContain('头部存活标');
+    expect(plannerReq.user).not.toContain('尾部牺牲标');
+    expect((sug.json() as { warnings?: string[] }).warnings).toContain('散文草稿超 3000 字，planner 草稿槽已按 head 截断');
+  });
 });
 
 describe('PUT blueprint 保存保留既有 mustHaveBeats（DEC-2026-1120-10 防洗掉）', () => {

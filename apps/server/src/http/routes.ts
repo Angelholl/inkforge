@@ -62,7 +62,7 @@ const settingsPutSchema = z.object({
   // mock 开关已彻底删除（owner 拍板）：mock 只认 INKFORGE_MOCK 环境变量（开发/测试用）
 });
 
-const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive(), seed: z.object({ goal: z.string().optional(), beats: z.array(z.string()).optional(), mustHaveBeats: z.array(z.object({ text: z.string(), keywords: z.array(z.string()).optional(), grade: z.enum(['H', 'L']).optional() })).optional(), bannedTopics: z.array(z.string()).optional() }).optional() });
+const blueprintSuggestSchema = z.object({ chapterNo: z.number().int().positive(), seed: z.object({ goal: z.string().optional(), beats: z.array(z.string()).optional(), mustHaveBeats: z.array(z.object({ text: z.string(), keywords: z.array(z.string()).optional(), grade: z.enum(['H', 'L']).optional() })).optional(), bannedTopics: z.array(z.string()).optional() }).optional(), draftText: z.string().min(1).max(20000).optional() });
 const outlineSuggestSchema = z.object({ chapterCount: z.number().int().min(1).max(50) });
 
 /** 按章号取命中卡：树遍历序（卷→阶段→卡 seq）首个 chapterFrom/To 非空且覆盖该章的卡；区间重叠首卡胜（与 apply 同语义）。 */
@@ -427,7 +427,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const body = parseBody(reply, blueprintSuggestSchema, req.body);
     if (!body) return;
     // FB-F5-1（DEC-2026-1125-03）：核心提取为 suggestBlueprintCore，单章路由与批量端点共用同一装配/合并语义
-    const r = await suggestBlueprintCore(bookId, body.chapterNo, body.seed);
+    const r = await suggestBlueprintCore(bookId, body.chapterNo, body.seed, body.draftText);
     return reply.code(r.code).send(r.payload);
   });
 
@@ -451,7 +451,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     reply.send(result);
   });
 
-  async function suggestBlueprintCore(bookId: string, chapterNo: number, seed?: z.infer<typeof blueprintSuggestSchema>['seed']): Promise<{ code: number; payload: Record<string, unknown> }> {
+  async function suggestBlueprintCore(bookId: string, chapterNo: number, seed?: z.infer<typeof blueprintSuggestSchema>['seed'], draftText?: string): Promise<{ code: number; payload: Record<string, unknown> }> {
     const book = booksRepo.getBook(db, bookId)!; // 调用方已验存在
 
     const prevChapter = chaptersRepo.getChapter(db, bookId, chapterNo - 1);
@@ -488,6 +488,10 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       continuityText,
     });
     const worldviewBrief = book.description; // FB-F3-1（DEC-2026-1125-03）：世界观走 planner 独立槽，不再挤 task 里的【书籍简介】行
+    // D4（BR-5）：散文草稿独立 planner 槽，与世界观槽并列、不挤 task
+    const draftTextBrief = draftText?.trim()
+      ? `【散文草稿】用户已为本章写好草稿，请保留其情节走向与要点，扩写为本章完整蓝图（GOAL/BEATS/HOOK/LANDING）：\n${draftText}`
+      : '';
     const b = config.budgets.planner;
     const slots = [
       { name: 'hardRules', content: PLANNER_HARD_RULES, budgetChars: b.hardRules, stable: true, keep: 'head' as const },
@@ -498,6 +502,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
       ...(outlineCardBrief ? [{ name: 'outlineCard', content: outlineCardBrief, budgetChars: 600, stable: false, keep: 'head' as const }] : []),
       ...(worldviewBrief ? [{ name: 'worldview', content: worldviewBrief, budgetChars: 2000, stable: true, keep: 'head' as const }] : []),
       { name: 'prevTail', content: prevTail, budgetChars: b.prevTail, stable: false, keep: 'head' as const },
+      ...(draftTextBrief ? [{ name: 'draftText', content: draftTextBrief, budgetChars: 3000, stable: false, keep: 'head' as const }] : []),
       { name: 'task', content: taskText, budgetChars: b.task, stable: false, keep: 'head' as const },
     ];
     const totalBudget = config.providers.local.contextWindow - config.providers.local.maxOutput - 500;
@@ -522,6 +527,7 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
     const warnings: string[] = [];
     // FB-F3-1（DEC-2026-1125-03）：worldview 独立槽超预算的可观测——拍板数 2000，截断必须可见
     if ((book.description?.length ?? 0) > 2000) warnings.push('书籍简介超 2000 字，planner 世界观槽已按 head 截断');
+    if ((draftText?.length ?? 0) > 3000) warnings.push('散文草稿超 3000 字，planner 草稿槽已按 head 截断');
 
     const first = parseBlueprint((await plannerProvider.complete(baseReq(assembled.user))).text);
     let report = first;
