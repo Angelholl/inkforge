@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Database } from '../db/open';
@@ -21,7 +20,7 @@ import { exportBook, safeSegment } from '../export/export';
 import { handleSse } from './sse';
 import { mergeSeedIntoBlueprint } from './blueprint-merge';
 import { batchBlueprintSuggest } from './blueprint-batch';
-import { blueprintSchema, bookMetaPutSchema, characterInstantiateSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, updateCharacterSchema } from './schemas';
+import { blueprintSchema, bookMetaPutSchema, characterInstantiateSchema, createBookSchema, createCharacterSchema, createRunSchema, distillStyleSchema, distillTemplatePutSchema, foreshadowingCreateSchema, foreshadowingUpdateSchema, fusionGateAnalyzeSchema, fusionGateConfirmSchema, generateSchema, imitationAnalyzeSchema, imitationBindSchema, imitationSaveSchema, importOriginalSchema, landingWordsPutSchema, outlineCheckSchema, outlineTreePutSchema, outlineTreeSuggestSchema, plotAnalyzeSchema, plotBindSchema, plotSaveSchema, polishSchema, qualityPutSchema, rewriteSelectionSchema, settingsImportApplySchema, settingsImportPreviewSchema, spectrumAnalyzeSchema, spectrumBindSchema, spectrumSaveSchema, styleBindSchema, styleFewshotPutSchema, styleProfileCreateSchema, summaryCommitSchema, updateCharacterSchema } from './schemas';
 import { instantiateCharacters } from './character-instantiate';
 import { analyzeImitation } from '../imitation';
 import { analyzePlot } from '../plot';
@@ -39,9 +38,9 @@ import { saveStyleProfile } from '../style/analysis';
 import { buildStyleBundle, contentFromProfileRow, type StyleProfileContent } from '../style/merge';
 import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
-import type { ChapterBlueprint, DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto } from '@inkforge/shared';
+import type { ChapterBlueprint, DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto, SummaryCommitBody, SummaryGenerateResultDto } from '@inkforge/shared';
 import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, mergeLegacyDimTexts, parseLandingMandate } from '@inkforge/shared';
-import { runSummarizeStep } from '../pipeline/summarize';
+import { commitSummarize, generateSummarize } from '../pipeline/summarize';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider } from '../llm/factory';
 import { parseBlueprint, parseOutline, parseOutlineTree, type ParsedBlueprint } from '../llm/plainproto';
@@ -1495,12 +1494,48 @@ ${repairPrompt(first.errors)}`))).text,
     if (activeRun) return reply.code(409).send({ error: 'book has active run' });
     const version = db.prepare('SELECT content FROM chapter_versions WHERE id = ?').get(ch.currentVersionId) as { content: string } | undefined;
     if (!version) return reply.code(404).send({ error: 'not found' });
+    // 断连即中止：generate 零写入，abort 只影响本次 LLM 调用
+    const ac = new AbortController();
+    req.raw.once('close', () => {
+      if (!reply.sent) ac.abort();
+    });
     const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
-    await runSummarizeStep(
-      { db, provider, config, emit: () => {} },
-      { runId: `manual-${randomUUID()}`, chapterId: ch.id, chapterNo: Number(chapterNo), bookId, finalContent: version.content },
-    );
-    reply.send({ ok: true });
+    try {
+      const payload = await generateSummarize(
+        { provider, config },
+        { chapterNo: Number(chapterNo), finalContent: version.content, signal: ac.signal },
+      );
+      const result: SummaryGenerateResultDto = { ...payload, baseVersionId: ch.currentVersionId };
+      reply.send(result);
+    } catch (e) {
+      reply.code(502).send({ error: '摘要生成失败', reason: (e as Error).message });
+    }
+  });
+
+  // 三项校验只放路由层：陈旧校验不得进共用 commitSummarize（流水线 finalize 前 currentVersionId 仍是旧值）
+  app.post('/api/books/:bookId/chapters/:chapterNo/summarize/commit', async (req, reply) => {
+    const { bookId, chapterNo } = req.params as { bookId: string; chapterNo: string };
+    const body: SummaryCommitBody | null = parseBody(reply, summaryCommitSchema, req.body);
+    if (body === null) return;
+    if (!booksRepo.getBook(db, bookId)) return reply.code(404).send({ error: 'not found' });
+    const ch = chaptersRepo.getChapter(db, bookId, Number(chapterNo));
+    if (!ch || !ch.currentVersionId) return reply.code(404).send({ error: 'not found' });
+    if (ch.currentVersionId !== body.baseVersionId) {
+      return reply.code(409).send({ error: '章节版本已变动，请重新生成摘要', reason: 'stale-base-version' });
+    }
+    const activeRun = db.prepare("SELECT id FROM runs WHERE book_id = ? AND status IN ('queued','running')").get(bookId) as { id: string } | undefined;
+    if (activeRun) return reply.code(409).send({ error: 'book has active run' });
+    try {
+      commitSummarize(db, bookId, Number(chapterNo), {
+        summary: body.summary,
+        beats: body.beats,
+        openThreads: body.threads.filter((t) => t.include).map((t) => t.text),
+        characterDeltas: body.states.filter((s) => s.include).map((s) => ({ name: s.name, stateJson: s.stateJson })),
+      });
+      reply.send({ ok: true });
+    } catch (e) {
+      reply.code(400).send({ error: (e as Error).message });
+    }
   });
 
   // ── versions ──

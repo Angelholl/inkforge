@@ -127,13 +127,39 @@ describe('POST /api/books/:bookId/import-original', () => {
   });
 
   describe('POST /api/books/:bookId/chapters/:chapterNo/summarize', () => {
-    it('可选摘要：注入 mock → 200 且 chapter_summaries 按书过滤恰 1 行', async () => {
+    it('可选摘要：generate 返回四段 + baseVersionId 且零写入；commit 后 chapter_summaries +1', async () => {
       const before = db.prepare('SELECT COUNT(*) AS n FROM chapter_summaries WHERE book_id = ?').get(bookId) as { n: number };
-      const r = await app.inject({ method: 'POST', url: `/api/books/${bookId}/chapters/1/summarize` });
-      expect(r.statusCode).toBe(200);
-      expect((r.json() as { ok: boolean }).ok).toBe(true);
-      const after = db.prepare('SELECT COUNT(*) AS n FROM chapter_summaries WHERE book_id = ?').get(bookId) as { n: number };
-      expect(after.n).toBe(before.n + 1);
+      const generated = await app.inject({ method: 'POST', url: `/api/books/${bookId}/chapters/1/summarize` });
+      expect(generated.statusCode).toBe(200);
+      const payload = generated.json() as {
+        baseVersionId: string; summary: string; beats: string[];
+        openThreads: string[]; characterDeltas: Array<{ name: string; stateJson: string }>;
+      };
+      expect(payload).toMatchObject({
+        baseVersionId: expect.any(String),
+        summary: expect.any(String),
+        beats: expect.any(Array),
+        openThreads: expect.any(Array),
+        characterDeltas: expect.any(Array),
+      });
+      const afterGenerate = db.prepare('SELECT COUNT(*) AS n FROM chapter_summaries WHERE book_id = ?').get(bookId) as { n: number };
+      expect(afterGenerate.n).toBe(before.n);
+
+      const committed = await app.inject({
+        method: 'POST',
+        url: `/api/books/${bookId}/chapters/1/summarize/commit`,
+        payload: {
+          baseVersionId: payload.baseVersionId,
+          summary: payload.summary,
+          beats: payload.beats,
+          threads: payload.openThreads.map((text) => ({ text, include: true })),
+          states: payload.characterDeltas.map((d) => ({ ...d, include: true })),
+        },
+      });
+      expect(committed.statusCode).toBe(200);
+      expect(committed.json()).toEqual({ ok: true });
+      const afterCommit = db.prepare('SELECT COUNT(*) AS n FROM chapter_summaries WHERE book_id = ?').get(bookId) as { n: number };
+      expect(afterCommit.n).toBe(before.n + 1);
     });
 
     it('无 current 版本章 → 404；有 running run → 409', async () => {
