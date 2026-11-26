@@ -36,8 +36,8 @@ ${StrLoc}
 
 !define MANUFACTURER "inkforge"
 !define PRODUCTNAME "inkforge"
-!define VERSION "0.2.4"
-!define VERSIONWITHBUILD "0.2.4.0"
+!define VERSION "0.2.5"
+!define VERSIONWITHBUILD "0.2.5.0"
 !define HOMEPAGE ""
 !define INSTALLMODE "currentUser"
 !define LICENSE ""
