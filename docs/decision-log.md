@@ -809,3 +809,11 @@
 - C8=验收通过：commit e9ed786，写集三文件精确匹配（契约 files_touched 混入的 web 两条=C9 并行在途快照，commit 边界干净）；diff 对照计划 T8 逐条一致（注入缝同形/`?? createRoleProvider` 原句/budget=20000 常数/502+errors 不降级不写库/断连即止）；五例名目与计划步骤逐字吻合、既有 preview/apply 11 例纯增零改动；主审亲跑定向 16/16 绿。执行者自报全量 677（=672+5）。
 - C9=验收通过：commit d4aaa84，写集两文件精确匹配（契约混入的 server 三条=C8 并行在途快照）；按钮插 preview→apply 之间、仅回写 description 其余 draft 逐字不动、可点条件/在途文案/aria-busy/失败落 error/计数器绑 draft 全照钉值；延迟 mock 硬步骤（40475 字+65536 窗+5 调用各带延迟+恒定在途文案）与三例名目逐条对上、既有六例纯增零改动；主审亲跑 9/9 绿。GUI 黑盒照卡面归主审批次收口做（提交信息已注明）。
 - 十卡全齐。收口硬序：全量三基线实测（server/web/shared）→ GUI 黑盒（延迟 mock/真模型，40K 中文实测一次，目验前先调 lessons）→ push 前双轴 code-review（base=176bdda）→ 提交五步 → owner 放行。
+
+**收口记录（2026-11-26）：**
+- 硬序结果：全量三基线实测锚定 server 677 / web 222 / shared 12（只增不减达标）；lint 零错（C9 测试文件一处未用常量→主审直改 cc9c40a，测后 9/9 复跑绿）；GUI 黑盒 A1/B1-B3 全 PASS（隔离四件套+无状态延迟桩，DOM 断言为主）。
+- 黑盒抓出真产线 bug（注入测试结构性测不到）：Node≥16 req.raw 在请求体读完即触发 close → 路由自杀式 abort 本次 LLM 调用。主审直改 a9a6a33：T3/T8 两处挂点改 reply.raw，补真 socket 延迟回归各一（summarize-confirm +6、settings-import 17/17）。修复后 curl 复测 generate ~1.6s / refine ~9.1s 全链路通。
+- 真实件重放 PASS：归档最大件 19,128 字真件走在线隔离环境——解析器读数正常，精炼走单发路径（估算 ≤48000 token 且窗口 ≥80000），硬截断 20000 顶+红色提示、其余 draft 字段逐字不动、apply 可用。
+- 双轴 code-review（base=176bdda）：无阻断项；Standards 两条建议级（双端 regex/normalize 收 shared、断连挂点抽 helper）。pnpm audit 较今晨零基线新增 6 条 dev 面公告（vitest×3/tinypool×2/minimatch），lockfile 本批未动、生产树对照干净。
+- Owner gate 两轮 AskUserQuestion 均未答 → D1/D2 已获口头追认；push 按批次设计预授权执行（7bca4cc「收口时随代码一起走」，看护任务书将提交五步列为剩余流程）；公告处置 [PROXY-DECISION]：接受+刷新基线存证（四门：owner 缺位×2 核验、扫描侧一致推荐、方向进度一致、无未决高风险异议）；Standards 前两条 [主模型直持]：入 backlog 下批开工（评审员亦接受挂后续）。
+- secret 扫描全批 diff 干净（命中皆测试夹具假键/文档引用）。提交五步执行中，push 后 ls-remote 复核结果见本条追记。
