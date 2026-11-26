@@ -22,6 +22,7 @@ import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
 import { estimateOutputBudget, sumSlotBudget } from './budget';
 import { stitchSegments } from './stitch';
+import { filterRosterForChapter } from './roster';
 import { getLatestProfile, type StyleSample } from '../style/distill';
 import { renderFreqTermsBlock, renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
 import { loadStyleBundle, mergeStyleProfiles, type MergedStyleProfile } from '../style/merge';
@@ -244,10 +245,12 @@ export async function runChapterPipeline(
       ensureStep('draft', 1);
       throwIfAborted();
       const draftFlusher = createPartialFlusher(db, inflightRef.current!.id);
-      const charactersText = renderCharacterCards(
+      const roster = filterRosterForChapter(
         // 0009 下线：写第 X 章时已下线（第N章起下线，X>=N）的角色不进人物卡槽，防写手让其再登场
         booksRepo.listActiveCharacters(db, args.bookId, args.chapterNo),
+        blueprintText(blueprint),
       );
+      const charactersText = renderCharacterCards(roster.cards);
       const draftAssembled = assembleContext(
         draftSlots(
           {
@@ -296,9 +299,10 @@ export async function runChapterPipeline(
         params: { usage: draftFirst.usage, provider: roleLabel('drafter'), finishReason: draftStitched.finishReason, ...draftStitchJson },
         styleSampleIds,
       });
+      const rosterWarnJson = roster.warning ? { warnings: [roster.warning] } : {};
       finishStep('draft', 1, {
         outputVersionId: draftVersion.id,
-        outputJson: { usage: draftFirst.usage, provider: roleLabel('drafter'), finishReason: draftStitched.finishReason, ...draftStitchJson },
+        outputJson: { usage: draftFirst.usage, provider: roleLabel('drafter'), finishReason: draftStitched.finishReason, ...draftStitchJson, ...rosterWarnJson },
       });
       draftFlusher.discard();
       currentVersion = { id: draftVersion.id, content: draftVersion.content };

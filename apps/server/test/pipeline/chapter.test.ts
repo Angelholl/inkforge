@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config';
 import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
-import { createBook, setBookStyleBinding } from '../../src/db/repositories/books';
+import { createBook, createCharacter, setBookStyleBinding } from '../../src/db/repositories/books';
 import { buildStyleBundle, type StyleProfileContent } from '../../src/style/merge';
 import { appendChapterVersion, getChapter, getCurrentVersion, listVersions, setCurrentVersion } from '../../src/db/repositories/chapters';
 import { listSteps } from '../../src/db/repositories/runs';
@@ -211,6 +211,26 @@ COMMENT: 恒定 blocker`;
     const out = draftStep.outputJson as { finishReason?: string; stitchSegments?: number };
     expect(out.finishReason).toBe('length');
     expect(out.stitchSegments).toBe(2);
+  }, 30000);
+
+  it('场景七 人物卡护栏：蓝图零命中时 characters 槽仍全量注入，draft output_json 记 warning', async () => {
+    const names = ['群像甲', '群像乙', '群像丙'];
+    const ids = names.map((name) => createCharacter(db, bookId, { name }).id);
+    try {
+      const runId = freshRun(1);
+      const cap = capturing(createDefaultMockProvider());
+      await runChapterPipeline({ db, provider: cap.provider, config, emit: () => {} }, { runId, bookId, chapterNo: 1 });
+      const draftCall = cap.calls.find((c) => c.step === 'draft')!;
+      const prompt = draftCall.system + draftCall.user;
+      for (const name of names) expect(prompt).toContain(`【人物卡】${name}`);
+      const draftStep = listSteps(db, runId).find((s) => s.step === 'draft')!;
+      const out = draftStep.outputJson as { warnings?: unknown };
+      expect(Array.isArray(out.warnings)).toBe(true);
+      expect((out.warnings as string[]).some((w) => typeof w === 'string' && w.length > 0)).toBe(true);
+    } finally {
+      const del = db.prepare('DELETE FROM characters WHERE id = ?');
+      for (const id of ids) del.run(id);
+    }
   }, 30000);
 });
 
