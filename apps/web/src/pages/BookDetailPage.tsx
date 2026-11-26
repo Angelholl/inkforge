@@ -5,6 +5,7 @@ import { RefreshCw } from 'lucide-react';
 import { api, apiErrorText } from '../api/client';
 import { startRunWithGate, type GateMount, type GateView } from '../fusionGate';
 import FusionGateDialog from '../components/FusionGateDialog';
+import SummaryConfirmDialog from '../components/SummaryConfirmDialog';
 import OutlineTreeSection from './OutlineTreeSection';
 import ForeshadowingsSection from './ForeshadowingsSection';
 import RunAsideCard from '../components/RunAsideCard';
@@ -59,7 +60,55 @@ function useActiveSection(enabled: boolean): string {
   return active;
 }
 import { DIM_SOURCE_COEXIST, DIM_SOURCE_NONE, STYLE_DIMENSIONS } from '@inkforge/shared';
-import type { BlueprintSuggestBody, CharacterDto, CharacterInstantiateDraftDto, ChapterBlueprint, ExportFormat, StyleBindBody, StyleProfileDto } from '@inkforge/shared';
+import type { BlueprintSuggestBody, CharacterDto, CharacterInstantiateDraftDto, ChapterBlueprint, ExportFormat, ForeshadowingDto, StyleBindBody, StyleProfileDto, SummaryCommitBody, SummaryGenerateResultDto } from '@inkforge/shared';
+
+/** T6 单在途槽位：generate 起步即占位（result 先空稿），完成后换成真实结果；abort 用于取消。 */
+type GenState = {
+  chapterNo: number;
+  result: SummaryGenerateResultDto;
+  abort: AbortController;
+  startedAt: number;
+};
+const EMPTY_GENERATE_RESULT: SummaryGenerateResultDto = { baseVersionId: '', summary: '', beats: [], openThreads: [], characterDeltas: [] };
+
+/**
+ * T6 生效标注：generate 的 THREADS/STATE 与页面既有伏笔/人物列表本地比对（D2 含已回收），
+ * 六类文案逐字照计划 T5 节，传给 SummaryConfirmDialog.annotations；不新增服务端端点。
+ */
+function buildSummaryAnnotations(
+  result: SummaryGenerateResultDto,
+  foreshadowings: ForeshadowingDto[],
+  characters: CharacterDto[],
+): { threads: Record<string, string>; states: Record<string, string> } {
+  const byDesc = new Map(foreshadowings.map((f) => [f.description.replace(/\s+/g, ' ').trim(), f]));
+  const threads: Record<string, string> = {};
+  for (const raw of result.openThreads) {
+    const m = /^\[(planted|advanced|resolved)\]\s*(.+)$/.exec(raw);
+    if (!m) {
+      threads[raw] = '未匹配将被忽略';
+      continue;
+    }
+    const [, tag, desc] = m;
+    const hit = byDesc.get(desc.replace(/\s+/g, ' ').trim());
+    if (hit && (tag === 'resolved' || tag === 'advanced')) {
+      threads[raw] = `将回收：${desc}（第${hit.plantedCh}章埋）`;
+    } else if (!hit && tag === 'planted') {
+      threads[raw] = `将新埋：${desc}`;
+    } else if (hit && tag === 'planted') {
+      threads[raw] = '已存在同名伏笔，不会重复埋';
+    } else {
+      threads[raw] = '未匹配将被忽略';
+    }
+  }
+  const names = new Set(characters.map((c) => c.name));
+  const states: Record<string, string> = {};
+  for (const d of result.characterDeltas) {
+    states[d.name] = names.has(d.name)
+      ? `将更新人物「${d.name}」状态（与前章浅合并）`
+      : '未匹配人物卡不会写入';
+  }
+  return { threads, states };
+}
 
 /**
  * 融合比例归一（DEC-2026-1117-05，客户端归一后提交、服务端只校验）：
@@ -354,6 +403,12 @@ export default function BookDetailPage() {
     queryKey: ['characters', bookId],
     queryFn: () => api.listCharacters(bookId),
   });
+  // T6 标注比对源：沿用既有伏笔端点（与伏笔区共享 query key），不新增服务端端点。
+  const { data: foreshadowings } = useQuery({
+    queryKey: ['foreshadowings', bookId],
+    queryFn: () => api.listForeshadowings(bookId),
+    refetchInterval: 5000,
+  });
   const [blueprintText, setBlueprintText] = useState('');
   const [chapterNo, setChapterNo] = useState(1);
   // B3：本页一枚 select 统管本页三个生成入口（单章/整书/行内），默认 2 = 服务端默认
@@ -370,6 +425,9 @@ export default function BookDetailPage() {
   // 人物下线（0009）：每卡行内章号草稿（默认下一章）
   const [offlineDraft, setOfflineDraft] = useState<Record<string, number>>({});
   const [msg, setMsg] = useState('');
+  // T6 补摘要：generate → 弹窗编辑确认 → commit，全页单在途（gen 非空即锁全部按钮）。
+  const [gen, setGen] = useState<GenState | null>(null);
+  const [committing, setCommitting] = useState(false);
   const [queuedRunId, setQueuedRunId] = useState('');
   const [worldText, setWorldText] = useState('');
   const [outlineText, setOutlineText] = useState('');
@@ -707,19 +765,40 @@ export default function BookDetailPage() {
   };
 
   const summarize = async (chapterNo: number) => {
+    if (gen !== null) return; // 单在途：再点其他章直接忽略，不触发第二次 generate
+    setMsg('');
+    const abort = new AbortController();
+    const startedAt = Date.now();
+    setGen({ chapterNo, result: EMPTY_GENERATE_RESULT, abort, startedAt });
     try {
-      const generated = await api.summarizeGenerate(bookId, chapterNo);
-      await api.summarizeCommit(bookId, chapterNo, {
-        baseVersionId: generated.baseVersionId,
-        summary: generated.summary,
-        beats: generated.beats,
-        threads: generated.openThreads.map((text) => ({ text, include: true })),
-        states: generated.characterDeltas.map((d) => ({ name: d.name, stateJson: d.stateJson, include: true })),
-      });
-      setMsg(`第${chapterNo}章摘要已生成`);
+      const result = await api.summarizeGenerate(bookId, chapterNo, abort.signal);
+      setGen((prev) => (prev?.abort === abort ? { ...prev, result } : prev));
+    } catch (e) {
+      if (abort.signal.aborted) return; // 取消不报错、不落 msg
+      setGen(null);
+      setMsg(`摘要失败：${apiErrorText(e)}`);
+    }
+  };
+
+  const cancelSummary = () => {
+    if (!gen) return;
+    gen.abort.abort();
+    setGen(null); // 不调 commit；服务端断连由 T3 signal 承接
+  };
+
+  const confirmSummary = async (body: SummaryCommitBody) => {
+    if (!gen || committing || gen.result.baseVersionId === '') return;
+    const current = gen;
+    setCommitting(true);
+    try {
+      await api.summarizeCommit(bookId, current.chapterNo, body);
+      setGen(null);
+      setMsg(`第${current.chapterNo}章摘要已生成`);
       void refetch();
     } catch (e) {
       setMsg(`摘要失败：${apiErrorText(e)}`);
+    } finally {
+      setCommitting(false);
     }
   };
 
@@ -1105,7 +1184,14 @@ export default function BookDetailPage() {
               </span>
               <Badge tone={c.status === 'done' ? 'ok' : c.status === 'needs_human' ? 'warn' : 'muted'}>{c.status}</Badge>
               {c.isOriginal && (
-                <Button variant="quiet" tone="primary" size="sm" onClick={() => void summarize(c.chapterNo)}>
+                <Button
+                  variant="quiet"
+                  tone="primary"
+                  size="sm"
+                  disabled={gen !== null}
+                  loading={gen?.chapterNo === c.chapterNo}
+                  onClick={() => void summarize(c.chapterNo)}
+                >
                   补摘要
                 </Button>
               )}
@@ -1226,6 +1312,22 @@ export default function BookDetailPage() {
           <RunAsideCard runs={book?.runs ?? []} bookId={bookId} />
         </aside>
       </div>
+      {gen && (
+        <SummaryConfirmDialog
+          open
+          chapterNo={gen.chapterNo}
+          result={gen.result}
+          annotations={buildSummaryAnnotations(
+            gen.result,
+            Array.isArray(foreshadowings) ? foreshadowings : [],
+            Array.isArray(characters) ? characters : [],
+          )}
+          busy={committing || gen.result.baseVersionId === ''}
+          startedAt={gen.startedAt}
+          onCancel={cancelSummary}
+          onConfirmed={(body) => confirmSummary(body)}
+        />
+      )}
       {gate && <FusionGateDialog {...gate} />}
     </main>
   );

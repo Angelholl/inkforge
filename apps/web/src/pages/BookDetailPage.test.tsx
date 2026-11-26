@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import BookDetailPage, { normalizeWeights } from './BookDetailPage';
+import type { SummaryGenerateResultDto } from '@inkforge/shared';
 
 // 回归：original 章须有「补摘要」按钮（手动触发，零自动模型调用——DEC-2026-1113-05 第 3 条）
 const book = {
@@ -167,6 +168,63 @@ function installStyleStub() {
 
 installFetchStub();
 
+// T6 接线专用桩：generate 走延迟 Promise（卡内硬步骤 ≥3s 走通在途态），commit 独立计数；
+// 伏笔列表走既有 listForeshadowings（不新增服务端端点）。
+const FORESHADOW_FIXTURE = [
+  { id: 'f1', bookId: 'b1', description: '密信落款人身份', plantedCh: 3, advancedJson: '{}', status: 'resolved' },
+  { id: 'f2', bookId: 'b1', description: '断剑的来历', plantedCh: 2, advancedJson: '{}', status: 'open' },
+];
+const SUMMARY_RESULT: SummaryGenerateResultDto = {
+  baseVersionId: 'v-1',
+  summary: '第一章摘要',
+  beats: ['初入城', '遇阻'],
+  openThreads: [
+    '[resolved] 密信落款人身份',
+    '[planted] 夜行人的面具',
+    '[planted] 断剑的来历',
+    '[advanced] 失踪的账本',
+  ],
+  characterDeltas: [
+    { name: '张三', stateJson: '{"伤":"轻"}' },
+    { name: '李四', stateJson: '{"伤":"重"}' },
+  ],
+};
+
+function installSummarizeStub(opts: { delayMs?: number; reject?: boolean; bothOriginal?: boolean } = {}) {
+  installFetchStub();
+  const baseFetch = globalThis.fetch;
+  let genCount = 0;
+  let commitCount = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith('/api/books/b1') && opts.bothOriginal) {
+        return jsonResponse({ ...book, chapters: book.chapters.map((c) => ({ ...c, isOriginal: true })) });
+      }
+      if (u.endsWith('/api/books/b1/foreshadowings')) return jsonResponse(FORESHADOW_FIXTURE);
+      if (/\/chapters\/\d+\/summarize$/.test(u) && init?.method === 'POST') {
+        genCount += 1;
+        if (opts.delayMs) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, opts.delayMs);
+            init.signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+          });
+        }
+        if (init?.signal?.aborted) throw new Error('aborted');
+        if (opts.reject) return jsonResponse({ error: '模型不可用' }, 500);
+        return jsonResponse(SUMMARY_RESULT);
+      }
+      if (u.endsWith('/summarize/commit') && init?.method === 'POST') {
+        commitCount += 1;
+        return jsonResponse({ ok: true });
+      }
+      return baseFetch(url, init);
+    }),
+  );
+  return { genCount: () => genCount, commitCount: () => commitCount };
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -194,6 +252,110 @@ describe('BookDetailPage', () => {
       </QueryClientProvider>,
     );
     await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
+  });
+
+  it('在途 aria-busy 不可点、再点其他章被忽略', async () => {
+    const stub = installSummarizeStub({ delayMs: 150, bothOriginal: true });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(2));
+    const [ch1, ch2] = screen.getAllByRole('button', { name: '补摘要' });
+    fireEvent.click(ch1);
+    await waitFor(() => expect(ch1.getAttribute('aria-busy')).toBe('true'));
+    expect((ch1 as HTMLButtonElement).disabled).toBe(true);
+    expect((ch2 as HTMLButtonElement).disabled).toBe(true);
+    expect(stub.genCount()).toBe(1);
+    fireEvent.click(ch2);
+    expect(stub.genCount()).toBe(1);
+  });
+
+  it('弹窗各段渲染断言（页面接线后）', async () => {
+    installSummarizeStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: '补摘要' }));
+    const dialog = await waitFor(() => screen.getByRole('dialog'));
+    expect(within(dialog).getByLabelText('摘要（可编辑）').tagName).toBe('TEXTAREA');
+    expect(within(dialog).getByText('BEATS').closest('details')).toBeTruthy();
+    const boxes = within(dialog).getAllByRole('checkbox');
+    expect(boxes.length).toBe(6);
+    for (const cb of boxes) expect((cb as HTMLInputElement).checked).toBe(true);
+    for (const text of [
+      '将回收：密信落款人身份（第3章埋）',
+      '将新埋：夜行人的面具',
+      '已存在同名伏笔，不会重复埋',
+      '未匹配将被忽略',
+      '将更新人物「张三」状态（与前章浅合并）',
+      '未匹配人物卡不会写入',
+    ]) {
+      expect(within(dialog).getByText(text)).toBeTruthy();
+    }
+  });
+
+  it('失败文案出现在按钮旁 msg 行', async () => {
+    installSummarizeStub({ reject: true });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: '补摘要' }));
+    await waitFor(() => expect(screen.getByText('摘要失败：模型不可用')).toBeTruthy());
+  });
+
+  it('延迟 mock（generate ≥3s）走通在途态：点击→秒数→取消→再点→确认落库', async () => {
+    const opts = { delayMs: 3100 };
+    const stub = installSummarizeStub(opts);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: '补摘要' }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    await waitFor(
+      () => expect(within(screen.getByRole('dialog')).getByText('正在生成摘要… 已等待 1s')).toBeTruthy(),
+      { timeout: 2500 },
+    );
+    // ≥3s mock 走完：generate 返回后弹窗转可编辑态（busy 解除），此刻取消不调 commit
+    await waitFor(
+      () => expect((within(screen.getByRole('dialog')).getByLabelText('摘要（可编辑）') as HTMLTextAreaElement).disabled).toBe(false),
+      { timeout: 5000 },
+    );
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(stub.commitCount()).toBe(0);
+    opts.delayMs = 0;
+    fireEvent.click(screen.getByRole('button', { name: '补摘要' }));
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByLabelText('摘要（可编辑）')).toBeTruthy());
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '确认落库' }));
+    await waitFor(() => expect(stub.commitCount()).toBe(1));
+    expect(screen.getByText('第1章摘要已生成')).toBeTruthy();
   });
 
   it('导出区说明行：保存位置说明可见（D3 澄清）', async () => {
