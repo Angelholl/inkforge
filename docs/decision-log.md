@@ -818,3 +818,16 @@
 - Owner gate 两轮 AskUserQuestion 均未答 → D1/D2 已获口头追认；push 按批次设计预授权执行（7bca4cc「收口时随代码一起走」，看护任务书将提交五步列为剩余流程）；公告处置 [PROXY-DECISION]：接受+刷新基线存证（四门：owner 缺位×2 核验、扫描侧一致推荐、方向进度一致、无未决高风险异议）；Standards 前两条 [主模型直持]：入 backlog 下批开工（评审员亦接受挂后续）。
 - secret 扫描全批 diff 干净（命中皆测试夹具假键/文档引用）。提交五步执行中，push 后 ls-remote 复核结果见本条追记。
 - 追记：五步闭环完成——push 176bdda..59449e9 → master，ls-remote 复核远程与本地 HEAD 一致（2026-11-26）。Standards backlog 两条 + dev 公告接受项随下批开工清单。
+
+## 重构批执行留痕（DEC-2026-1126-10 挂账三条开工，2026-11-26）
+
+**计划真值：** docs/plans/2026-11-26-shared-consolidate-and-helper.md（code-planner 产出+主审两裁定落文：dev 快照不入库[prod 基线实测系 gitignore 本地存证、同口径]、命名采 planner 中性名 collapseWhitespace/BRACKET_TAG_RE）。卡面=docs/design/card-refactor-r1..r4.md。
+
+**派卡台账：**
+- R1 run1=hy4 空跑（wrapper 以启动目录为项目根、执行者在错主领地找不到卡，exit 0 零改动无染）→cd 目标根原令重派。R1r=验收通过：commit 94925b7，写集两文件精确；diff 与计划 Task-01 逐字一致（测试代码块照抄）；主审亲跑 shared 22/22+typecheck 零错。
+- R3r=验收通过：commit 0e1056e，写集三文件精确（契约混列 shared 两条=R1r 在途快照）；helper 签名/docblock 原委注释/两处调用点替换全照钉值；主审亲跑 server 全量 681 绿+typecheck 零错，三条保护网点名 PASS。路由级注释前半句「generate 零写入」未搬入 docblock（计划裁定删行），如实记。
+- R4=验收通过：commit 3cc30a7，写集四文件精确；导入落点/替换照钉值、提示文案逐字不动；四文件 grep replace(/\s 零残留；GUI 未验证（纯重构无界面改动，组件测试 222 绿覆盖），提交信息已注明。
+- R2=验收通过：commit 77ddd52，写集单文件精确；type/value 分行导入/删本地副本/三处切换逐字照钉值；主审亲跑全链复核。
+- R5=主模型直执：dev 快照落盘 apps/server/data/audit-baseline-dev.json（不入库），6 条口径与台账一致（vitest 系 3/tinypool critical 2/minimatch 1）。
+
+**收口硬序（主审亲跑，最终树）：** eslint 零错 → shared 22 / server 681 / web 222 全绿只增不减 → typecheck ×3 零错 → audit --prod no known vulnerabilities=基线持平；dev 快照口径与今晨台账一致（lockfile 本批未动）。
