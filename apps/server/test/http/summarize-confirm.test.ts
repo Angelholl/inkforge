@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { LlmProvider } from '../../src/llm/types';
 import { loadConfig } from '../../src/config';
 import { buildApp } from '../../src/app';
 import { createDefaultMockProvider, createMockProvider } from '../../src/llm/mock';
@@ -214,6 +215,30 @@ describe('POST /api/books/:bookId/chapters/:chapterNo/summarize + /commit', () =
       expect(countSummaries()).toBe(before);
     } finally {
       await slow.close();
+    }
+  });
+
+  it('真 socket：延迟 provider 应答期间连接未断 → generate 200（回归 close 挂点，收口黑盒实证）', async () => {
+    const slowProvider: LlmProvider = {
+      async complete() {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return {
+          text: 'SUMMARY: 延迟应答梗概\nBEATS:\n- 节拍甲\nTHREADS:\n- [planted] 测试伏笔\nSTATE:\n甲={"位置":"测试"}',
+          usage: { promptTokens: 0, completionTokens: 0 },
+          finishReason: 'end_turn',
+        };
+      },
+    };
+    const app2 = await makeApp(slowProvider);
+    try {
+      await app2.listen({ port: 0, host: '127.0.0.1' });
+      const port = (app2.server.address() as { port: number }).port;
+      const r = await fetch(`http://127.0.0.1:${port}/api/books/${bookId}/chapters/${chapterNo}/summarize`, { method: 'POST' });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as Generated;
+      expect(body.summary).toBe('延迟应答梗概');
+    } finally {
+      await app2.close();
     }
   });
 });

@@ -512,4 +512,29 @@ describe('POST /api/settings-import/refine', () => {
       teardown(h);
     }
   });
+
+  it('真 socket：延迟 provider 应答期间连接未断 → 200（回归 close 挂点，收口黑盒实证）', async () => {
+    const slow: LlmProvider = {
+      async complete() {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return okRefine('乙'.repeat(300));
+      },
+    };
+    const h = await makeRefineApp(524288, slow);
+    try {
+      await h.app.listen({ port: 0, host: '127.0.0.1' });
+      const port = (h.app.server.address() as { port: number }).port;
+      const r = await fetch(`http://127.0.0.1:${port}/api/settings-import/refine`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: '甲'.repeat(12000) }),
+      });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as { description: string; truncated: boolean };
+      expect(body.description).toBe('乙'.repeat(300));
+      expect(body.truncated).toBe(false);
+    } finally {
+      teardown(h);
+    }
+  });
 });

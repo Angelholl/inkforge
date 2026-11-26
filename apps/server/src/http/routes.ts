@@ -394,9 +394,9 @@ export async function registerRoutes(app: FastifyInstance, state: RouteState): P
   app.post('/api/settings-import/refine', async (req, reply) => {
     const body = parseBody(reply, settingsImportRefineSchema, req.body);
     if (!body) return;
-    // 断连即中止：与 summarize generate 同形
+    // 断连即中止：与 summarize generate 同形。挂 reply.raw——req.raw 的 close 在请求体读完即触发（真 socket），会秒杀本次调用；inject 测不出此差异（收口黑盒实证）。
     const ac = new AbortController();
-    req.raw.once('close', () => {
+    reply.raw.once('close', () => {
       if (!reply.sent) ac.abort();
     });
     const provider = state.refinerProvider ?? createRoleProvider(config, 'refiner');
@@ -1518,9 +1518,9 @@ ${repairPrompt(first.errors)}`))).text,
     if (activeRun) return reply.code(409).send({ error: 'book has active run' });
     const version = db.prepare('SELECT content FROM chapter_versions WHERE id = ?').get(ch.currentVersionId) as { content: string } | undefined;
     if (!version) return reply.code(404).send({ error: 'not found' });
-    // 断连即中止：generate 零写入，abort 只影响本次 LLM 调用
+    // 断连即中止：generate 零写入，abort 只影响本次 LLM 调用。挂 reply.raw——req.raw 的 close 在请求体读完即触发（真 socket），会秒杀本次调用；inject 测不出此差异（收口黑盒实证）。
     const ac = new AbortController();
-    req.raw.once('close', () => {
+    reply.raw.once('close', () => {
       if (!reply.sent) ac.abort();
     });
     const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
