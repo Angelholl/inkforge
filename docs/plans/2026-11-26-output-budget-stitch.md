@@ -18,9 +18,9 @@
 **文件：** Create `apps/server/src/pipeline/budget.ts` / Test `apps/server/test/pipeline/budget.test.ts`
 **接口：** Consumes: chapter.targetChars（chapter.ts:88 已有）、provider.promptTokensEstimate=各槽预算和（BUDGETS_DRAFT/BUDGETS_REWRITE 现有值求和）。Produces: `estimateOutputBudget(targetChars: number, promptTokensEstimate: number, provider: ProviderConfig): number`，T2 的续写调用也用它。
 **钉死值：** TOKENS_PER_CHAR=4.0（实测 iq3_xxs≈3.3，跨档留安全余量）；MARGIN_TOKENS=2048；PROMPT_RESERVE_TOKENS=4096；CEILING_TOKENS=512000（owner 拍板上限）；下限 floor=1024。公式：`min(CEILING, ceil(targetChars×4.0)+MARGIN, provider.contextWindow − promptTokensEstimate − PROMPT_RESERVE)`，结果 clamp ≥floor。
-**调用点改动：** chapter.ts:254 与 :379 的 `maxOutputTokens: config.providers.local.maxOutput` → `estimateOutputBudget(targetChars, <槽预算和>, config.providers[providerName])`（provider 名从现有变量取，cloud 同走此函数）。ProviderConfig 形状与 loadConfig 默认值不动（test/config.test.ts:29/:108 钉值零改动）。
+**调用点改动：** chapter.ts:254 与 :379 的 `maxOutputTokens: config.providers.local.maxOutput` → `estimateOutputBudget(targetChars, <槽预算和>, config.providers[providerName])`（评审勘误留痕：执行卡 OB-T1 §2.2 钉死为 `config.providers.local`——管线现行既有形态即硬编码 local，cloud 同走此函数为后续需要，不阻塞本批）。ProviderConfig 形状与 loadConfig 默认值不动（test/config.test.ts:29/:108 钉值零改动）。
 **步骤：**
-- [ ] 写失败测试 budget.test.ts：①6000字/local→结果≈26112（>8192，证明修复）；②小目标300字→小于8192（省资源）；③窗口被 prompt 吃满→clamp 到 floor=1024；④CEILING 生效：targetChars=200000→512000。跑 `pnpm vitest run test/pipeline/budget.test.ts` 确认红。
+- [ ] 写失败测试 budget.test.ts：①6000字/local→结果=26048（按公式 ceil(6000×4)+2048，>8192 证明修复；勘误 DEC 评审注：原示例笔误≈26112）；②小目标300字→小于8192（省资源）；③窗口被 prompt 吃满→clamp 到 floor=1024；④CEILING 生效：targetChars=200000→512000。跑 `pnpm vitest run test/pipeline/budget.test.ts` 确认红。
 - [ ] 实现 budget.ts（纯函数＋常量表），同命令转绿。
 - [ ] chapter.ts 两处调用点接线；跑 `pnpm vitest run test/pipeline/ test/config.test.ts` 全绿（既有 mock 测试 usage 不含 token 换算，应零波及）。
 - [ ] 全量 `pnpm -C apps/server test` ≥840 只增不减。commit。
