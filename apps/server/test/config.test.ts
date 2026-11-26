@@ -69,8 +69,8 @@ describe('loadConfig', () => {
       task: 800,
     });
     expect(c.quality).toEqual({ targetChars: 3000, scoreThreshold: 8.0, minGain: 0.05, maxRounds: 2 });
-    expect(c.timeouts).toEqual({ draft: 3600000, qc: 900000, rewrite: 3600000, summarize: 1200000 });
-    for (const role of ['planner', 'drafter', 'qc', 'rewriter', 'summarizer'] as const) {
+    expect(c.timeouts).toEqual({ draft: 3600000, qc: 900000, rewrite: 3600000, summarize: 1200000, refine: 180000 });
+    for (const role of ['planner', 'drafter', 'qc', 'rewriter', 'summarizer', 'refiner'] as const) {
       expect(c.roles[role]).toEqual({ provider: 'local', model: 'iq3_xxs' });
     }
   });
@@ -113,6 +113,17 @@ describe('loadConfig', () => {
   it('cloud 缺任一 env → cloud provider 不出现', () => {
     const c = loadConfig({ ...LEGAL_ENV, INKFORGE_CLOUD_BASE_URL: 'https://x', INKFORGE_CLOUD_API_KEY: 'k' });
     expect(c.providers.cloud).toBeUndefined();
+  });
+
+  it('refiner 默认走 local 且 timeouts.refine=180000', () => {
+    const c = loadConfig(LEGAL_ENV);
+    expect(c.roles.refiner.provider).toBe('local');
+    expect(c.timeouts.refine).toBe(180000);
+  });
+
+  it('INKFORGE_ROLE_REFINER=cloud → roles.refiner.provider=cloud', () => {
+    const c = loadConfig({ ...LEGAL_ENV, INKFORGE_ROLE_REFINER: 'cloud' });
+    expect(c.roles.refiner.provider).toBe('cloud');
   });
 });
 

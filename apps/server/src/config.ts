@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { StepName } from '@inkforge/shared';
 import { readSettingsFile } from './settings';
 
-export type RoleName = 'planner' | 'drafter' | 'qc' | 'rewriter' | 'summarizer';
+export type RoleName = 'planner' | 'drafter' | 'qc' | 'rewriter' | 'summarizer' | 'refiner';
 
 export interface ProviderConfig {
   name: 'local' | 'cloud';
@@ -96,6 +96,7 @@ const envSchema = z.object({
   INKFORGE_ROLE_QC: z.enum(['local', 'cloud']).default('local'),
   INKFORGE_ROLE_REWRITER: z.enum(['local', 'cloud']).default('local'),
   INKFORGE_ROLE_SUMMARIZER: z.enum(['local', 'cloud']).default('local'),
+  INKFORGE_ROLE_REFINER: z.enum(['local', 'cloud']).default('local'),
   INKFORGE_TEST_HEARTBEAT_MS: z.string().optional(),
   INKFORGE_SUPERVISOR_BACKOFF_MS: z.string().optional(),
 });
@@ -104,6 +105,7 @@ const envSchema = z.object({
 // 现槽合计≈10k，扩容余量巨大且只对长设定内容生效（短设定按实际长度取用），溢出收缩逻辑不会触发。
 const BUDGETS_DRAFT: DraftBudgets = {
   hardRules: 500,
+  // 64K 上下文参考：长章 ~15000 字 / 短章 ≤16000 字；worldview 常数保持 20000，供日后调参。
   worldview: 20000, // DEC-2026-1121-01：16000→20000（owner 令，长设定集余量不足）
   characters: 8000,
   styleRules: 1000,
@@ -181,6 +183,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     qc: { provider: e.INKFORGE_ROLE_QC, model: e.STRATA_MODEL },
     rewriter: { provider: e.INKFORGE_ROLE_REWRITER, model: e.STRATA_MODEL },
     summarizer: { provider: e.INKFORGE_ROLE_SUMMARIZER, model: e.STRATA_MODEL },
+    refiner: { provider: e.INKFORGE_ROLE_REFINER, model: e.STRATA_MODEL },
   } as Record<RoleName, { provider: 'local' | 'cloud'; model: string }>;
   return {
     port: e.INKFORGE_PORT,
@@ -198,6 +201,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       outline: BUDGETS_OUTLINE,
     },
     quality: { targetChars: 3000, scoreThreshold: 8.0, minGain: 0.05, maxRounds: 2 },
-    timeouts: { draft: 3600000, qc: 900000, rewrite: 3600000, summarize: 1200000 },
+    timeouts: { draft: 3600000, qc: 900000, rewrite: 3600000, summarize: 1200000, refine: 180000 },
   };
 }

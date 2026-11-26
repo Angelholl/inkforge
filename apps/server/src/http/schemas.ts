@@ -417,3 +417,34 @@ export const fusionGateConfirmSchema = z
     suppress: z.boolean().optional(),
   })
   .optional();
+
+// T1（D1 补摘要确认）：SUMMARY 落库前压单行 + ≤2000 字；THREADS/STATE 勾选由客户端逐行给出，不做自由文本编辑。
+export const summaryCommitSchema = z.object({
+  baseVersionId: z.string().min(1),
+  summary: z
+    .string()
+    .transform((s) => s.replace(/\s*[\r\n]+\s*/g, ' ').trim())
+    .pipe(z.string().min(1).max(2000)),
+  beats: z.array(z.string()).default([]),
+  threads: z.array(z.object({ text: z.string(), include: z.boolean() })).default([]),
+  states: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        stateJson: z
+          .string()
+          .min(1)
+          .refine((s) => {
+            const v = JSON.parse(s);
+            return v !== null && typeof v === 'object' && !Array.isArray(v);
+          }, 'stateJson 必须是纯对象'),
+        include: z.boolean(),
+      }),
+    )
+    .default([]),
+});
+
+// T1（D4 设定集单次精炼）：入参仅正文，校验非零长。
+export const settingsImportRefineSchema = z.object({
+  content: z.string().min(1),
+});

@@ -182,7 +182,14 @@ export function listRunsByBook(db: Database, bookId: string): Run[] {
 
 // ── 租约与恢复（T17）──
 
-const STEP_ORDER: Record<StepName, number> = { draft: 0, qc: 1, rewrite: 2, summarize: 3, finalize: 4 };
+const STEP_ORDER: Record<StepName, number> = {
+  draft: 0,
+  qc: 1,
+  rewrite: 2,
+  summarize: 3,
+  finalize: 4,
+  refine: 5, // 非管线步，仅满足 Record 穷举，永不入 claim
+};
 
 /** 事务内 claim：最早活跃 run（queued/running 按创建序）→ 其 (chapter_no, 步序, attempt) 最早的 queued step → inflight+租约。 */
 export function claimNextStep(db: Database, workerId: string): RunStep | null {
