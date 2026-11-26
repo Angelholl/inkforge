@@ -20,6 +20,7 @@ import { decideGate, type L1Report } from '../quality/gate';
 import { readScoreThreshold } from '../settings';
 import { buildRewriteSlots, chooseRewriteMode } from './rewrite';
 import { createPartialFlusher } from './partial';
+import { estimateOutputBudget, sumSlotBudget } from './budget';
 import { getLatestProfile, type StyleSample } from '../style/distill';
 import { renderFreqTermsBlock, renderStyleBlock, renderStyleDimsBlock } from '../style/inject';
 import { loadStyleBundle, mergeStyleProfiles, type MergedStyleProfile } from '../style/merge';
@@ -251,7 +252,7 @@ export async function runChapterPipeline(
         user: draftAssembled.user,
         temperature: 0.9,
         topP: 0.9,
-        maxOutputTokens: config.providers.local.maxOutput,
+        maxOutputTokens: estimateOutputBudget(targetChars, sumSlotBudget({ ...config.budgets.draft }), config.providers.local),
         timeoutMs: config.timeouts.draft,
         meta: { step: 'draft', chapterNo: args.chapterNo },
         signal,
@@ -376,7 +377,7 @@ export async function runChapterPipeline(
         user: rwAssembled.user,
         temperature: 0.7,
         topP: 0.9,
-        maxOutputTokens: config.providers.local.maxOutput,
+        maxOutputTokens: estimateOutputBudget(targetChars, sumSlotBudget({ ...config.budgets.rewrite }), config.providers.local),
         timeoutMs: config.timeouts.rewrite,
         meta: { step: 'rewrite', chapterNo: args.chapterNo, round: rounds },
         signal,
