@@ -8,17 +8,30 @@ import type { RunEvent } from '@inkforge/shared';
 import { upsertChapterSummary, upsertCharacterState, getContinuitySnapshot, resolveForeshadowing, listForeshadowings } from '../db/repositories/continuity';
 import { listCharacters } from '../db/repositories/books';
 
+export interface SummaryPayload {
+  summary: string;
+  beats: string[];
+  openThreads: string[];
+  characterDeltas: Array<{ name: string; stateJson: string }>;
+}
+
+export class SummarizeParseError extends Error {
+  constructor(public errors: string[]) {
+    super(`summarize 解析失败: ${errors.join('; ')}`);
+  }
+}
+
 /** THREADS 归一化：trim + 压缩空白。 */
 function normalizeThread(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** summarize 步：摘要/节拍落库；STATE 与前章浅合并；THREADS 匹配伏笔（resolved/advanced/planted）。 */
-export async function runSummarizeStep(
-  deps: { db: Database; provider: LlmProvider; config: AppConfig; emit: (e: RunEvent) => void },
-  input: { runId: string; chapterId: string; chapterNo: number; bookId: string; finalContent: string; signal?: AbortSignal },
-): Promise<void> {
-  const { db, provider, config } = deps;
+/** LLM 生成 + 解析，零写库。 */
+export async function generateSummarize(
+  deps: { provider: LlmProvider; config: AppConfig },
+  input: { chapterNo: number; finalContent: string; signal?: AbortSignal },
+): Promise<SummaryPayload> {
+  const { provider, config } = deps;
   const res = await provider.complete({
     system: '你是小说连续性管理员。严格按输出格式作答。',
     user: renderSummarize({ chapterNo: input.chapterNo, content: input.finalContent }),
@@ -31,52 +44,86 @@ export async function runSummarizeStep(
   });
   const parsed = parseSummary(res.text);
   if (parsed.summary === '') {
-    throw new Error(`summarize 解析失败: ${parsed.errors.join('; ')}`);
+    throw new SummarizeParseError(parsed.errors);
   }
-  upsertChapterSummary(db, {
-    bookId: input.bookId,
-    chapterNo: input.chapterNo,
+  return {
     summary: parsed.summary,
     beats: parsed.beats,
     openThreads: parsed.openThreads,
-  });
+    characterDeltas: parsed.characterDeltas,
+  };
+}
 
-  // STATE：与该角色前一章 state 浅合并
-  const snapshot = getContinuitySnapshot(db, input.bookId, input.chapterNo);
-  const prevStates = new Map(snapshot.characters.map((c) => [c.name, c.state as Record<string, unknown>]));
-  const characters = listCharacters(db, input.bookId);
-  const idByName = new Map(characters.map((c) => [c.name, c.id]));
-  for (const delta of parsed.characterDeltas) {
-    try {
-      const incoming = JSON.parse(delta.stateJson) as Record<string, unknown>;
+/** 单事务四段齐写：摘要 upsert → STATE 浅合并 → THREADS 比对（含已回收同名伏笔）。 */
+export function commitSummarize(
+  db: Database, bookId: string, chapterNo: number, payload: SummaryPayload,
+): void {
+  db.transaction(() => {
+    // ① 摘要
+    upsertChapterSummary(db, {
+      bookId,
+      chapterNo,
+      summary: payload.summary,
+      beats: payload.beats,
+      openThreads: payload.openThreads,
+    });
+
+    // ② STATE：与该角色前一章 state 浅合并
+    const snapshot = getContinuitySnapshot(db, bookId, chapterNo);
+    const prevStates = new Map(snapshot.characters.map((c) => [c.name, c.state as Record<string, unknown>]));
+    const characters = listCharacters(db, bookId);
+    const idByName = new Map(characters.map((c) => [c.name, c.id]));
+    for (const delta of payload.characterDeltas) {
+      let incoming: unknown;
+      try {
+        incoming = JSON.parse(delta.stateJson);
+      } catch {
+        // STATE 行 JSON 非法：跳过该行（下一章快照仍可用上一章状态）
+        continue;
+      }
+      if (incoming === null || typeof incoming !== 'object' || Array.isArray(incoming)) {
+        // JSON.parse 成功但非纯对象：抛错，整事务回滚
+        throw new Error(`STATE 行非纯对象: ${delta.stateJson}`);
+      }
       const merged = { ...(prevStates.get(delta.name) ?? {}), ...incoming };
       const charId = idByName.get(delta.name);
-      if (charId) upsertCharacterState(db, { characterId: charId, chapterNo: input.chapterNo, state: merged });
-    } catch {
-      // STATE 行 JSON 非法：跳过（下一章快照仍可用上一章状态）
+      if (charId) upsertCharacterState(db, { characterId: charId, chapterNo, state: merged });
     }
-  }
 
-  // THREADS：归一化后与 open foreshadowings 精确匹配
-  const open = listForeshadowings(db, input.bookId).filter((f) => f.status !== 'resolved');
-  const openByDesc = new Map(open.map((f) => [normalizeThread(f.description), f]));
-  for (const raw of parsed.openThreads) {
-    const tagMatch = /^\[(planted|advanced|resolved)\]\s*(.+)$/.exec(raw);
-    if (!tagMatch) continue;
-    const [, tag, desc] = tagMatch;
-    const descNorm = normalizeThread(desc);
-    const hit = openByDesc.get(descNorm);
-    if (hit && (tag === 'resolved' || tag === 'advanced')) {
-      resolveForeshadowing(db, hit.id, input.chapterNo, tag);
-    } else if (!hit && tag === 'planted') {
-      db.prepare('INSERT INTO foreshadowings(id, book_id, description, planted_ch, status, created_at) VALUES(?,?,?,?,?,?)').run(
-        randomUUID(),
-        input.bookId,
-        descNorm,
-        input.chapterNo,
-        'open',
-        new Date().toISOString(),
-      );
+    // ③ THREADS：与全书同名伏笔比对（D2 含已回收），命中 [planted] 不重复埋
+    const open = listForeshadowings(db, bookId);
+    const openByDesc = new Map(open.map((f) => [normalizeThread(f.description), f]));
+    for (const raw of payload.openThreads) {
+      const tagMatch = /^\[(planted|advanced|resolved)\]\s*(.+)$/.exec(raw);
+      if (!tagMatch) continue;
+      const [, tag, desc] = tagMatch;
+      const descNorm = normalizeThread(desc);
+      const hit = openByDesc.get(descNorm);
+      if (hit && (tag === 'resolved' || tag === 'advanced')) {
+        resolveForeshadowing(db, hit.id, chapterNo, tag);
+      } else if (!hit && tag === 'planted') {
+        db.prepare('INSERT INTO foreshadowings(id, book_id, description, planted_ch, status, created_at) VALUES(?,?,?,?,?,?)').run(
+          randomUUID(),
+          bookId,
+          descNorm,
+          chapterNo,
+          'open',
+          new Date().toISOString(),
+        );
+      }
     }
-  }
+  })();
+}
+
+/** 组合壳：generate → commit；失败语义不区分，直通抛错（chapter.ts 不改）。 */
+export async function runSummarizeStep(
+  deps: { db: Database; provider: LlmProvider; config: AppConfig; emit: (e: RunEvent) => void },
+  input: { runId: string; chapterId: string; chapterNo: number; bookId: string; finalContent: string; signal?: AbortSignal },
+): Promise<void> {
+  const { db, provider, config } = deps;
+  const payload = await generateSummarize(
+    { provider, config },
+    { chapterNo: input.chapterNo, finalContent: input.finalContent, signal: input.signal },
+  );
+  commitSummarize(db, input.bookId, input.chapterNo, payload);
 }
