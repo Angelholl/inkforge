@@ -141,4 +141,28 @@ describe('拆解仿写路由', () => {
     const redel = await app.inject({ method: 'DELETE', url: `/api/imitation-profiles/${profileId}` });
     expect(redel.statusCode).toBe(404);
   });
+
+  it('BR：GET /api/imitation-profiles 逐条带 boundBooks（绑定书反查）', async () => {
+    // 自持夹具：前序 delete 例已清空档案表；两存同 hash draft 得 v1/v2 两行，不依赖用例顺序
+    const save1 = await app.inject({ method: 'POST', url: '/api/imitation-profiles', payload: { draft } });
+    expect(save1.statusCode).toBe(201);
+    const v1 = save1.json() as { id: string; version: number };
+    const save2 = await app.inject({ method: 'POST', url: '/api/imitation-profiles', payload: { draft } });
+    expect(save2.statusCode).toBe(201);
+    const v2 = save2.json() as { id: string; version: number };
+
+    const created = await app.inject({ method: 'POST', url: '/api/books', payload: { title: '仿写反查测书' } });
+    const bookId = (created.json() as { id: string }).id;
+
+    const bind = await app.inject({ method: 'PUT', url: `/api/books/${bookId}/imitation`, payload: { profileId: v1.id } });
+    expect(bind.statusCode).toBe(200);
+
+    const list = await app.inject({ method: 'GET', url: '/api/imitation-profiles' });
+    expect(list.statusCode).toBe(200);
+    const rows = list.json() as Array<{ id: string; version: number; boundBooks?: Array<{ id: string; title: string }> }>;
+    const rowV1 = rows.find((r) => r.id === v1.id)!;
+    const rowV2 = rows.find((r) => r.id === v2.id)!;
+    expect(rowV1.boundBooks).toEqual([{ id: bookId, title: '仿写反查测书' }]);
+    expect(rowV2.boundBooks).toEqual([]);
+  });
 });

@@ -205,7 +205,7 @@ export function getBookStyleBinding(db: Database, bookId: string): StyleBinding 
 /** 只读徽标反查：该档案当前绑在哪本书。style=0010 关联表引用真相（含辅档命中）；plot/spectrum=books 镜像列固定字面量映射（无用户输入拼接）。 */
 export function listBooksBoundToProfile(
   db: Database,
-  kind: 'style' | 'plot' | 'spectrum',
+  kind: 'style' | 'plot' | 'spectrum' | 'imitation',
   profileId: string,
 ): Array<{ id: string; title: string }> {
   if (kind === 'style') {
@@ -216,8 +216,8 @@ export function listBooksBoundToProfile(
       )
       .all(profileId) as Array<{ id: string; title: string }>;
   }
-  // plot/spectrum=books 镜像列固定字面量映射（无用户输入拼接）
-  const column = kind === 'plot' ? 'plot_profile_id' : 'spectrum_profile_id';
+  // plot/spectrum/imitation=books 镜像列固定字面量映射（无用户输入拼接）
+  const column = kind === 'plot' ? 'plot_profile_id' : kind === 'spectrum' ? 'spectrum_profile_id' : 'imitation_profile_id';
   return db.prepare(`SELECT id, title FROM books WHERE ${column} = ? ORDER BY created_at DESC`).all(profileId) as Array<{
     id: string;
     title: string;

@@ -561,6 +561,7 @@ export interface ImitationProfileDto {
   version: number;
   sourcePath: string;
   createdAt: string;
+  boundBooks?: Array<{ id: string; title: string }>;
 }
 
 export interface ImitationBindBody {

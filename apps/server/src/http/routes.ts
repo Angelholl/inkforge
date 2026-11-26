@@ -1121,7 +1121,9 @@ ${repairPrompt(first.errors)}`))).text,
     reply.code(201).send(saved);
   });
 
-  app.get('/api/imitation-profiles', async () => imitationRepo.listImitationProfiles(db));
+  app.get('/api/imitation-profiles', async () =>
+    imitationRepo.listImitationProfiles(db).map((p) => ({ ...p, boundBooks: booksRepo.listBooksBoundToProfile(db, 'imitation', p.id) })),
+  );
 
   app.delete('/api/imitation-profiles/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
