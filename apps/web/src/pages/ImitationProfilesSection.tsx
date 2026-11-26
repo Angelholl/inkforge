@@ -7,7 +7,7 @@ import { EmptyState } from '../components/EmptyState';
 import { decodeTextFile } from './NewBookPage';
 import type { ImitationDraftDto } from '@inkforge/shared';
 
-/** 拆解仿写档案分区（Pagekin 式）：analyze→预览→确认入库→列表→绑定书。draft 不入库，确认才落档案。 */
+/** 拆解仿写档案分区（Pagekin 式）：analyze→预览→确认入库→列表+只读徽标（绑定入口在书页）。draft 不入库，确认才落档案。 */
 export default function ImitationProfilesSection() {
   const { data: profilesData, refetch } = useQuery({ queryKey: ['imitation-profiles'], queryFn: api.listImitationProfiles, refetchInterval: 5000 });
   const profiles = Array.isArray(profilesData) ? profilesData : [];
