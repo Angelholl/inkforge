@@ -254,3 +254,24 @@ export function renderOutlineCheckTask(args: { summariesText: string; cardsText:
     args.cardsText,
   ].join('\n');
 }
+
+/** 设定集精炼任务段（单次与每段 map 共用）：保留规则体系、约束条件与人物关系网，压到预算字数。 */
+export function renderRefineTask(raw: string, budgetChars: number): string {
+  return [
+    '【任务】精炼下方设定集文本：保留规则体系、约束条件与人物关系网，合并语义重复项，不得新增设定。',
+    `【输出要求】直接输出精炼正文，压到预算 ${budgetChars} 字以内，字数上限 ${budgetChars} 字，不要标题、解释或元信息。`,
+    `【本段字数】${raw.length}`,
+    '【原文】',
+    raw,
+  ].join('\n');
+}
+
+/** 设定集精炼合并任务段（reduce）：保留规则体系、约束条件与人物关系网，合并去重压到预算字数。 */
+export function renderRefineReduceTask(chunkOutputs: string[], budgetChars: number): string {
+  return [
+    '【任务】合并下方分段精炼结果：保留规则体系、约束条件与人物关系网，合并去重，不得新增设定。',
+    `【输出要求】直接输出合并后的正文，预算 ${budgetChars} 字以内，字数上限 ${budgetChars} 字，不要标题、解释或元信息。`,
+    '【分段结果】',
+    chunkOutputs.join('\n\n'),
+  ].join('\n');
+}

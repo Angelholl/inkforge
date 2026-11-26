@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSIONS, type ChapterBlueprint } from '@inkforge/shared';
-import { LANDING_POOL_BUDGET_CHARS, renderCharacterCards, renderDraft, renderHardRules, renderQcTask, renderRewrite, renderSummarize, renderTaskSummaryBlock } from '../../src/prompts/render';
+import { LANDING_POOL_BUDGET_CHARS, renderCharacterCards, renderDraft, renderHardRules, renderQcTask, renderRefineReduceTask, renderRewrite, renderSummarize, renderTaskSummaryBlock } from '../../src/prompts/render';
 import { parseBlueprint, parseOutline } from '../../src/llm/plainproto';
 import { MANDATE_TEXT_PREFIX } from '../../src/pipeline/mandate';
 
@@ -89,6 +89,14 @@ describe('prompt 渲染契约', () => {
     const out = renderSummarize({ chapterNo: 5, content: DRAFT });
     for (const marker of ['SUMMARY:', 'BEATS:', 'THREADS:', 'STATE:']) expect(out).toContain(marker);
     expect(out).toContain(DRAFT.slice(0, 10));
+  });
+
+  it('renderRefineReduceTask 含“合并”“预算 20000 字”关键词', () => {
+    const out = renderRefineReduceTask(['甲', '乙'], 20000);
+    expect(out).toContain('合并');
+    expect(out).toContain('预算 20000 字');
+    expect(out).toContain('甲');
+    expect(out).toContain('乙');
   });
 
   it('parseBlueprint：合格文样往返', () => {
