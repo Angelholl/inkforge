@@ -863,3 +863,11 @@ verify: docs-only 归档无执行步骤；计划自审五查 code-planner 已过
 - push：owner 呈问未答按批次设计预授权执行；与 refine 批互载（该批留痕亦声明随本批 docs 一并上远程），先 fetch 核对再推，ls-remote 复核见追记。
 
 verify: 静树主审亲跑 server 706/web 230/shared 22 全绿只增不减+typecheck×3/lint 零错；GUI 黑盒如上。Refs: DEC-2026-1127-02
+
+## DEC-2026-1127-03 [OWNER] 补摘要名册注入改非排他＋名册含别名（回归定性＋单卡修复）
+
+**背景：** owner 报「补摘要分析不出人物，上一版会自动分析出本章出场人物」。code-reader 调研定性：主因=5ad05b2 名册注入钉死文案系禁止性表述「只可使用下列名字，名册外新名字一律不写入 STATE」，名册缺人（未建档/下线/别名）时模型自我抑制，STATE 人物段大面积变空；解析器/DTO/弹窗接线完好。次生缺陷=名册只列 name 不含 aliases，133279d 落库 alias 命中分支在 prompt 层被掐死成死代码。测试漏网原因=补摘要用例全为 mock 直喂不经真实 LLM，无一条钉「注入名册后仍应列出人物」。
+
+**拍板：** owner 选 A 案（非排他文案＋名册含 aliases；B=只改文案、C=保持排他+NEW_CHARACTERS 独立段两案未采）。执行=单卡 docs/design/card-2026-11-27-roster-nonexclusive.md，通道=hy4 限时窗（至 2026-12-02），先红后绿回归测试随卡、基线 server 706 只增不减。
+
+verify: docs-only 归档；计划自审五查主审已过（钉死文案/签名不变/CAP 口径三处唯一可写）。Refs: DEC-2026-1127-03
