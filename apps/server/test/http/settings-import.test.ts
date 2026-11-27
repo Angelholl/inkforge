@@ -474,7 +474,7 @@ describe('POST /api/settings-import/refine', () => {
     }
   });
 
-  it('分块中途某段 mock 报错 → 502 且 reason 含 refine-map-failed: segment 3/4', async () => {
+  it('分块中途某段 mock 报错 → 重试一次成功后 200（原 refine-map-failed 语义更新）', async () => {
     const { provider } = makeRefineProvider((_req, index) => {
       if (index === 2) throw new Error('boom');
       return okRefine('摘'.repeat(10));
@@ -486,16 +486,16 @@ describe('POST /api/settings-import/refine', () => {
         url: '/api/settings-import/refine',
         payload: { content: '甲'.repeat(40475) },
       });
-      expect(r.statusCode).toBe(502);
-      const body = r.json() as { error: string; reason: string };
-      expect(body.error).toBe('refine failed');
-      expect(body.reason).toContain('refine-map-failed: segment 3/4');
+      expect(r.statusCode).toBe(200);
+      const body = r.json() as { description: string; truncated: boolean };
+      expect(body.description).toBe('摘'.repeat(10));
+      expect(body.truncated).toBe(false);
     } finally {
       teardown(h);
     }
   });
 
-  it('分块某段空输出 → 502 且 reason 含 refine-map-empty: segment 2/4', async () => {
+  it('分块某段空输出 → 重试一次成功后 200（原 refine-map-empty 语义更新）', async () => {
     const { provider } = makeRefineProvider((_req, index) => okRefine(index === 1 ? '' : '摘'.repeat(10)));
     const h = await makeRefineApp(65536, provider);
     try {
@@ -504,10 +504,10 @@ describe('POST /api/settings-import/refine', () => {
         url: '/api/settings-import/refine',
         payload: { content: '甲'.repeat(40475) },
       });
-      expect(r.statusCode).toBe(502);
-      const body = r.json() as { error: string; reason: string };
-      expect(body.error).toBe('refine failed');
-      expect(body.reason).toContain('refine-map-empty: segment 2/4');
+      expect(r.statusCode).toBe(200);
+      const body = r.json() as { description: string; truncated: boolean };
+      expect(body.description).toBe('摘'.repeat(10));
+      expect(body.truncated).toBe(false);
     } finally {
       teardown(h);
     }

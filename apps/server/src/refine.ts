@@ -12,16 +12,36 @@ const REFINE_CHUNK_MAX_CHARS = 10666;
 const REFINE_OUTPUT_RESERVE_TOKENS = 4096;
 const REFINE_WINDOW_MARGIN = 2048;
 const REFINE_MIN_MAP_WINDOW = REFINE_CHUNK_TARGET_TOKENS + REFINE_OUTPUT_RESERVE_TOKENS + REFINE_WINDOW_MARGIN;
+const REFINE_MICRO_SEGMENT_CHARS = 50;
+
+function refineAbortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('refine-aborted');
+}
 
 export function estimateRefineTokens(s: string): number {
   return Math.ceil(s.length * REFINE_TOKEN_PER_CHAR);
 }
 
-/** 段落优先、超长段内按硬上限切；不跨段合并。 */
+/** 段落优先、超长段内按硬上限切；微段（<50 字）并入相邻段，不跨段合并。 */
 export function splitRefineSegments(raw: string): string[] {
+  const paragraphs = raw.split('\n\n').filter((paragraph) => paragraph.length > 0);
+  const merged: string[] = [];
+  let pending: string[] = [];
+  for (const paragraph of paragraphs) {
+    if (paragraph.length < REFINE_MICRO_SEGMENT_CHARS) {
+      pending.push(paragraph);
+      continue;
+    }
+    merged.push([...pending, paragraph].join('\n\n'));
+    pending = [];
+  }
+  if (pending.length > 0) {
+    if (merged.length > 0) merged[merged.length - 1] += '\n\n' + pending.join('\n\n');
+    else merged.push(pending.join('\n\n'));
+  }
+
   const segments: string[] = [];
-  for (const paragraph of raw.split('\n\n')) {
-    if (paragraph.length === 0) continue;
+  for (const paragraph of merged) {
     for (let offset = 0; offset < paragraph.length; offset += REFINE_CHUNK_MAX_CHARS) {
       segments.push(paragraph.slice(offset, offset + REFINE_CHUNK_MAX_CHARS));
     }
@@ -71,17 +91,33 @@ export async function refineDescriptionWithLlm(
   let segmentTruncated = false;
 
   for (let i = 0; i < n; i++) {
-    let res: CompletionResult;
-    try {
-      res = await provider.complete({
-        ...baseRequest,
-        user: renderRefineTask(segments[i], chunkBudgetChars),
-      });
-    } catch {
-      throw new Error(`refine-map-failed: segment ${i + 1}/${n}`);
+    const segment = segments[i];
+    const request = { ...baseRequest, user: renderRefineTask(segment, chunkBudgetChars) };
+    let text = '';
+    let succeeded = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await provider.complete(request);
+        if (signal?.aborted) throw refineAbortError(signal);
+        text = res.text.trim();
+        if (text !== '') {
+          succeeded = true;
+          break;
+        }
+      } catch {
+        if (signal?.aborted) throw refineAbortError(signal);
+        // 异常或空返回原样重试一次；两次都失败则在循环外降级为该段原文
+      }
     }
-    const text = res.text.trim();
-    if (text === '') throw new Error(`refine-map-empty: segment ${i + 1}/${n}`);
+    if (!succeeded) {
+      if (segment.length > chunkBudgetChars) {
+        mapOutputs.push(segment.slice(0, chunkBudgetChars));
+        segmentTruncated = true;
+      } else {
+        mapOutputs.push(segment);
+      }
+      continue;
+    }
     if (text.length > chunkBudgetChars) {
       mapOutputs.push(text.slice(0, chunkBudgetChars));
       segmentTruncated = true;
@@ -97,8 +133,10 @@ export async function refineDescriptionWithLlm(
       user: renderRefineReduceTask(mapOutputs, budgetChars),
     });
   } catch {
+    if (signal?.aborted) throw refineAbortError(signal);
     throw new Error('refine-reduce-failed');
   }
+  if (signal?.aborted) throw refineAbortError(signal);
   const reducedText = reduced.text.trim();
   if (reducedText === '') throw new Error('refine-reduce-empty');
   return {

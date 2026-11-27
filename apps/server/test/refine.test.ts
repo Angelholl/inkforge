@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppConfig, ProviderConfig } from '../src/config';
 import type { CompletionRequest, CompletionResult, LlmProvider } from '../src/llm/types';
-import { estimateRefineTokens, refineDescriptionWithLlm } from '../src/refine';
+import { estimateRefineTokens, refineDescriptionWithLlm, splitRefineSegments } from '../src/refine';
 
 const LOCAL_MAX_OUTPUT = 8192;
 const TIMEOUT = 180000;
@@ -137,29 +137,29 @@ describe('refine 双路径引擎', () => {
     expect(segmentSizes(calls, 4)).toEqual([5000, 10666, 9334, 1000]);
   });
 
-  it('map 段报错 → 抛 refine-map-failed: segment 3/4，无部分结果', async () => {
+  it('map 段报错 → 原样重试一次后成功（原 refine-map-failed 语义更新）', async () => {
     const { provider, calls } = makeProvider((_req, index) => {
       if (index === 2) throw new Error('boom');
       return ok('摘'.repeat(10));
     });
-    await expect(
-      refineDescriptionWithLlm(deps(65536, provider), {
-        raw: '甲'.repeat(40475),
-        budgetChars: 20000,
-      }),
-    ).rejects.toThrow('refine-map-failed: segment 3/4');
-    expect(calls.length).toBe(3);
+    const result = await refineDescriptionWithLlm(deps(65536, provider), {
+      raw: '甲'.repeat(40475),
+      budgetChars: 20000,
+    });
+    expect(calls.length).toBe(6);
+    expect(result.description.length).toBe(10);
+    expect(result.truncated).toBe(false);
   });
 
-  it('map 段空输出 → 抛 refine-map-empty: segment 2/4', async () => {
+  it('map 段空输出 → 原样重试一次后成功（原 refine-map-empty 语义更新）', async () => {
     const { provider, calls } = makeProvider((_req, index) => ok(index === 1 ? '' : '摘'.repeat(10)));
-    await expect(
-      refineDescriptionWithLlm(deps(65536, provider), {
-        raw: '甲'.repeat(40475),
-        budgetChars: 20000,
-      }),
-    ).rejects.toThrow('refine-map-empty: segment 2/4');
-    expect(calls.length).toBe(2);
+    const result = await refineDescriptionWithLlm(deps(65536, provider), {
+      raw: '甲'.repeat(40475),
+      budgetChars: 20000,
+    });
+    expect(calls.length).toBe(6);
+    expect(result.description.length).toBe(10);
+    expect(result.truncated).toBe(false);
   });
 
   it('reduce 报错 → refine-reduce-failed；reduce 空输出 → refine-reduce-empty', async () => {
@@ -189,5 +189,101 @@ describe('refine 双路径引擎', () => {
     for (const call of calls.slice(0, 4)) expect(call.user).toContain('预算 5000 字');
     expect(result.description.length).toBe(100);
     expect(result.truncated).toBe(true);
+  });
+});
+
+describe('refine map-reduce 容错三件套', () => {
+  it('分段器：微段（<50 字）并入下一段，以 \\n\\n 连接', () => {
+    const micro = '微'.repeat(20);
+    const big = '乙'.repeat(120);
+    expect(splitRefineSegments(`${micro}\n\n${big}`)).toEqual([`${micro}\n\n${big}`]);
+  });
+
+  it('分段器：末位微段并入前段尾部', () => {
+    const big = '乙'.repeat(120);
+    const micro = '微'.repeat(20);
+    expect(splitRefineSegments(`${big}\n\n${micro}`)).toEqual([`${big}\n\n${micro}`]);
+  });
+
+  it('分段器：连续微段依次并入下一段', () => {
+    const m1 = '子'.repeat(10);
+    const m2 = '丑'.repeat(10);
+    const big = '乙'.repeat(120);
+    expect(splitRefineSegments(`${m1}\n\n${m2}\n\n${big}`)).toEqual([`${m1}\n\n${m2}\n\n${big}`]);
+  });
+
+  it('分段器：现有段落边界 [5000,10666,9334,1000] 不受微段合并影响', () => {
+    const raw = 'A'.repeat(5000) + '\n\n' + 'B'.repeat(20000) + '\n\n' + 'C'.repeat(1000);
+    expect(splitRefineSegments(raw).map((s) => s.length)).toEqual([5000, 10666, 9334, 1000]);
+  });
+
+  it('map 空返回：首次空、重试给正常文本 → 整体成功且 reduce 含重试结果', async () => {
+    const { provider, calls } = makeProvider((_req, index) =>
+      ok(index === 1 ? '' : index === 2 ? '乙'.repeat(10) : '摘'.repeat(10)),
+    );
+    const result = await refineDescriptionWithLlm(deps(65536, provider), {
+      raw: '甲'.repeat(40475),
+      budgetChars: 20000,
+    });
+    expect(calls.length).toBe(6);
+    expect(result.description.length).toBe(10);
+    expect(calls[5].user).toContain('乙'.repeat(10));
+  });
+
+  it('map 异常：首次 throw、第二次成功 → 整体成功', async () => {
+    const { provider, calls } = makeProvider((_req, index) => {
+      if (index === 2) throw new Error('boom');
+      return ok('摘'.repeat(10));
+    });
+    const result = await refineDescriptionWithLlm(deps(65536, provider), {
+      raw: '甲'.repeat(40475),
+      budgetChars: 20000,
+    });
+    expect(calls.length).toBe(6);
+    expect(result.description.length).toBe(10);
+  });
+
+  it('map 异常：两次都失败 → 该段原文截断进 mapOutputs（reduce 可见）且 truncated=true', async () => {
+    const { provider, calls } = makeProvider((_req, index) => {
+      if (index === 2 || index === 3) throw new Error('boom');
+      return ok('摘'.repeat(10));
+    });
+    const result = await refineDescriptionWithLlm(deps(65536, provider), {
+      raw: '甲'.repeat(40475),
+      budgetChars: 20000,
+    });
+    expect(calls.length).toBe(6);
+    expect(calls[5].user).toContain('甲'.repeat(5000));
+    expect(result.truncated).toBe(true);
+  });
+
+  it('abort 不吞：signal 在首次调用中 aborted → provider 恰 1 次即抛，无重试无回退', async () => {
+    const controller = new AbortController();
+    const { provider, calls } = makeProvider(() => {
+      controller.abort(new Error('user-cancel'));
+      throw new Error('network-abort');
+    });
+    await expect(
+      refineDescriptionWithLlm(deps(65536, provider), {
+        raw: '甲'.repeat(40475),
+        budgetChars: 20000,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('user-cancel');
+    expect(calls.length).toBe(1);
+  });
+
+  it('abort 不吞：signal 预先 aborted → provider 恰 1 次即抛，不重试不回退', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('pre-cancel'));
+    const { provider, calls } = makeProvider(() => ok('摘'.repeat(10)));
+    await expect(
+      refineDescriptionWithLlm(deps(65536, provider), {
+        raw: '甲'.repeat(40475),
+        budgetChars: 20000,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('pre-cancel');
+    expect(calls.length).toBe(1);
   });
 });
