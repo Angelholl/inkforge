@@ -855,3 +855,11 @@
 **拍板：** 三决策点全数拍板：①SUMMARIZE_ROSTER_CAP=50；②无标签 THREADS 行进第五段；③第五段默认处置=写入/建档（推翻原推荐「忽略」，幻觉名批量建档风险由用户逐条改判与前端重名预检承担）。decision-critic [HIGH_RISK_OBJECTION] 采纳：commit 前端重名预检+事务内禁裸 INSERT（撞后回查关联既有卡）。计划真值=docs/plans/2026-11-27-summary-unmatched-confirm.md（六卡 C0-C5，依赖序 T0→{T1,T2,T4}、T1+T2→T3、T4→T5，C1 迁移卡独占串行窗）。执行通道=hy4 限时窗（至 2026-12-02）按 dispatch-discipline 派卡。
 
 verify: docs-only 归档无执行步骤；计划自审五查 code-planner 已过（三处含混修正留痕在计划文内）。Refs: DEC-2026-1127-02
+
+**执行留痕（2026-11-27 收口）：**
+- 派卡台账：C0=hy4 run1 验收过 commit 6c76f6b（diff 与计划 T0 逐字一致，主审亲跑 shared 22/22+typecheck+lint）。C1=ZCode Agent（迁移禁入型独占串行窗）首轮停手申报计划缺口→主审补令扩写集三测试文件续跑，验收过 commit 937c279；执行者两申报采纳（migrate 降级夹具补 DROP COLUMN aliases 沿 gen_gate_json 惯例；roster 夹具+1 行系类型必填所迫）。C4 run1=一跑双收（T4+T2 各 commit 恰含对应写集：1a198bf/5ad05b2），三写者共窗期归属不可分，验收按内容面：钉值抽查全对+静树亲跑定向 35/35、web 组件 11/11、全量 694/227/22；主审误派 run2（刷盘竞态误判 L1）自察共写者退避零残留，判废不究。C3=hy4 验收过 commit 133279d（+9/+3 例含重名撞车回查/精确优先/link 悬空整事务回滚/管道维持跳过）。C5=hy4 验收过 commit d1abae9（钉死文案三条随迁+checkbox 6→4+新三例，模块级夹具零污染）。
+- GUI 黑盒（隔离四件套+无状态延迟桩，puppeteer-core+系统 Chrome）：T1 五段渲染/T2 三态裁决+剔除/T3 落库对账（张三 aliases=["阿七"]、合并态挂张三不含被剔除自身态、乙新埋甲回收）/T4 取消不落库/T5 单在途锁=全 PASS，每点截图互证，console/pageerror 零。T3 附注：已存章节摘要无 GUI 展示面（既有产品展示缺口非本批缺陷）→ **[PROXY-DECISION] 挂 backlog 下批**（四门：owner 呈问未答、推荐项一致、方向进度一致、无未决高风险异议；可驳回）。
+- 双轴 code-review（基线 750adaa，剔 refine 两枚）：Standards=硬违规 1（GUI 标注时序）已由黑盒核销+6 judgement call（3 条系计划自钉照案）；Spec=无阻断，知悉项三条——DialogCallProps 必填 prop 实作为可选桥件（C5 后恒传行为无差）、alias 命中不写 alias 断言力弱（幂等不可区分，代码检视补证）、段五复位 useEffect 依赖未含 unmatched（同 result 必换实际无影响）。937c279 抽 CharacterRow 消重复获正向评价。
+- push：owner 呈问未答按批次设计预授权执行；与 refine 批互载（该批留痕亦声明随本批 docs 一并上远程），先 fetch 核对再推，ls-remote 复核见追记。
+
+verify: 静树主审亲跑 server 706/web 230/shared 22 全绿只增不减+typecheck×3/lint 零错；GUI 黑盒如上。Refs: DEC-2026-1127-02
