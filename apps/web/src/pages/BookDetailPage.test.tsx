@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import BookDetailPage, { normalizeWeights } from './BookDetailPage';
-import type { SummaryGenerateResultDto } from '@inkforge/shared';
+import type { SummaryCommitBody, SummaryGenerateResultDto } from '@inkforge/shared';
 
 // 回归：original 章须有「补摘要」按钮（手动触发，零自动模型调用——DEC-2026-1113-05 第 3 条）
 const book = {
@@ -195,6 +195,7 @@ function installSummarizeStub(opts: { delayMs?: number; reject?: boolean; bothOr
   const baseFetch = globalThis.fetch;
   let genCount = 0;
   let commitCount = 0;
+  let commitBody: SummaryCommitBody | null = null;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -217,12 +218,13 @@ function installSummarizeStub(opts: { delayMs?: number; reject?: boolean; bothOr
       }
       if (u.endsWith('/summarize/commit') && init?.method === 'POST') {
         commitCount += 1;
+        commitBody = JSON.parse(String(init.body)) as SummaryCommitBody;
         return jsonResponse({ ok: true });
       }
       return baseFetch(url, init);
     }),
   );
-  return { genCount: () => genCount, commitCount: () => commitCount };
+  return { genCount: () => genCount, commitCount: () => commitCount, commitBody: () => commitBody };
 }
 
 afterEach(() => {
@@ -293,18 +295,123 @@ describe('BookDetailPage', () => {
     expect(within(dialog).getByLabelText('摘要（可编辑）').tagName).toBe('TEXTAREA');
     expect(within(dialog).getByText('BEATS').closest('details')).toBeTruthy();
     const boxes = within(dialog).getAllByRole('checkbox');
-    expect(boxes.length).toBe(6);
+    expect(boxes.length).toBe(4);
     for (const cb of boxes) expect((cb as HTMLInputElement).checked).toBe(true);
     for (const text of [
       '将回收：密信落款人身份（第3章埋）',
       '将新埋：夜行人的面具',
       '已存在同名伏笔，不会重复埋',
-      '未匹配将被忽略',
+      '待裁决：未命中既有伏笔，见「未匹配处理」',
       '将更新人物「张三」状态（与前章浅合并）',
-      '未匹配人物卡不会写入',
+      '待裁决：档案无此名，见「未匹配处理」',
     ]) {
       expect(within(dialog).getByText(text)).toBeTruthy();
     }
+    expect(within(dialog).getByRole('heading', { name: '未匹配处理' })).toBeTruthy();
+    expect(within(dialog).getByLabelText('未匹配人物：李四')).toBeTruthy();
+    expect(within(dialog).getByLabelText('未匹配伏笔：[advanced] 失踪的账本')).toBeTruthy();
+  });
+
+  it('第五段裁决 link → commit 载荷带 unmatchedCharacters', async () => {
+    const stub = installSummarizeStub();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: '补摘要' }));
+    const dialog = await waitFor(() => screen.getByRole('dialog'));
+    const charSelect = await waitFor(() => within(dialog).getByLabelText('未匹配人物：李四'));
+    fireEvent.change(charSelect, { target: { value: 'link' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认落库' }));
+    await waitFor(() => expect(stub.commitCount()).toBe(1));
+    const body = stub.commitBody()!;
+    expect(body.unmatchedCharacters).toEqual([{ name: '李四', action: 'link', characterId: 'k1' }]);
+    expect(body.states.find((s) => s.name === '李四')?.include).toBe(false);
+  });
+
+  it('alias 命中显示为命中并保留 checkbox', async () => {
+    installFetchStub();
+    const baseFetch = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (u.endsWith('/api/books/b1/characters')) {
+          return jsonResponse([
+            { id: 'k1', name: '张三', baseSetting: '{"身份":"主角"}', offlineFromChapter: null, aliases: ['张郎'] },
+          ]);
+        }
+        if (u.endsWith('/api/books/b1/foreshadowings')) return jsonResponse(FORESHADOW_FIXTURE);
+        if (/\/chapters\/\d+\/summarize$/.test(u) && init?.method === 'POST') {
+          return jsonResponse({
+            ...SUMMARY_RESULT,
+            characterDeltas: [
+              { name: '张郎', stateJson: '{"伤":"轻"}' },
+              { name: '李四', stateJson: '{"伤":"重"}' },
+            ],
+          });
+        }
+        if (u.endsWith('/summarize/commit') && init?.method === 'POST') return jsonResponse({ ok: true });
+        return baseFetch(url, init);
+      }),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: '补摘要' }));
+    const dialog = await waitFor(() => screen.getByRole('dialog'));
+    await waitFor(() => expect(within(dialog).getByText('将更新人物「张郎」状态（与前章浅合并）')).toBeTruthy());
+    expect((within(dialog).getByLabelText('STATE：张郎') as HTMLInputElement).checked).toBe(true);
+    expect(within(dialog).queryByLabelText('未匹配人物：张郎')).toBeNull();
+    expect(within(dialog).getByLabelText('未匹配人物：李四')).toBeTruthy();
+  });
+
+  it('无标签 THREADS 行进第五段', async () => {
+    installFetchStub();
+    const baseFetch = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (u.endsWith('/api/books/b1/characters')) return jsonResponse(CHARACTER_FIXTURE);
+        if (u.endsWith('/api/books/b1/foreshadowings')) return jsonResponse(FORESHADOW_FIXTURE);
+        if (/\/chapters\/\d+\/summarize$/.test(u) && init?.method === 'POST') {
+          return jsonResponse({
+            ...SUMMARY_RESULT,
+            openThreads: [...SUMMARY_RESULT.openThreads, '夜行人的真实身份'],
+          });
+        }
+        if (u.endsWith('/summarize/commit') && init?.method === 'POST') return jsonResponse({ ok: true });
+        return baseFetch(url, init);
+      }),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/books/b1']}>
+          <Routes>
+            <Route path="/books/:bookId" element={<BookDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '补摘要' }).length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: '补摘要' }));
+    const dialog = await waitFor(() => screen.getByRole('dialog'));
+    await waitFor(() => expect(within(dialog).getByText('待裁决：无标签行，见「未匹配处理」')).toBeTruthy());
+    expect(within(dialog).getByLabelText('未匹配伏笔：夜行人的真实身份')).toBeTruthy();
   });
 
   it('失败文案出现在按钮旁 msg 行', async () => {

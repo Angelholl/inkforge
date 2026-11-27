@@ -79,13 +79,19 @@ function buildSummaryAnnotations(
   result: SummaryGenerateResultDto,
   foreshadowings: ForeshadowingDto[],
   characters: CharacterDto[],
-): { threads: Record<string, string>; states: Record<string, string> } {
+): {
+  threads: Record<string, string>;
+  states: Record<string, string>;
+  unmatched: { characters: string[]; threads: string[]; cards: Array<{ id: string; name: string }> };
+} {
   const byDesc = new Map(foreshadowings.map((f) => [collapseWhitespace(f.description), f]));
   const threads: Record<string, string> = {};
+  const unmatchedThreads: string[] = [];
   for (const raw of result.openThreads) {
     const m = BRACKET_TAG_RE.exec(raw);
     if (!m) {
-      threads[raw] = '未匹配将被忽略';
+      threads[raw] = '待裁决：无标签行，见「未匹配处理」';
+      if (!unmatchedThreads.includes(raw)) unmatchedThreads.push(raw);
       continue;
     }
     const [, tag, desc] = m;
@@ -97,17 +103,31 @@ function buildSummaryAnnotations(
     } else if (hit && tag === 'planted') {
       threads[raw] = '已存在同名伏笔，不会重复埋';
     } else {
-      threads[raw] = '未匹配将被忽略';
+      threads[raw] = '待裁决：未命中既有伏笔，见「未匹配处理」';
+      if (!unmatchedThreads.includes(raw)) unmatchedThreads.push(raw);
     }
   }
   const names = new Set(characters.map((c) => c.name));
+  const aliasSet = new Set(characters.flatMap((c) => c.aliases ?? []));
   const states: Record<string, string> = {};
+  const unmatchedCharacters: string[] = [];
   for (const d of result.characterDeltas) {
-    states[d.name] = names.has(d.name)
-      ? `将更新人物「${d.name}」状态（与前章浅合并）`
-      : '未匹配人物卡不会写入';
+    if (names.has(d.name) || aliasSet.has(d.name)) {
+      states[d.name] = `将更新人物「${d.name}」状态（与前章浅合并）`;
+    } else {
+      states[d.name] = '待裁决：档案无此名，见「未匹配处理」';
+      if (!unmatchedCharacters.includes(d.name)) unmatchedCharacters.push(d.name);
+    }
   }
-  return { threads, states };
+  return {
+    threads,
+    states,
+    unmatched: {
+      characters: unmatchedCharacters,
+      threads: unmatchedThreads,
+      cards: characters.map((c) => ({ id: c.id, name: c.name })),
+    },
+  };
 }
 
 /**
@@ -814,6 +834,14 @@ export default function BookDetailPage() {
 
   const doneCount = (book?.chapters ?? []).filter((c) => c.status === 'done').length;
   const activeSec = useActiveSection(Boolean(book));
+  // T5 接线：一次算好标注与未匹配数组，弹窗两 prop 同源于此（confirmSummary/取消/在途零改动）。
+  const summaryAnnotations = gen
+    ? buildSummaryAnnotations(
+        gen.result,
+        Array.isArray(foreshadowings) ? foreshadowings : [],
+        Array.isArray(characters) ? characters : [],
+      )
+    : null;
   return (
     <main className="mx-auto max-w-6xl px-8 py-8">
       <Link to="/" className="text-sm text-muted hover:text-ink">
@@ -1312,16 +1340,13 @@ export default function BookDetailPage() {
           <RunAsideCard runs={book?.runs ?? []} bookId={bookId} />
         </aside>
       </div>
-      {gen && (
+      {gen && summaryAnnotations && (
         <SummaryConfirmDialog
           open
           chapterNo={gen.chapterNo}
           result={gen.result}
-          annotations={buildSummaryAnnotations(
-            gen.result,
-            Array.isArray(foreshadowings) ? foreshadowings : [],
-            Array.isArray(characters) ? characters : [],
-          )}
+          annotations={summaryAnnotations}
+          unmatched={summaryAnnotations.unmatched}
           busy={committing || gen.result.baseVersionId === ''}
           startedAt={gen.startedAt}
           onCancel={cancelSummary}
