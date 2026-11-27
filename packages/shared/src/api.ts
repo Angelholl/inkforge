@@ -190,6 +190,9 @@ export interface CharacterDto {
   baseSetting: string;
   /** null=在场；N=第 N 章（含）起下线（0009） */
   offlineFromChapter?: number | null;
+  // CharacterDto 追加（可选=旧夹具零改动；0016 起服务端恒回）：
+  /** per-book 别名（0016，JSON 数组）；匹配顺序=精确同名→aliases→未匹配裁决 */
+  aliases?: string[];
 }
 
 export interface CreateCharacterBody {
@@ -705,9 +708,19 @@ export interface SummaryGenerateResultDto {
   baseVersionId: string; summary: string; beats: string[];
   openThreads: string[]; characterDeltas: Array<{ name: string; stateJson: string }>;
 }
+export interface SummaryUnmatchedThreadChoice { text: string; action: 'write' | 'ignore' }
+export interface SummaryUnmatchedCharacterChoice {
+  name: string;
+  action: 'link' | 'create' | 'ignore';
+  /** action='link' 必填：目标人物卡 id（zod 层 refine 把关） */
+  characterId?: string;
+}
 export interface SummaryCommitBody {
   baseVersionId: string; summary: string; beats: string[];
   threads: SummaryThreadChoice[]; states: SummaryStateChoice[];
+  // SummaryCommitBody 追加两个可选字段（可选=既有测试夹具与管道路径零改动）：
+  unmatchedThreads?: SummaryUnmatchedThreadChoice[];
+  unmatchedCharacters?: SummaryUnmatchedCharacterChoice[];
 }
 export interface SettingsImportRefineBody { content: string }
 export interface SettingsImportRefineResult { description: string; truncated: boolean }
