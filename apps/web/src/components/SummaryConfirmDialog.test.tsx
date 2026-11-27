@@ -15,6 +15,15 @@ const TEXT_STATE_SKIP = '未匹配人物卡不会写入';
 
 const ANNOTATION_TEXTS = [TEXT_RECYCLED, TEXT_DUP, TEXT_NEW, TEXT_IGNORED, TEXT_STATE_UPDATE, TEXT_STATE_SKIP];
 
+/** T4 夹具：假名，避免引入任何原文片段。 */
+const UNMATCHED_CHAR = '测试人物戊';
+const UNMATCHED_THREAD = '测试伏笔戊';
+const LINK_CARDS = [
+  { id: 'card-a', name: '测试人物甲' },
+  { id: 'card-b', name: '测试人物乙' },
+];
+const DUP_CARD_NAME = '测试人物丙';
+
 const result: SummaryGenerateResultDto = {
   baseVersionId: 'v1',
   summary: '原始摘要',
@@ -46,6 +55,7 @@ function renderDialog(overrides: Partial<ComponentProps<typeof SummaryConfirmDia
       chapterNo={3}
       result={result}
       annotations={annotations}
+      unmatched={{ characters: [], threads: [], cards: [] }}
       onConfirmed={onConfirmed}
       onCancel={onCancel}
       {...overrides}
@@ -140,5 +150,97 @@ describe('SummaryConfirmDialog（T5 补摘要确认弹窗）', () => {
 
     await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
     expect(onConfirmed.mock.calls[0][0].summary).toBe(long);
+  });
+
+  it('段五渲染：人物三态下拉默认新建卡、伏笔两态下拉默认写入', () => {
+    const emptyCards = renderDialog({
+      unmatched: { characters: [UNMATCHED_CHAR], threads: [UNMATCHED_THREAD], cards: [] },
+    });
+    const emptyLinkOpt = (
+      screen.getByLabelText(`未匹配人物：${UNMATCHED_CHAR}`) as HTMLSelectElement
+    ).querySelector('option[value="link"]') as HTMLOptionElement;
+    expect(emptyLinkOpt.disabled).toBe(true); // cards 空时「关联已有卡」选项 disabled
+    emptyCards.unmount();
+
+    renderDialog({
+      unmatched: { characters: [UNMATCHED_CHAR], threads: [UNMATCHED_THREAD], cards: LINK_CARDS },
+    });
+
+    expect(screen.getByText('未匹配处理')).toBeTruthy();
+    const charSelect = screen.getByLabelText(`未匹配人物：${UNMATCHED_CHAR}`) as HTMLSelectElement;
+    expect(Array.from(charSelect.options).map((o) => o.textContent)).toEqual(['新建卡', '关联已有卡', '忽略']);
+    expect(charSelect.selectedOptions[0]?.textContent).toBe('新建卡');
+    const threadSelect = screen.getByLabelText(`未匹配伏笔：${UNMATCHED_THREAD}`) as HTMLSelectElement;
+    expect(Array.from(threadSelect.options).map((o) => o.textContent)).toEqual(['写入（按新伏笔埋入）', '忽略']);
+    expect(threadSelect.selectedOptions[0]?.textContent).toBe('写入（按新伏笔埋入）');
+  });
+
+  it('关联已有卡：出现目标下拉默认第一张卡，buildBody 带 {name, action:"link", characterId}', async () => {
+    const { onConfirmed } = renderDialog({
+      unmatched: { characters: [UNMATCHED_CHAR], threads: [], cards: LINK_CARDS },
+    });
+
+    fireEvent.change(screen.getByLabelText(`未匹配人物：${UNMATCHED_CHAR}`), { target: { value: 'link' } });
+    const target = screen.getByLabelText(`关联目标：${UNMATCHED_CHAR}`) as HTMLSelectElement;
+    expect(Array.from(target.options).map((o) => o.textContent)).toEqual(['测试人物甲', '测试人物乙']);
+    expect(target.value).toBe(LINK_CARDS[0].id);
+
+    fireEvent.click(screen.getByRole('button', { name: '确认落库' }));
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+    expect(onConfirmed.mock.calls[0][0].unmatchedCharacters).toEqual([
+      { name: UNMATCHED_CHAR, action: 'link', characterId: LINK_CARDS[0].id },
+    ]);
+  });
+
+  it('新建卡 + 伏笔写入：buildBody.unmatchedCharacters/unmatchedThreads 逐字', async () => {
+    const { onConfirmed } = renderDialog({
+      unmatched: { characters: [UNMATCHED_CHAR], threads: [UNMATCHED_THREAD], cards: LINK_CARDS },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '确认落库' }));
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+    const body = onConfirmed.mock.calls[0][0];
+    expect(body.unmatchedCharacters).toEqual([{ name: UNMATCHED_CHAR, action: 'create' }]);
+    expect(body.unmatchedThreads).toEqual([{ text: UNMATCHED_THREAD, action: 'write' }]);
+  });
+
+  it('重名预检：create 名命中 cards → 显示预检文案、onConfirmed 零调用', async () => {
+    const { onConfirmed } = renderDialog({
+      unmatched: {
+        characters: [DUP_CARD_NAME],
+        threads: [],
+        cards: [{ id: 'card-c', name: DUP_CARD_NAME }],
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '确认落库' }));
+    expect(screen.getByTestId('summary-dialog-error').textContent).toBe(
+      `人物「${DUP_CARD_NAME}」已在档案中存在，请改选「关联已有卡」`,
+    );
+    expect(onConfirmed).not.toHaveBeenCalled();
+  });
+
+  it('未匹配行在段三/四无 checkbox，include 恒 false 进 payload', async () => {
+    const mixedResult: SummaryGenerateResultDto = {
+      ...result,
+      openThreads: [...result.openThreads, UNMATCHED_THREAD],
+      characterDeltas: [...result.characterDeltas, { name: UNMATCHED_CHAR, stateJson: '{}' }],
+    };
+    const { onConfirmed } = renderDialog({
+      result: mixedResult,
+      unmatched: { characters: [UNMATCHED_CHAR], threads: [UNMATCHED_THREAD], cards: LINK_CARDS },
+    });
+
+    expect(screen.queryByLabelText(`THREADS：${UNMATCHED_THREAD}`)).toBeNull();
+    expect(screen.queryByLabelText(`STATE：${UNMATCHED_CHAR}`)).toBeNull();
+    expect(screen.getByLabelText(`THREADS：${result.openThreads[0]}`)).toBeTruthy();
+    expect(screen.getByLabelText(`STATE：${result.characterDeltas[0].name}`)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '确认落库' }));
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1));
+    const body = onConfirmed.mock.calls[0][0];
+    expect(body.threads).toContainEqual({ text: UNMATCHED_THREAD, include: false });
+    expect(body.states).toContainEqual({ name: UNMATCHED_CHAR, stateJson: '{}', include: false });
+    expect(body.threads).toContainEqual({ text: result.openThreads[0], include: true });
   });
 });
