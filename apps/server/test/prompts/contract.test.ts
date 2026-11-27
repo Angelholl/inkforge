@@ -117,6 +117,20 @@ describe('prompt 渲染契约', () => {
     expect(out.split('\n').filter((l) => l.includes('张三'))).toEqual(['- 张三']);
   });
 
+  it('renderSummarize 名册非排他文案（DEC-2026-1127-03）', () => {
+    const out = renderSummarize({
+      chapterNo: 5,
+      content: DRAFT,
+      roster: ['张三（别名：小三）'],
+      rosterTruncated: false,
+      foreshadowTitles: [],
+      foreshadowTruncated: false,
+    });
+    expect(out).toContain('优先使用');
+    expect(out).not.toContain('一律不写入');
+    expect(out.split('\n').filter((l) => l.includes('张三'))).toEqual(['- 张三（别名：小三）']);
+  });
+
   it('renderRefineReduceTask 含“合并”“预算 20000 字”关键词', () => {
     const out = renderRefineReduceTask(['甲', '乙'], 20000);
     expect(out).toContain('合并');

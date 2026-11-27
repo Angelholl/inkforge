@@ -150,7 +150,7 @@ export function renderSummarize(input: {
   const inject: string[] = [];
   if (input.roster.length > 0) {
     inject.push(
-      `【已知角色名册】（只可使用下列名字，名册外新名字一律不写入 STATE）`,
+      `【已知角色名册】（STATE 优先使用下列名字，括号内别名同样可用；名册遗漏的本章出场人物照常写入 STATE，落库时逐行裁决）`,
       ...input.roster.map((name) => `- ${name}`),
     );
     if (input.rosterTruncated) inject.push(`（名册未列全，超出上限部分未列出）`);

@@ -25,7 +25,9 @@ export const SUMMARIZE_ROSTER_CAP = 50; // 钉值（owner 已拍板 2026-11-27�
 export function collectSummarizeContext(db: Database, bookId: string, chapterNo: number): {
   roster: string[]; rosterTruncated: boolean; foreshadowTitles: string[]; foreshadowTruncated: boolean;
 } {
-  const rosterAll = listActiveCharacters(db, bookId, chapterNo).map((c) => c.name);
+  const rosterAll = listActiveCharacters(db, bookId, chapterNo).map((c) =>
+    c.aliases.length > 0 ? `${c.name}（别名：${c.aliases.join('、')}）` : c.name,
+  );
   const titlesAll = listForeshadowings(db, bookId).map((f) => collapseWhitespace(f.description));
   return {
     roster: rosterAll.slice(0, SUMMARIZE_ROSTER_CAP),

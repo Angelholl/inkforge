@@ -5,10 +5,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config';
 import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
-import { createBook } from '../../src/db/repositories/books';
+import { appendCharacterAlias, createBook, createCharacter } from '../../src/db/repositories/books';
 import { upsertBlueprint } from '../../src/db/repositories/chapters';
 import { getContinuitySnapshot, listForeshadowings, getRecentSummaries } from '../../src/db/repositories/continuity';
-import { runSummarizeStep } from '../../src/pipeline/summarize';
+import { collectSummarizeContext, runSummarizeStep } from '../../src/pipeline/summarize';
 import { createMockProvider } from '../../src/llm/mock';
 
 const config = loadConfig({ STRATA_BASE_URL: 'http://x', STRATA_API_KEY: 'k', STRATA_MODEL: 'm' });
@@ -118,4 +118,21 @@ describe('runSummarizeStep', () => {
       }
     }
   }, 30000);
+});
+
+describe('collectSummarizeContext 名册展平别名', () => {
+  it('有别名人物为 name（别名：…），无别名为裸名，多别名顿号分隔', () => {
+    const book = createBook(db, { title: '名册别名测试书' });
+    const zhao = createCharacter(db, book.id, { name: '赵九' });
+    appendCharacterAlias(db, zhao.id, '小赵');
+    createCharacter(db, book.id, { name: '钱十' });
+    const sun = createCharacter(db, book.id, { name: '孙十一' });
+    appendCharacterAlias(db, sun.id, '甲');
+    appendCharacterAlias(db, sun.id, '乙');
+
+    const { roster } = collectSummarizeContext(db, book.id, 1);
+    expect(roster).toContain('赵九（别名：小赵）');
+    expect(roster).toContain('钱十');
+    expect(roster).toContain('孙十一（别名：甲、乙）');
+  });
 });
