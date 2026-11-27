@@ -7,13 +7,16 @@ import type { LlmProvider } from '../llm/types';
 import type { RunEvent } from '@inkforge/shared';
 import { collapseWhitespace, BRACKET_TAG_RE } from '@inkforge/shared';
 import { upsertChapterSummary, upsertCharacterState, getContinuitySnapshot, resolveForeshadowing, listForeshadowings } from '../db/repositories/continuity';
-import { listActiveCharacters, listCharacters } from '../db/repositories/books';
+import { appendCharacterAlias, createCharacter, getCharacter, getCharacterByName, listActiveCharacters, listCharacters } from '../db/repositories/books';
 
 export interface SummaryPayload {
   summary: string;
   beats: string[];
   openThreads: string[];
   characterDeltas: Array<{ name: string; stateJson: string }>;
+  // 可选：管道路径不带裁决载荷；未匹配行维持跳过
+  unmatchedThreads?: Array<{ text: string; action: 'write' | 'ignore' }>;
+  unmatchedCharacters?: Array<{ name: string; action: 'link' | 'create' | 'ignore'; characterId?: string }>;
 }
 
 export const SUMMARIZE_ROSTER_CAP = 50; // 钉值（owner 已拍板 2026-11-27，测试引常量）
@@ -95,11 +98,14 @@ export function commitSummarize(
       openThreads: payload.openThreads,
     });
 
-    // ② STATE：与该角色前一章 state 浅合并
+    // ② STATE：匹配序=精确同名→aliases→裁决载荷；与该角色前一章 state 浅合并
     const snapshot = getContinuitySnapshot(db, bookId, chapterNo);
     const prevStates = new Map(snapshot.characters.map((c) => [c.name, c.state as Record<string, unknown>]));
-    const characters = listCharacters(db, bookId);
-    const idByName = new Map(characters.map((c) => [c.name, c.id]));
+    const allCards = listCharacters(db, bookId);
+    const idByExact = new Map(allCards.map((c) => [c.name, c.id]));
+    const idByAlias = new Map(allCards.flatMap((c) => c.aliases.map((a) => [a, c.id] as const)));
+    // Map by name，重复 key 后者覆盖
+    const choiceByName = new Map((payload.unmatchedCharacters ?? []).map((c) => [c.name, c]));
     for (const delta of payload.characterDeltas) {
       let incoming: unknown;
       try {
@@ -113,31 +119,60 @@ export function commitSummarize(
         throw new Error(`STATE 行非纯对象: ${delta.stateJson}`);
       }
       const merged = { ...(prevStates.get(delta.name) ?? {}), ...incoming };
-      const charId = idByName.get(delta.name);
-      if (charId) upsertCharacterState(db, { characterId: charId, chapterNo, state: merged });
+      let charId = idByExact.get(delta.name) ?? idByAlias.get(delta.name);
+      if (charId === undefined) {
+        const choice = choiceByName.get(delta.name);
+        if (choice?.action === 'link') {
+          const targetId = choice.characterId;
+          if (!targetId || !getCharacter(db, bookId, targetId)) {
+            throw new Error('关联的人物卡不存在: ' + targetId);
+          }
+          appendCharacterAlias(db, targetId, delta.name);
+          charId = targetId;
+        } else if (choice?.action === 'create') {
+          // 重名撞车回查：命中即关联既有卡，不 INSERT、不写 alias
+          const existing = getCharacterByName(db, bookId, delta.name);
+          charId = existing ? existing.id : createCharacter(db, bookId, { name: delta.name }).id;
+        }
+        // ignore 或无裁决 → 跳过该行
+      }
+      if (charId !== undefined) upsertCharacterState(db, { characterId: charId, chapterNo, state: merged });
     }
 
     // ③ THREADS：与全书同名伏笔比对（D2 含已回收），命中 [planted] 不重复埋
     const open = listForeshadowings(db, bookId);
     const openByDesc = new Map(open.map((f) => [collapseWhitespace(f.description), f]));
+    // Map by 整行原文，重复 key 后者覆盖
+    const actionByText = new Map((payload.unmatchedThreads ?? []).map((t) => [t.text, t.action]));
+    const insertPlanted = (desc: string) => {
+      db.prepare('INSERT INTO foreshadowings(id, book_id, description, planted_ch, status, created_at) VALUES(?,?,?,?,?,?)').run(
+        randomUUID(),
+        bookId,
+        desc,
+        chapterNo,
+        'open',
+        new Date().toISOString(),
+      );
+    };
     for (const raw of payload.openThreads) {
       const tagMatch = BRACKET_TAG_RE.exec(raw);
-      if (!tagMatch) continue;
+      if (!tagMatch) {
+        // 无标签行：仅 write 裁决才埋（desc 取整行原文）
+        if (actionByText.get(raw) === 'write') insertPlanted(collapseWhitespace(raw));
+        continue;
+      }
       const [, tag, desc] = tagMatch;
       const descNorm = collapseWhitespace(desc);
       const hit = openByDesc.get(descNorm);
       if (hit && (tag === 'resolved' || tag === 'advanced')) {
         resolveForeshadowing(db, hit.id, chapterNo, tag);
       } else if (!hit && tag === 'planted') {
-        db.prepare('INSERT INTO foreshadowings(id, book_id, description, planted_ch, status, created_at) VALUES(?,?,?,?,?,?)').run(
-          randomUUID(),
-          bookId,
-          descNorm,
-          chapterNo,
-          'open',
-          new Date().toISOString(),
-        );
+        insertPlanted(descNorm);
+      } else if (!hit && actionByText.get(raw) === 'write') {
+        // 带标签但 desc 未命中且标签非 planted：按裁决埋（desc 取 collapseWhitespace(desc)）
+        insertPlanted(descNorm);
       }
+      // ignore 或无裁决（管道路径）→ 跳过
     }
   })();
 }

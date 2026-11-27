@@ -6,7 +6,7 @@ import type { RunWithStepsDto } from '@inkforge/shared';
 import { loadConfig } from '../../src/config';
 import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
-import { appendCharacterAlias, createBook, createCharacter, listCharacters } from '../../src/db/repositories/books';
+import { appendCharacterAlias, createBook, createCharacter, getCharacterByName, listCharacters } from '../../src/db/repositories/books';
 import { upsertBlueprint } from '../../src/db/repositories/chapters';
 import { getContinuitySnapshot, getRecentSummaries, listForeshadowings, upsertForeshadowing } from '../../src/db/repositories/continuity';
 import { SUMMARIZE_ROSTER_CAP, collectSummarizeContext, commitSummarize, generateSummarize, runSummarizeStep, SummarizeParseError } from '../../src/pipeline/summarize';
@@ -334,4 +334,137 @@ STATE:
       }
     }
   }, 90000);
+
+  // C3：commitSummarize 匹配顺序 / 裁决落库 / 建档 / alias 写入 / 冲突回查
+  it('alias 命中自动匹配：delta 用别名写库到本人卡，且不写 alias', () => {
+    const { db, bookId } = fresh();
+    const card = listCharacters(db, bookId)[0];
+    appendCharacterAlias(db, card.id, '张三别名');
+    commitSummarize(db, bookId, 1, {
+      summary: '别名匹配摘要',
+      beats: [],
+      openThreads: [],
+      characterDeltas: [{ name: '张三别名', stateJson: '{"位置":"庭院"}' }],
+    });
+    expect(getContinuitySnapshot(db, bookId, 2).characters).toEqual([{ name: '张三', state: { 位置: '庭院' } }]);
+    expect(listCharacters(db, bookId)[0].aliases).toEqual(['张三别名']);
+  });
+
+  it('精确同名优先于他人 alias', () => {
+    const { db, bookId } = fresh();
+    const other = createCharacter(db, bookId, { name: '乙' });
+    appendCharacterAlias(db, other.id, '张三');
+    commitSummarize(db, bookId, 1, {
+      summary: '精确优先摘要',
+      beats: [],
+      openThreads: [],
+      characterDeltas: [{ name: '张三', stateJson: '{"位置":"精确卡"}' }],
+    });
+    expect(getContinuitySnapshot(db, bookId, 2).characters).toEqual([{ name: '张三', state: { 位置: '精确卡' } }]);
+    expect(listCharacters(db, bookId).find((c) => c.id === other.id)?.aliases).toEqual(['张三']);
+  });
+
+  it('link 裁决：状态合并进目标卡 + alias 追加', () => {
+    const { db, bookId } = fresh();
+    const target = createCharacter(db, bookId, { name: '目标卡' });
+    commitSummarize(db, bookId, 1, {
+      summary: 'link 裁决摘要',
+      beats: [],
+      openThreads: [],
+      characterDeltas: [{ name: '新称谓', stateJson: '{"位置":"目标处"}' }],
+      unmatchedCharacters: [{ name: '新称谓', action: 'link', characterId: target.id }],
+    });
+    expect(getContinuitySnapshot(db, bookId, 2).characters).toEqual([{ name: '目标卡', state: { 位置: '目标处' } }]);
+    expect(listCharacters(db, bookId).find((c) => c.id === target.id)?.aliases).toEqual(['新称谓']);
+  });
+
+  it('create 裁决：建档 name-only（baseSetting={}）+ 状态落新卡', () => {
+    const { db, bookId } = fresh();
+    commitSummarize(db, bookId, 1, {
+      summary: 'create 裁决摘要',
+      beats: [],
+      openThreads: [],
+      characterDeltas: [{ name: '新建档', stateJson: '{"位置":"新处"}' }],
+      unmatchedCharacters: [{ name: '新建档', action: 'create' }],
+    });
+    const created = getCharacterByName(db, bookId, '新建档');
+    expect(created?.baseSetting).toBe('{}');
+    expect(getContinuitySnapshot(db, bookId, 2).characters).toEqual([{ name: '新建档', state: { 位置: '新处' } }]);
+  });
+
+  it('重名撞车回查：create 裁决遇同名既有卡 → 不炸事务、关联既有卡', () => {
+    const { db, bookId } = fresh();
+    const existing = createCharacter(db, bookId, { name: '撞车名' });
+    expect(() =>
+      commitSummarize(db, bookId, 1, {
+        summary: '撞车摘要',
+        beats: [],
+        openThreads: [],
+        characterDeltas: [{ name: '撞车名', stateJson: '{"位置":"既有"}' }],
+        unmatchedCharacters: [{ name: '撞车名', action: 'create' }],
+      }),
+    ).not.toThrow();
+    const rows = db.prepare('SELECT id, name FROM characters WHERE book_id = ? AND name = ?').all(bookId, '撞车名') as Array<{ id: string; name: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(existing.id);
+    expect(getContinuitySnapshot(db, bookId, 2).characters).toEqual([{ name: '撞车名', state: { 位置: '既有' } }]);
+    expect(listCharacters(db, bookId).find((c) => c.id === existing.id)?.aliases).toEqual([]);
+  });
+
+  it('未匹配伏笔 write 裁决：新建 planted 条目（planted_ch=本章，status=open）', () => {
+    const { db, bookId } = fresh();
+    const before = listForeshadowings(db, bookId).length;
+    commitSummarize(db, bookId, 1, {
+      summary: '伏笔 write 摘要',
+      beats: [],
+      openThreads: ['未匹配独立行'],
+      characterDeltas: [],
+      unmatchedThreads: [{ text: '未匹配独立行', action: 'write' }],
+    });
+    const planted = listForeshadowings(db, bookId).find((f) => f.description === '未匹配独立行');
+    expect(listForeshadowings(db, bookId)).toHaveLength(before + 1);
+    expect(planted?.plantedCh).toBe(1);
+    expect(planted?.status).toBe('open');
+  });
+
+  it('未匹配伏笔 ignore 裁决/无裁决：零写入', () => {
+    const { db, bookId } = fresh();
+    const before = listForeshadowings(db, bookId).length;
+    commitSummarize(db, bookId, 1, {
+      summary: '伏笔 ignore 摘要',
+      beats: [],
+      openThreads: ['被忽略无标签行', '无裁决无标签行', '[resolved] 无裁决标签行'],
+      characterDeltas: [],
+      unmatchedThreads: [{ text: '被忽略无标签行', action: 'ignore' }],
+    });
+    expect(listForeshadowings(db, bookId)).toHaveLength(before);
+  });
+
+  it('link 指向不存在的 characterId → 抛错四段零写入回滚', () => {
+    const { db, bookId } = fresh();
+    const before = tableCounts(db);
+    expect(() =>
+      commitSummarize(db, bookId, 1, {
+        summary: '不该落库',
+        beats: [],
+        openThreads: ['[planted] 不该埋的伏笔'],
+        characterDeltas: [{ name: '悬空别名', stateJson: '{"位置":"不该写"}' }],
+        unmatchedCharacters: [{ name: '悬空别名', action: 'link', characterId: 'no-such-card' }],
+      }),
+    ).toThrow('关联的人物卡不存在: no-such-card');
+    expect(tableCounts(db)).toEqual(before);
+  });
+
+  it('管道路径（无裁决载荷）：未匹配行维持跳过', () => {
+    const { db, bookId } = fresh();
+    const before = listForeshadowings(db, bookId).length;
+    commitSummarize(db, bookId, 1, {
+      summary: '管道路径摘要',
+      beats: [],
+      openThreads: ['无标签未匹配行', '[resolved] 未命中伏笔'],
+      characterDeltas: [{ name: '陌生角色', stateJson: '{"位置":"跳过"}' }],
+    });
+    expect(listForeshadowings(db, bookId)).toHaveLength(before);
+    expect(getContinuitySnapshot(db, bookId, 2).characters).toEqual([]);
+  });
 });

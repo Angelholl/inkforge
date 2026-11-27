@@ -1551,11 +1551,17 @@ ${repairPrompt(first.errors)}`))).text,
     const activeRun = db.prepare("SELECT id FROM runs WHERE book_id = ? AND status IN ('queued','running')").get(bookId) as { id: string } | undefined;
     if (activeRun) return reply.code(409).send({ error: 'book has active run' });
     try {
+      const unmatchedThreadTexts = new Set((body.unmatchedThreads ?? []).map((t) => t.text));
+      const unmatchedCharacterNames = new Set((body.unmatchedCharacters ?? []).map((c) => c.name));
       commitSummarize(db, bookId, Number(chapterNo), {
         summary: body.summary,
         beats: body.beats,
-        openThreads: body.threads.filter((t) => t.include).map((t) => t.text),
-        characterDeltas: body.states.filter((s) => s.include).map((s) => ({ name: s.name, stateJson: s.stateJson })),
+        openThreads: body.threads.filter((t) => t.include || unmatchedThreadTexts.has(t.text)).map((t) => t.text),
+        characterDeltas: body.states
+          .filter((s) => s.include || unmatchedCharacterNames.has(s.name))
+          .map((s) => ({ name: s.name, stateJson: s.stateJson })),
+        unmatchedThreads: body.unmatchedThreads,
+        unmatchedCharacters: body.unmatchedCharacters,
       });
       reply.send({ ok: true });
     } catch (e) {

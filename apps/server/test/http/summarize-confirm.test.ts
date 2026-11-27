@@ -241,4 +241,57 @@ describe('POST /api/books/:bookId/chapters/:chapterNo/summarize + /commit', () =
       await app2.close();
     }
   });
+
+  // C3：未匹配裁决的 HTTP 契约（zod refine / 全链落库 / 悬空 characterId）
+  it('link 缺 characterId → 400（zod refine）', async () => {
+    const g = await generate();
+    const r = await app.inject({
+      method: 'POST',
+      url: commitUrl(),
+      payload: { ...bodyFrom(g), unmatchedCharacters: [{ name: '待关联', action: 'link' }] },
+    });
+    expect(r.statusCode).toBe(400);
+    expect((r.json() as { error: string }).error).toContain('link 裁决必须带 characterId');
+  });
+
+  it('HTTP 全链：unmatched create+thread write 载荷 → 200 且库中建档+新伏笔', async () => {
+    const g = await generate();
+    const charName = '新增人物';
+    const threadText = '未匹配独立行';
+    const r = await app.inject({
+      method: 'POST',
+      url: commitUrl(),
+      payload: {
+        ...bodyFrom(g),
+        threads: [...g.openThreads.map((text) => ({ text, include: true })), { text: threadText, include: false }],
+        states: [
+          ...g.characterDeltas.map((d) => ({ ...d, include: true })),
+          { name: charName, stateJson: '{"位置":"新处"}', include: false },
+        ],
+        unmatchedCharacters: [{ name: charName, action: 'create' }],
+        unmatchedThreads: [{ text: threadText, action: 'write' }],
+      },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(count('SELECT COUNT(*) AS n FROM characters WHERE book_id = ? AND name = ?', bookId, charName)).toBe(1);
+    expect(count('SELECT COUNT(*) AS n FROM foreshadowings WHERE book_id = ? AND description = ?', bookId, threadText)).toBe(1);
+  });
+
+  it('characterId 不存在 → 400 可读错误', async () => {
+    const g = await generate();
+    const r = await app.inject({
+      method: 'POST',
+      url: commitUrl(),
+      payload: {
+        ...bodyFrom(g),
+        states: [
+          ...g.characterDeltas.map((d) => ({ ...d, include: true })),
+          { name: '悬空关联', stateJson: '{"位置":"待定"}', include: false },
+        ],
+        unmatchedCharacters: [{ name: '悬空关联', action: 'link', characterId: 'no-such-card' }],
+      },
+    });
+    expect(r.statusCode).toBe(400);
+    expect((r.json() as { error: string }).error).toContain('关联的人物卡不存在');
+  });
 });

@@ -442,7 +442,20 @@ export const summaryCommitSchema = z.object({
       }),
     )
     .default([]),
-});
+  unmatchedThreads: z.array(z.object({ text: z.string().min(1), action: z.enum(['write', 'ignore']) })).default([]),
+  unmatchedCharacters: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        action: z.enum(['link', 'create', 'ignore']),
+        characterId: z.string().min(1).optional(),
+      }),
+    )
+    .default([]),
+}).refine(
+  (b) => b.unmatchedCharacters.every((e) => e.action !== 'link' || e.characterId !== undefined),
+  'link 裁决必须带 characterId',
+);
 
 // T1（D4 设定集单次精炼）：入参仅正文，校验非零长。
 export const settingsImportRefineSchema = z.object({
