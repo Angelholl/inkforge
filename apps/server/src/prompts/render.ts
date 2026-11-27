@@ -139,11 +139,34 @@ export function renderTaskSummaryBlock(input: { mustHaveBeats: BeatRequirement[]
 }
 
 /** summarize 步指令：四段输出协议。 */
-export function renderSummarize(input: { chapterNo: number; content: string }): string {
+export function renderSummarize(input: {
+  chapterNo: number;
+  content: string;
+  roster: string[];
+  rosterTruncated: boolean;
+  foreshadowTitles: string[];
+  foreshadowTruncated: boolean;
+}): string {
+  const inject: string[] = [];
+  if (input.roster.length > 0) {
+    inject.push(
+      `【已知角色名册】（只可使用下列名字，名册外新名字一律不写入 STATE）`,
+      ...input.roster.map((name) => `- ${name}`),
+    );
+    if (input.rosterTruncated) inject.push(`（名册未列全，超出上限部分未列出）`);
+  }
+  if (input.foreshadowTitles.length > 0) {
+    inject.push(
+      `【既有伏笔清单】（[advanced]/[resolved] 只可指向下列条目）`,
+      ...input.foreshadowTitles.map((title) => `- ${title}`),
+    );
+    if (input.foreshadowTruncated) inject.push(`（伏笔未列全，超出上限部分未列出）`);
+  }
   return [
     `【待摘要正文开始】`,
     input.content,
     `【待摘要正文结束】`,
+    ...inject,
     `【输出格式】严格遵循：`,
     `SUMMARY: <不超过 120 字的本章梗概>`,
     `BEATS:`,

@@ -41,7 +41,7 @@ import * as distillJobRepo from '../style/distill-job';
 import { pickFewShotAndHeldOut } from '../style/sample';
 import type { ChapterBlueprint, DistillStyleDraftDto, OutlineCardDto, OutlineTreeDto, StyleAnalysisDto, SummaryCommitBody, SummaryGenerateResultDto } from '@inkforge/shared';
 import { countChars, FULL_TEXT_REWRITE_MAX_CHARS, mergeLegacyDimTexts, parseLandingMandate } from '@inkforge/shared';
-import { commitSummarize, generateSummarize } from '../pipeline/summarize';
+import { collectSummarizeContext, commitSummarize, generateSummarize } from '../pipeline/summarize';
 import { refineDescriptionWithLlm } from '../refine';
 import { configFilePath, readScoreThreshold, readSettingsFile, writeScoreThreshold, writeSettingsFile } from '../settings';
 import { createRoleProvider, pickProviderForRole } from '../llm/factory';
@@ -1520,9 +1520,15 @@ ${repairPrompt(first.errors)}`))).text,
     abortOnDisconnect(reply, ac);
     const provider = state.summarizerProvider ?? createRoleProvider(config, 'summarizer');
     try {
+      const context = collectSummarizeContext(db, bookId, Number(chapterNo));
       const payload = await generateSummarize(
         { provider, config },
-        { chapterNo: Number(chapterNo), finalContent: version.content, signal: ac.signal },
+        {
+          chapterNo: Number(chapterNo),
+          finalContent: version.content,
+          ...context,
+          signal: ac.signal,
+        },
       );
       const result: SummaryGenerateResultDto = { ...payload, baseVersionId: ch.currentVersionId };
       reply.send(result);

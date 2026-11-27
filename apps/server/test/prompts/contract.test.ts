@@ -86,9 +86,35 @@ describe('prompt 渲染契约', () => {
   });
 
   it('renderSummarize：四个格式标记齐备', () => {
-    const out = renderSummarize({ chapterNo: 5, content: DRAFT });
+    const out = renderSummarize({
+      chapterNo: 5,
+      content: DRAFT,
+      roster: [],
+      rosterTruncated: false,
+      foreshadowTitles: [],
+      foreshadowTruncated: false,
+    });
     for (const marker of ['SUMMARY:', 'BEATS:', 'THREADS:', 'STATE:']) expect(out).toContain(marker);
     expect(out).toContain(DRAFT.slice(0, 10));
+    expect(out).not.toContain('【已知角色名册】');
+  });
+
+  it('renderSummarize 注入名册与伏笔标题行及截断注记', () => {
+    const out = renderSummarize({
+      chapterNo: 5,
+      content: DRAFT,
+      roster: ['张三', '李四'],
+      rosterTruncated: true,
+      foreshadowTitles: ['密信落款人身份'],
+      foreshadowTruncated: false,
+    });
+    expect(out).toContain('- 张三');
+    expect(out).toContain('- 李四');
+    expect(out).toContain('（名册未列全，超出上限部分未列出）');
+    expect(out).toContain('- 密信落款人身份');
+    expect(out).not.toContain('（伏笔未列全，超出上限部分未列出）');
+    expect(out).not.toContain('baseSetting');
+    expect(out.split('\n').filter((l) => l.includes('张三'))).toEqual(['- 张三']);
   });
 
   it('renderRefineReduceTask 含“合并”“预算 20000 字”关键词', () => {

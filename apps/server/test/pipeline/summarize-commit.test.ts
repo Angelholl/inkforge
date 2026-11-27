@@ -8,8 +8,8 @@ import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
 import { appendCharacterAlias, createBook, createCharacter, listCharacters } from '../../src/db/repositories/books';
 import { upsertBlueprint } from '../../src/db/repositories/chapters';
-import { getContinuitySnapshot, getRecentSummaries, listForeshadowings } from '../../src/db/repositories/continuity';
-import { commitSummarize, generateSummarize, runSummarizeStep, SummarizeParseError } from '../../src/pipeline/summarize';
+import { getContinuitySnapshot, getRecentSummaries, listForeshadowings, upsertForeshadowing } from '../../src/db/repositories/continuity';
+import { SUMMARIZE_ROSTER_CAP, collectSummarizeContext, commitSummarize, generateSummarize, runSummarizeStep, SummarizeParseError } from '../../src/pipeline/summarize';
 import { createMockProvider } from '../../src/llm/mock';
 
 const config = loadConfig({ STRATA_BASE_URL: 'http://x', STRATA_API_KEY: 'k', STRATA_MODEL: 'm' });
@@ -81,6 +81,28 @@ describe('summarize 拆分与 D2 伏笔复活', () => {
     expect(listCharacters(db, bookId)[0].aliases).toEqual(['阿三', '三哥']);
   });
 
+  it('collectSummarizeContext 截断：恰好 CAP 不注记、CAP+1 双清单注记', () => {
+    const { db } = fresh();
+    const bookId = createBook(db, { title: '名册截断测试书' }).id;
+    for (let i = 0; i < SUMMARIZE_ROSTER_CAP; i++) {
+      createCharacter(db, bookId, { name: `名册角色${i}` });
+      upsertForeshadowing(db, { bookId, description: `既有伏笔${i}`, plantedCh: 1 });
+    }
+    const atCap = collectSummarizeContext(db, bookId, 1);
+    expect(atCap.roster.length).toBe(SUMMARIZE_ROSTER_CAP);
+    expect(atCap.rosterTruncated).toBe(false);
+    expect(atCap.foreshadowTitles.length).toBe(SUMMARIZE_ROSTER_CAP);
+    expect(atCap.foreshadowTruncated).toBe(false);
+
+    createCharacter(db, bookId, { name: '额外名册角色' });
+    upsertForeshadowing(db, { bookId, description: '额外伏笔', plantedCh: 1 });
+    const overCap = collectSummarizeContext(db, bookId, 1);
+    expect(overCap.rosterTruncated).toBe(true);
+    expect(overCap.foreshadowTruncated).toBe(true);
+    expect(overCap.roster.length).toBe(SUMMARIZE_ROSTER_CAP);
+    expect(overCap.foreshadowTitles.length).toBe(SUMMARIZE_ROSTER_CAP);
+  });
+
   it('现状：重摘要旧章复活已回收伏笔（D2 修复前快照）', async () => {
     const { db, bookId, chapterId } = fresh();
     db.prepare('INSERT INTO foreshadowings(id, book_id, description, planted_ch, status, created_at) VALUES(?,?,?,?,?,?)').run(
@@ -98,7 +120,14 @@ describe('summarize 拆分与 D2 伏笔复活', () => {
     const before = tableCounts(db);
     const payload = await generateSummarize(
       { provider: createMockProvider({ summarize: { text: PIN_TEXT } }), config },
-      { chapterNo: 1, finalContent: '正文' },
+      {
+        chapterNo: 1,
+        finalContent: '正文',
+        roster: [],
+        rosterTruncated: false,
+        foreshadowTitles: [],
+        foreshadowTruncated: false,
+      },
     );
     expect(tableCounts(db)).toEqual(before);
     expect(payload.summary).toBe('重摘要旧章，密信落款人身份仍被埋下。');
@@ -165,7 +194,14 @@ describe('summarize 拆分与 D2 伏笔复活', () => {
     await expect(
       generateSummarize(
         { provider: createMockProvider({ summarize: { text: 'BEATS:\n- x' } }), config },
-        { chapterNo: 1, finalContent: '正文' },
+        {
+          chapterNo: 1,
+          finalContent: '正文',
+          roster: [],
+          rosterTruncated: false,
+          foreshadowTitles: [],
+          foreshadowTruncated: false,
+        },
       ),
     ).rejects.toBeInstanceOf(SummarizeParseError);
   });

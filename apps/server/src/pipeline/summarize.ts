@@ -7,13 +7,29 @@ import type { LlmProvider } from '../llm/types';
 import type { RunEvent } from '@inkforge/shared';
 import { collapseWhitespace, BRACKET_TAG_RE } from '@inkforge/shared';
 import { upsertChapterSummary, upsertCharacterState, getContinuitySnapshot, resolveForeshadowing, listForeshadowings } from '../db/repositories/continuity';
-import { listCharacters } from '../db/repositories/books';
+import { listActiveCharacters, listCharacters } from '../db/repositories/books';
 
 export interface SummaryPayload {
   summary: string;
   beats: string[];
   openThreads: string[];
   characterDeltas: Array<{ name: string; stateJson: string }>;
+}
+
+export const SUMMARIZE_ROSTER_CAP = 50; // 钉值（owner 已拍板 2026-11-27，测试引常量）
+
+/** generate 侧只读上下文：名册取写章在场口径，伏笔取 collapseWhitespace(description)，两清单各自独立截断。 */
+export function collectSummarizeContext(db: Database, bookId: string, chapterNo: number): {
+  roster: string[]; rosterTruncated: boolean; foreshadowTitles: string[]; foreshadowTruncated: boolean;
+} {
+  const rosterAll = listActiveCharacters(db, bookId, chapterNo).map((c) => c.name);
+  const titlesAll = listForeshadowings(db, bookId).map((f) => collapseWhitespace(f.description));
+  return {
+    roster: rosterAll.slice(0, SUMMARIZE_ROSTER_CAP),
+    rosterTruncated: rosterAll.length > SUMMARIZE_ROSTER_CAP,
+    foreshadowTitles: titlesAll.slice(0, SUMMARIZE_ROSTER_CAP),
+    foreshadowTruncated: titlesAll.length > SUMMARIZE_ROSTER_CAP,
+  };
 }
 
 export class SummarizeParseError extends Error {
@@ -25,12 +41,27 @@ export class SummarizeParseError extends Error {
 /** LLM 生成 + 解析，零写库。 */
 export async function generateSummarize(
   deps: { provider: LlmProvider; config: AppConfig },
-  input: { chapterNo: number; finalContent: string; signal?: AbortSignal },
+  input: {
+    chapterNo: number;
+    finalContent: string;
+    roster: string[];
+    rosterTruncated: boolean;
+    foreshadowTitles: string[];
+    foreshadowTruncated: boolean;
+    signal?: AbortSignal;
+  },
 ): Promise<SummaryPayload> {
   const { provider, config } = deps;
   const res = await provider.complete({
     system: '你是小说连续性管理员。严格按输出格式作答。',
-    user: renderSummarize({ chapterNo: input.chapterNo, content: input.finalContent }),
+    user: renderSummarize({
+      chapterNo: input.chapterNo,
+      content: input.finalContent,
+      roster: input.roster,
+      rosterTruncated: input.rosterTruncated,
+      foreshadowTitles: input.foreshadowTitles,
+      foreshadowTruncated: input.foreshadowTruncated,
+    }),
     temperature: 0.3,
     topP: 0.9,
     maxOutputTokens: config.providers.local.maxOutput,
@@ -117,9 +148,15 @@ export async function runSummarizeStep(
   input: { runId: string; chapterId: string; chapterNo: number; bookId: string; finalContent: string; signal?: AbortSignal },
 ): Promise<void> {
   const { db, provider, config } = deps;
+  const context = collectSummarizeContext(db, input.bookId, input.chapterNo);
   const payload = await generateSummarize(
     { provider, config },
-    { chapterNo: input.chapterNo, finalContent: input.finalContent, signal: input.signal },
+    {
+      chapterNo: input.chapterNo,
+      finalContent: input.finalContent,
+      ...context,
+      signal: input.signal,
+    },
   );
   commitSummarize(db, input.bookId, input.chapterNo, payload);
 }
