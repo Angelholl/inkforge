@@ -831,3 +831,21 @@
 - R5=主模型直执：dev 快照落盘 apps/server/data/audit-baseline-dev.json（不入库），6 条口径与台账一致（vitest 系 3/tinypool critical 2/minimatch 1）。
 
 **收口硬序（主审亲跑，最终树）：** eslint 零错 → shared 22 / server 681 / web 222 全绿只增不减 → typecheck ×3 零错 → audit --prod no known vulnerabilities=基线持平；dev 快照口径与今晨台账一致（lockfile 本批未动）。
+
+## refine 容错批执行留痕（DEC-2026-1127-01，单卡，2026-11-27）
+
+**Owner 实测两反馈**：①设定集精炼 502 `refine-map-empty: segment 5/14`；②世界观（含规则）40475 字「无法直接导入」。
+
+**根因四阶段**：输入=降噪全文 40475 字（与屏显逐字对上，源文件系 GBK 码的阿美.txt），切 14 段后 seg1/3/5/7/9/11 全为「（一）…（六）」三字标记行微段；活体复现失败点漂移（owner=seg5 空、主审 run1=seg3 空、run2=seg2 provider 异常顶满 180s）→ 根因=map-reduce 对单段空返回/异常零容错（refine.ts:80-84），anthropic 层只重试 HTTP 429/5xx。点位2 代码层面**无拦截**：红字系设计内警示，直接导入可行、代价=生成时世界观槽 head 截前 20000（assembler keep='head'）——如实答复不改代码。
+
+**Owner 拍板 A 案三层**（AskUserQuestion 推荐项即选；单文件+测试非重大架构故免 critic）：微段(<50字)并入相邻段 / 单段失败或空重试一次 / 仍不行保留该段原文继续；abort 不吞、reduce 判定不动、DTO 不加字段。既有 refine.test.ts 两枚即时 throw 例按新行为更新，基线只增不减。
+
+**卡面=docs/design/card-refine-resilience-1127.md**，派 hy4（窗口至 2026-12-02，gate 过闸；wrapper 自仓库根起跑=R1 事故教训），防过滤器条款已上卡面。执行留痕续写本行下方。
+
+## DEC-2026-1127-02 [OWNER] 补摘要未匹配批量确认+per-book alias：四反馈落地与 D1 条款修订（2026-11-27）
+
+**背景：** owner 四反馈（未匹配不得静默忽略/改名人物三态裁决/批量确认环节/确认写入同步建档）+四拍板（Q1 prompt 注入名册不模糊匹配、Q2 现弹窗加第五段、Q3 新建卡 name-only+重名预检+事务防炸、Q4 迁移 0016 aliases+匹配顺序精确→alias→裁决）。修订 DEC-2026-1126-10 D1 两条未匹配钉死文案与「每行可勾选」条款（匹配行保留勾选剔除、未匹配行归第五段裁决），自由文本编辑禁令维持。
+
+**拍板：** 三决策点全数拍板：①SUMMARIZE_ROSTER_CAP=50；②无标签 THREADS 行进第五段；③第五段默认处置=写入/建档（推翻原推荐「忽略」，幻觉名批量建档风险由用户逐条改判与前端重名预检承担）。decision-critic [HIGH_RISK_OBJECTION] 采纳：commit 前端重名预检+事务内禁裸 INSERT（撞后回查关联既有卡）。计划真值=docs/plans/2026-11-27-summary-unmatched-confirm.md（六卡 C0-C5，依赖序 T0→{T1,T2,T4}、T1+T2→T3、T4→T5，C1 迁移卡独占串行窗）。执行通道=hy4 限时窗（至 2026-12-02）按 dispatch-discipline 派卡。
+
+verify: docs-only 归档无执行步骤；计划自审五查 code-planner 已过（三处含混修正留痕在计划文内）。Refs: DEC-2026-1127-02
