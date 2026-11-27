@@ -842,6 +842,12 @@
 
 **卡面=docs/design/card-refine-resilience-1127.md**，派 hy4（窗口至 2026-12-02，gate 过闸；wrapper 自仓库根起跑=R1 事故教训），防过滤器条款已上卡面。执行留痕续写本行下方。
 
+- hy4 执行卡=验收通过：commit 773f23f（8.4 分钟单轮无轮转）；diff 对卡面五条钉值逐条全中；第三文件 settings-import.test.ts 系既有断言固化旧语义的必要同步（条数不变），与 commit 正文声明属实。
+- 验证链主审亲跑：eslint 零错 → 定向 36/36 → 全量 shared22/web222/server690（server 681→+9=本卡新增，只增不减）→ typecheck ×3 → audit --prod 基线持平；红绿抽验实证（修复前代码跑新测试=10 红/9 绿，与执行者自报吻合）。
+- 双轴评审（base=750adaa）：Standards 无硬违规，Duplicated Code 一枚值得跟进→**backlog**（map 循环两处同形截断块抽 pushCapped，勿捆绑本卡）；Spec 五钉值全中，reduce 前后 abort 检查略超第 2 条字面但与「不得吞」意图一致。
+- 冒烟=真实件重放（L-20261124-01）：HTTP 200、实测 **23 分钟**、desc_len=2851、truncated=false、首尾闭合非截断；两次独立全跑皆绿。**观测项**：GUI 走此文件精炼耗时同量级，webview 客户端 fetch 超时若短于此会先掐线（Node undici 默认 300s 头墙实证）→归 owner 实测点位；掐线则补客户端长保守护卡。
+- 搭载说明：本节曾被并行会话 a828c82 整文件 add 随 DEC-1127-02 入库（内容完好顺序正确）；本批 push 含其 docs 提交一并上远程。
+
 ## DEC-2026-1127-02 [OWNER] 补摘要未匹配批量确认+per-book alias：四反馈落地与 D1 条款修订（2026-11-27）
 
 **背景：** owner 四反馈（未匹配不得静默忽略/改名人物三态裁决/批量确认环节/确认写入同步建档）+四拍板（Q1 prompt 注入名册不模糊匹配、Q2 现弹窗加第五段、Q3 新建卡 name-only+重名预检+事务防炸、Q4 迁移 0016 aliases+匹配顺序精确→alias→裁决）。修订 DEC-2026-1126-10 D1 两条未匹配钉死文案与「每行可勾选」条款（匹配行保留勾选剔除、未匹配行归第五段裁决），自由文本编辑禁令维持。
