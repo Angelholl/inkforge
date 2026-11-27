@@ -30,7 +30,7 @@ describe('migrate', () => {
     const dir = tmpDir();
     const db = openDb(path.join(dir, 'inkforge.db'));
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(15);
+    expect(db.pragma('user_version', { simple: true })).toBe(16);
     const indexes = (
       db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?)").all(
         'idx_chapter_versions_chapter',
@@ -85,9 +85,10 @@ describe('migrate', () => {
     const snapshot = () =>
       Object.fromEntries(Object.entries(tables).map(([t, sql]) => [t, db.prepare(sql).all()]));
     const before = snapshot();
+    db.exec('ALTER TABLE characters DROP COLUMN aliases');
     db.pragma('user_version = 2');
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(15);
+    expect(db.pragma('user_version', { simple: true })).toBe(16);
     expect(snapshot()).toEqual(before);
     expect(db.prepare("SELECT name FROM pragma_table_info('books') WHERE name = 'outline'").all()).toHaveLength(1);
 
@@ -99,7 +100,7 @@ describe('migrate', () => {
     const dir = tmpDir();
     const db = openDb(path.join(dir, 'inkforge.db'));
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(15);
+    expect(db.pragma('user_version', { simple: true })).toBe(16);
     const newTables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('outline_nodes','imitation_profiles')").all() as Array<{ name: string }>)
       .map((r) => r.name)
       .sort();
@@ -133,10 +134,11 @@ describe('migrate', () => {
     db.prepare(
       "INSERT INTO runs(id, book_id, mode, chapter_scope_json, created_at) VALUES('r5','b5','generate','{\"from\":1,\"to\":1}',?)",
     ).run(now);
+    db.exec('ALTER TABLE characters DROP COLUMN aliases');
     const before = db.prepare('SELECT id, book_id, mode, chapter_scope_json, created_at FROM runs ORDER BY id').all();
     db.pragma('user_version = 4');
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(15);
+    expect(db.pragma('user_version', { simple: true })).toBe(16);
     const after = db.prepare('SELECT id, book_id, mode, chapter_scope_json, created_at FROM runs ORDER BY id').all();
     expect(after).toEqual(before);
     expect((db.prepare("SELECT kind FROM runs WHERE id = 'r5'").get() as { kind: string }).kind).toBe('pipeline');
@@ -157,11 +159,12 @@ describe('migrate', () => {
     db.exec('DROP TABLE IF EXISTS spectrum_profiles');
     db.exec('ALTER TABLE books DROP COLUMN spectrum_profile_id');
     db.exec('ALTER TABLE books DROP COLUMN landing_mandate_json');
+    db.exec('ALTER TABLE characters DROP COLUMN aliases');
     db.exec('ALTER TABLE books DROP COLUMN gen_gate_json');
     db.prepare("INSERT INTO books(id, title, style_profile_id, created_at, updated_at) VALUES('b10','书十', 'p-legacy', ?, ?)").run(now, now);
     db.pragma('user_version = 9');
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(15);
+    expect(db.pragma('user_version', { simple: true })).toBe(16);
     const bound = db.prepare("SELECT profile_id, is_primary, dims_json, weights_json FROM book_style_profiles WHERE book_id = 'b10'").get() as {
       profile_id: string;
       is_primary: number;
@@ -196,12 +199,13 @@ describe('migrate', () => {
     db.exec('DROP TABLE IF EXISTS spectrum_profiles');
     db.exec('ALTER TABLE books DROP COLUMN spectrum_profile_id');
     db.exec('ALTER TABLE books DROP COLUMN landing_mandate_json');
+    db.exec('ALTER TABLE characters DROP COLUMN aliases');
     db.exec('ALTER TABLE books DROP COLUMN gen_gate_json');
     db.prepare("INSERT INTO books(id, title, style_profile_id, created_at, updated_at) VALUES('b11','书十一','p-old',?,?)").run(now, now);
     db.prepare("INSERT INTO book_style_profiles(book_id, profile_id, is_primary, dims_json, created_at) VALUES('b11','p-old',1,'{}',?)").run(now);
     db.pragma('user_version = 10');
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(15);
+    expect(db.pragma('user_version', { simple: true })).toBe(16);
     expect(db.prepare("SELECT name FROM pragma_table_info('book_style_profiles') WHERE name = 'weights_json'").all()).toHaveLength(1);
     const row = db.prepare("SELECT weights_json FROM book_style_profiles WHERE book_id = 'b11'").get() as { weights_json: string };
     expect(row.weights_json).toBe('{}'); // 存量行由列默认值回填=legacy 口径

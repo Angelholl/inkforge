@@ -8,6 +8,7 @@ const cards: CharacterCard[] = ['阿美', '阿泰', '赵启帆', '马春桃', '�
   name,
   baseSetting: '{}',
   offlineFromChapter: null,
+  aliases: [],
 }));
 
 const blueprint = (goal: string, beats: string[] = []): string =>

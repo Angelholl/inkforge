@@ -6,7 +6,7 @@ import type { RunWithStepsDto } from '@inkforge/shared';
 import { loadConfig } from '../../src/config';
 import { migrate } from '../../src/db/migrate';
 import { openDb, type Database } from '../../src/db/open';
-import { createBook } from '../../src/db/repositories/books';
+import { appendCharacterAlias, createBook, createCharacter, listCharacters } from '../../src/db/repositories/books';
 import { upsertBlueprint } from '../../src/db/repositories/chapters';
 import { getContinuitySnapshot, getRecentSummaries, listForeshadowings } from '../../src/db/repositories/continuity';
 import { commitSummarize, generateSummarize, runSummarizeStep, SummarizeParseError } from '../../src/pipeline/summarize';
@@ -64,6 +64,23 @@ afterAll(() => {
 });
 
 describe('summarize 拆分与 D2 伏笔复活', () => {
+  it('0016 迁移：characters.aliases 列存在且旧行默认 []', () => {
+    const { db } = fresh();
+    const row = db.prepare('SELECT aliases FROM characters LIMIT 1').get() as { aliases: string };
+    expect(row.aliases).toBe('[]');
+  });
+
+  it('appendCharacterAlias 幂等：重复 append 不产生重复项', () => {
+    const { db } = fresh();
+    const bookId = createBook(db, { title: '别名幂等测试书' }).id;
+    const id = createCharacter(db, bookId, { name: '阿三' }).id;
+    appendCharacterAlias(db, id, '阿三');
+    appendCharacterAlias(db, id, '阿三');
+    expect(listCharacters(db, bookId)[0].aliases).toEqual(['阿三']);
+    appendCharacterAlias(db, id, '三哥');
+    expect(listCharacters(db, bookId)[0].aliases).toEqual(['阿三', '三哥']);
+  });
+
   it('现状：重摘要旧章复活已回收伏笔（D2 修复前快照）', async () => {
     const { db, bookId, chapterId } = fresh();
     db.prepare('INSERT INTO foreshadowings(id, book_id, description, planted_ch, status, created_at) VALUES(?,?,?,?,?,?)').run(

@@ -106,12 +106,7 @@ export function listBooks(db: Database): Book[] {
 
 export function listCharacters(db: Database, bookId: string): CharacterCard[] {
   return (
-    db.prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? ORDER BY created_at`).all(bookId) as Array<{
-      id: string;
-      name: string;
-      base_setting: string;
-      offline_from_chapter: number | null;
-    }>
+    db.prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? ORDER BY created_at`).all(bookId) as CharacterRow[]
   ).map(toCharacterCard);
 }
 
@@ -314,31 +309,34 @@ export function updateBookMeta(
   return getBook(db, bookId);
 }
 
-/** 人物卡统一形态（0009）：offlineFromChapter=null 在场；N=第 N 章（含）起下线。 */
+/** 人物卡统一形态（0009）：offlineFromChapter=null 在场；N=第 N 章（含）起下线。aliases=per-book 人物别名（0016）。 */
 export interface CharacterCard {
   id: string;
   name: string;
   baseSetting: string;
   offlineFromChapter: number | null;
+  aliases: string[];
 }
 
-const CHARACTER_COLS = 'id, name, base_setting, offline_from_chapter';
+const CHARACTER_COLS = 'id, name, base_setting, offline_from_chapter, aliases';
 
-function toCharacterCard(r: { id: string; name: string; base_setting: string; offline_from_chapter: number | null }): CharacterCard {
-  return { id: r.id, name: r.name, baseSetting: r.base_setting, offlineFromChapter: r.offline_from_chapter ?? null };
+type CharacterRow = { id: string; name: string; base_setting: string; offline_from_chapter: number | null; aliases: string };
+
+function toCharacterCard(r: CharacterRow): CharacterCard {
+  return { id: r.id, name: r.name, baseSetting: r.base_setting, offlineFromChapter: r.offline_from_chapter ?? null, aliases: JSON.parse(r.aliases) as string[] };
 }
 
 export function getCharacter(db: Database, bookId: string, characterId: string): CharacterCard | undefined {
   const row = db
     .prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? AND id = ?`)
-    .get(bookId, characterId) as { id: string; name: string; base_setting: string; offline_from_chapter: number | null } | undefined;
+    .get(bookId, characterId) as CharacterRow | undefined;
   return row ? toCharacterCard(row) : undefined;
 }
 
 export function getCharacterByName(db: Database, bookId: string, name: string): CharacterCard | undefined {
   const row = db
     .prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? AND name = ?`)
-    .get(bookId, name) as { id: string; name: string; base_setting: string; offline_from_chapter: number | null } | undefined;
+    .get(bookId, name) as CharacterRow | undefined;
   return row ? toCharacterCard(row) : undefined;
 }
 
@@ -347,8 +345,18 @@ export function listActiveCharacters(db: Database, bookId: string, chapterNo: nu
   return (
     db
       .prepare(`SELECT ${CHARACTER_COLS} FROM characters WHERE book_id = ? AND (offline_from_chapter IS NULL OR offline_from_chapter > ?) ORDER BY created_at`)
-      .all(bookId, chapterNo) as Array<{ id: string; name: string; base_setting: string; offline_from_chapter: number | null }>
+      .all(bookId, chapterNo) as CharacterRow[]
   ).map(toCharacterCard);
+}
+
+/** 追加 per-book 人物别名（0016，幂等）：已含该 alias 则零写入；去重后 UPDATE characters SET aliases=?。 */
+export function appendCharacterAlias(db: Database, characterId: string, alias: string): void {
+  const row = db.prepare('SELECT aliases FROM characters WHERE id = ?').get(characterId) as { aliases: string } | undefined;
+  if (!row) return;
+  const aliases = JSON.parse(row.aliases) as string[];
+  if (aliases.includes(alias)) return;
+  aliases.push(alias);
+  db.prepare('UPDATE characters SET aliases = ? WHERE id = ?').run(JSON.stringify(aliases), characterId);
 }
 
 export function createCharacter(
@@ -364,7 +372,7 @@ export function createCharacter(
     input.baseSetting ?? '{}',
     new Date().toISOString(),
   );
-  return { id, name: input.name, baseSetting: input.baseSetting ?? '{}', offlineFromChapter: null };
+  return { id, name: input.name, baseSetting: input.baseSetting ?? '{}', offlineFromChapter: null, aliases: [] };
 }
 
 /**
